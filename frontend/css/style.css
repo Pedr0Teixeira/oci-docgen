@@ -1,0 +1,778 @@
+/**
+ * OCI DocGen
+ * Autor: Pedro Teixeira
+ * Data: 01 de Setembro de 2025
+ * Descrição: Folha de estilos principal para a interface do OCI DocGen.
+ */
+
+/* ====================================================== */
+/* 1. CONFIGURAÇÕES GLOBAIS E VARIÁVEIS                   */
+/* ====================================================== */
+:root {
+  --font-family: 'Inter', sans-serif;
+  --bg-main: #1a1b26;
+  --bg-card: #2a2c3a;
+  --bg-dropdown: #3c3e4f;
+  --text-primary: #e2e8f0;
+  --text-secondary: #a0aec0;
+  --text-headers: #ffffff;
+  --border-color: #4a4c5a;
+  --accent-gradient: linear-gradient(90deg, #4f46e5, #7c3aed);
+  --accent-color-start: #4f46e5;
+  --accent-color-end: #7c3aed;
+  --disabled-bg: #3c3e4f;
+  --disabled-text: #71717a;
+  --hover-bg: rgba(79, 70, 229, 0.2);
+  --border-radius: 8px;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 40px 20px;
+}
+
+/* ====================================================== */
+/* 2. LAYOUT PRINCIPAL E ESTRUTURA                        */
+/* ====================================================== */
+.container {
+  width: 100%;
+  max-width: 800px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  color: var(--text-headers);
+}
+
+.header-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--accent-color-start);
+}
+
+.app-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.header-subtitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background-color: var(--bg-card);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+.content-card {
+  background-color: var(--bg-card);
+  border-radius: var(--border-radius);
+  padding: 32px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border-color);
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.step-number {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 600;
+}
+
+.step-content {
+  width: 100%;
+}
+
+.step-content label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+/* ====================================================== */
+/* 3. COMPONENTE DE SELEÇÃO CUSTOMIZADO (CUSTOM SELECT)   */
+/* ====================================================== */
+.custom-select-container {
+  position: relative;
+  width: 100%;
+  user-select: none;
+}
+
+.select-selected {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-primary);
+  font-size: 16px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-height: 50px;
+}
+
+.select-selected.select-arrow-active {
+  border-color: var(--accent-color-start);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.4);
+}
+
+.select-selected.disabled {
+  background-color: var(--disabled-bg);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+.select-selected .placeholder {
+  color: var(--text-secondary);
+}
+
+.select-arrow {
+  transition: transform 0.2s ease-in-out;
+}
+
+.select-selected.select-arrow-active .select-arrow {
+  transform: rotate(180deg);
+}
+
+.select-items {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background-color: var(--bg-dropdown);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  z-index: 99;
+  max-height: 250px;
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+}
+
+.select-hide {
+  display: none;
+}
+
+.select-search {
+  width: calc(100% - 20px);
+  margin: 10px;
+  padding: 10px 14px;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 14px;
+  outline: none;
+}
+
+.select-search:focus {
+  border-color: var(--accent-color-start);
+}
+
+.select-item,
+.select-item-parent {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 15px;
+  gap: 10px;
+}
+
+.select-item-parent {
+  font-weight: 600;
+}
+
+.select-item:hover,
+.select-item-parent:hover {
+  background-color: var(--hover-bg);
+}
+
+.select-selected .selected-item-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  flex-grow: 1;
+}
+
+.selected-item-display .item-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.item-tree-prefix {
+  display: inline-block;
+  width: 20px;
+  height: 1em;
+  position: relative;
+  margin-right: 5px;
+  flex-shrink: 0;
+}
+
+.item-tree-prefix::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: 5px;
+  width: 1.5px;
+  height: 100%;
+  background-color: var(--border-color);
+}
+
+.item-tree-prefix::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  width: 10px;
+  height: 1.5px;
+  background-color: var(--border-color);
+}
+
+/* ====================================================== */
+/* 4. COMPONENTE DE SELEÇÃO MÚLTIPLA (MULTI-SELECT)       */
+/* ====================================================== */
+.select-item input[type="checkbox"] {
+  display: none;
+}
+
+.custom-checkbox {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-color);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.custom-checkbox svg {
+  width: 14px;
+  height: 14px;
+  stroke: white;
+  stroke-width: 3;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.select-item input[type="checkbox"]:checked + .custom-checkbox {
+  background-color: var(--accent-color-end);
+  border-color: var(--accent-color-end);
+}
+
+.select-item input[type="checkbox"]:checked + .custom-checkbox svg {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.select-selected .selected-items-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-right: 20px;
+  align-items: center;
+}
+
+.selected-item-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--accent-color-start);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.instance-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.item-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ====================================================== */
+/* 5. BOTÕES E ELEMENTOS DE INTERAÇÃO                     */
+/* ====================================================== */
+.button-primary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: var(--border-radius);
+  background: var(--accent-gradient);
+  color: white;
+  font-family: var(--font-family);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.button-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3), 0 4px 6px -4px rgba(79, 70, 229, 0.3);
+}
+
+.button-primary:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+.button-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.generate-btn {
+  margin-top: 16px;
+}
+
+/* ====================================================== */
+/* 6. SEÇÃO DE DETALHES E RESUMO                          */
+/* ====================================================== */
+#details-container {
+  margin-top: 32px;
+  animation: fadeIn 0.5s ease-out;
+}
+
+fieldset {
+  border: none;
+}
+
+legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-headers);
+  margin-bottom: 16px;
+}
+
+.legend-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--accent-color-start);
+}
+
+.fieldset-divider {
+  border: 0;
+  height: 1px;
+  background-image: linear-gradient(to right, rgba(74, 76, 90, 0), rgba(74, 76, 90, 0.75), rgba(74, 76, 90, 0));
+  margin: 24px 0;
+}
+
+.summary-section legend {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-headers);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#fetched-data-summary {
+  padding: 16px;
+  background-color: var(--bg-main);
+  border-radius: var(--border-radius);
+}
+
+.instance-summary-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 24px;
+  margin-bottom: 24px;
+  background-color: var(--bg-card);
+}
+
+.instance-summary-card:last-child {
+  margin-bottom: 0;
+}
+
+.instance-summary-title {
+  font-size: 20px;
+  color: var(--accent-color-start);
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.info-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.info-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.info-group label {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.info-value {
+  width: 100%;
+  padding: 12px 16px;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 16px;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+}
+
+.table-container {
+  width: 100%;
+}
+
+.bv-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.bv-table th,
+.bv-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.bv-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.bv-table td {
+  color: var(--text-primary);
+}
+
+.bv-table tr:last-child td {
+  border-bottom: none;
+}
+
+.no-data-message {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.summary-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.summary-group label {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.summary-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  min-height: 48px;
+}
+
+.summary-item {
+  background: var(--accent-gradient);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.summary-item.empty {
+  color: var(--text-secondary);
+  background: transparent;
+  font-style: italic;
+}
+
+/* ====================================================== */
+/* 7. COMPONENTES DE UPLOAD DE ARQUIVO                    */
+/* ====================================================== */
+.attachments-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+.file-upload-group {
+  background-color: var(--bg-main);
+  border-radius: var(--border-radius);
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  transition: box-shadow 0.2s;
+}
+
+.file-upload-group:focus-within {
+  border-color: var(--accent-color-start);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.4);
+}
+
+.file-upload-group input[type="file"] {
+  display: none;
+}
+
+.file-upload-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.file-upload-label:hover {
+  background-color: var(--hover-bg);
+  border-color: var(--accent-color-start);
+}
+
+.file-upload-label svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.upload-note {
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+.file-list-container {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 50px;
+}
+
+.file-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--bg-card);
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.file-list-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.file-list-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+}
+
+.file-list-delete-btn {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.file-list-delete-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--text-secondary);
+  transition: stroke 0.2s;
+}
+
+.file-list-delete-btn:hover svg {
+  stroke: #ff5555;
+}
+
+.file-list-delete-btn:hover {
+  background-color: rgba(255, 85, 85, 0.1);
+}
+
+/* ====================================================== */
+/* 8. UTILITÁRIOS, ANIMAÇÕES E RESPONSIVIDADE             */
+/* ====================================================== */
+#loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid var(--border-color);
+  border-top-color: var(--accent-color-end);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 700px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .grid-container {
+    grid-template-columns: 1fr;
+  }
+  .app-header h1 {
+    font-size: 22px;
+  }
+  .content-card {
+    padding: 24px;
+  }
+}
