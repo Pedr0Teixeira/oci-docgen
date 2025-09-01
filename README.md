@@ -145,7 +145,7 @@ pip install -r requirements.txt
 
 # 4. Inicie o servidor da API
 uvicorn main:app --reload
-
+```
 O backend estará em execução em `http://127.0.0.1:8000`.
 
 ### 2. Configuração do Frontend
