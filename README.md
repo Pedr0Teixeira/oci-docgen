@@ -99,6 +99,7 @@ graph TD
     -   **Vanilla JavaScript (ES6):** Para interatividade e comunicação com o backend, sem a necessidade de frameworks.
 
 ## 📂 Estrutura do Projeto
+```
 .
 ├── backend
 │   ├── doc_generator.py         # Lógica para criar o documento .docx
@@ -114,6 +115,7 @@ graph TD
 ├── index.html               # Estrutura principal da interface
 └── js
 └── app.js               # Lógica do frontend e manipulação do DOM
+```
 
 ## 🚀 Instalação e Execução
 
