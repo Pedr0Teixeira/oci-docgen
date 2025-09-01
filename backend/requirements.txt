@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+oci
+python-docx
+python-multipart
+aiofiles

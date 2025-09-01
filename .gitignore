@@ -1,0 +1,42 @@
+# Ambientes Virtuais do Python
+# Ignora a pasta que contém as dependências instaladas.
+venv/
+.venv/
+env/
+.env/
+
+# Bytecode e Cache do Python
+# Arquivos gerados pelo interpretador Python.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de Configuração Sensíveis
+# Nunca envie chaves de API, senhas ou credenciais para o repositório.
+*.env
+.env*
+
+# ATENÇÃO: Se você tiver um arquivo de configuração da OCI
+# dentro do projeto (o que não é recomendado), adicione o nome dele aqui.
+
+# Arquivos Gerados pela Aplicação
+# Ignora a pasta onde os documentos .docx são salvos.
+backend/generated_docs/
+
+# Arquivos de IDEs e Editores de Código
+# Configurações específicas do seu ambiente de desenvolvimento.
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Arquivos de Sistema Operacional
+# Arquivos temporários gerados pelo macOS e Windows.
+.DS_Store
+Thumbs.db
+
+# Arquivos de log
+*.log
