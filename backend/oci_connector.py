@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 01 de Setembro de 2025
+# Data: 02 de setembro de 2025
 # Descrição: Módulo de conector que interage com o SDK da OCI para buscar dados da infraestrutura.
 
 from typing import Any, Dict, List
@@ -75,23 +75,38 @@ def _translate_protocol(protocol_code: str) -> str:
     return IANA_PROTOCOL_MAP.get(str(protocol_code), str(protocol_code))
 
 
+# ADICIONADO: Função para extrair e formatar as portas de uma regra.
+def _format_rule_ports(rule: Any) -> str:
+    """Extrai e formata as portas de uma regra de segurança (TCP/UDP)."""
+    options = None
+    # Verifica se a regra tem opções de TCP ou UDP.
+    if hasattr(rule, 'tcp_options') and rule.tcp_options:
+        options = rule.tcp_options
+    elif hasattr(rule, 'udp_options') and rule.udp_options:
+        options = rule.udp_options
+
+    # Se a regra for de outro protocolo (ex: ICMP) ou não especificar portas, retorna uma string vazia.
+    if not options:
+        return ""
+
+    # Formata o range de portas de destino.
+    port_range = options.destination_port_range
+    if not port_range:
+        return ""
+        
+    if port_range.min == port_range.max:
+        return str(port_range.min)
+    return f"{port_range.min}-{port_range.max}"
+
+
 def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
     """
     Busca o nome de exibição de uma entidade de rede (como Gateways) a partir de seu OCID.
-
-    Args:
-        virtual_network_client: Cliente OCI para serviços de rede.
-        entity_id: O OCID da entidade de rede.
-
-    Returns:
-        Uma string formatada com o tipo e nome da entidade, ou o próprio ID se não for encontrado.
     """
     if not entity_id:
         return "N/A"
     try:
-        # O tipo da entidade está embutido no OCID (ex: ocid1.internetgateway...).
         entity_type = entity_id.split('.')[1]
-
         entity_type_map = {
             "internetgateway": ("Internet Gateway", virtual_network_client.get_internet_gateway),
             "natgateway": ("NAT Gateway", virtual_network_client.get_nat_gateway),
@@ -100,23 +115,19 @@ def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
             "privateip": ("Private IP", virtual_network_client.get_private_ip),
             "drg": ("Dynamic Routing Gateway", virtual_network_client.get_drg),
         }
-
         if entity_type in entity_type_map:
             type_name, func = entity_type_map[entity_type]
             entity = _safe_api_call(func, entity_id)
             if entity:
-                # Private IP usa 'ip_address', enquanto a maioria dos outros usa 'display_name'.
                 display_attr = getattr(entity, 'ip_address', getattr(entity, 'display_name', None))
                 return f"{type_name}: {display_attr}"
             return entity_id
-
         elif entity_type == "drgattachment":
             attachment = _safe_api_call(virtual_network_client.get_drg_attachment, entity_id)
             if attachment:
                 drg = _safe_api_call(virtual_network_client.get_drg, attachment.drg_id)
                 return f"DRG Attachment: {drg.display_name}" if drg else entity_id
     except (IndexError, AttributeError):
-        # Trata casos onde o OCID pode não seguir o padrão esperado.
         pass
     return entity_id
 
@@ -125,7 +136,6 @@ def _get_source_dest_name(virtual_network_client, source_dest: str) -> str:
     """Traduz um OCID de um Network Security Group (NSG) para seu nome de exibição."""
     if not source_dest or not source_dest.startswith("ocid1.networksecuritygroup"):
         return source_dest
-
     nsg = _safe_api_call(virtual_network_client.get_network_security_group, source_dest)
     return nsg.display_name if nsg else source_dest
 
@@ -136,12 +146,9 @@ def list_regions() -> List[Dict[str, str]]:
     """Busca todas as regiões ativas e disponíveis na tenancy."""
     if not tenancy_id:
         raise ConnectionError("Tenancy ID não encontrado na configuração da OCI.")
-
     identity_client = oci.identity.IdentityClient(config)
     regions = _safe_api_call(identity_client.list_region_subscriptions, tenancy_id)
-    if regions:
-        return [{"key": r.region_key, "name": r.region_name} for r in regions if r.status == "READY"]
-    return []
+    return [{"key": r.region_key, "name": r.region_name} for r in regions if r.status == "READY"] if regions else []
 
 
 def list_compartments(region: str) -> List[Dict[str, Any]]:
@@ -151,26 +158,18 @@ def list_compartments(region: str) -> List[Dict[str, Any]]:
     identity_client = get_client(oci.identity.IdentityClient, region)
     if not identity_client:
         raise ConnectionError("Cliente de Identidade OCI não pôde ser inicializado.")
-
-    # 1. Busca todos os compartimentos ativos de forma recursiva.
     all_compartments = oci.pagination.list_call_get_all_results(
         identity_client.list_compartments,
         tenancy_id,
         compartment_id_in_subtree=True,
         lifecycle_state="ACTIVE"
     ).data
-
-    # 2. Prepara estruturas de dados para construir a árvore.
     compartments_dict = {c.id: c for c in all_compartments}
     children_map = {c.id: [] for c in all_compartments}
     children_map[tenancy_id] = []
-
-    # 3. Mapeia cada compartimento filho ao seu pai.
     for comp in all_compartments:
         if comp.compartment_id in children_map:
             children_map[comp.compartment_id].append(comp.id)
-
-    # 4. Função recursiva para construir a árvore a partir do mapa.
     def build_tree(parent_id, level=0):
         tree = []
         sorted_children = sorted(children_map.get(parent_id, []), key=lambda cid: compartments_dict.get(cid).name)
@@ -180,8 +179,6 @@ def list_compartments(region: str) -> List[Dict[str, Any]]:
                 tree.append({"id": child_comp.id, "name": child_comp.name, "level": level})
                 tree.extend(build_tree(child_id, level + 1))
         return tree
-
-    # 5. Inicia a construção da árvore a partir da raiz (tenancy).
     hierarchical_list = [{"id": tenancy_id, "name": "Raiz (Tenancy)", "level": 0}]
     hierarchical_list.extend(build_tree(tenancy_id, level=1))
     return hierarchical_list
@@ -192,7 +189,6 @@ def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict
     compute_client = get_client(oci.core.ComputeClient, region)
     if not compute_client:
         raise ConnectionError("Cliente de Computação OCI não pôde ser inicializado.")
-
     instances = oci.pagination.list_call_get_all_results(
         compute_client.list_instances,
         compartment_id=compartment_id,
@@ -203,38 +199,26 @@ def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict
 
 def get_instance_details(region: str, instance_id: str) -> Dict[str, Any]:
     """
-    Coleta um conjunto abrangente de detalhes para uma única instância, incluindo
-    computação, rede, armazenamento e políticas de backup.
+    Coleta um conjunto abrangente de detalhes para uma única instância.
     """
-    # Inicializa todos os clientes necessários para a região.
     compute_client = get_client(oci.core.ComputeClient, region)
     virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
     block_storage_client = get_client(oci.core.BlockstorageClient, region)
-
     if not all([compute_client, virtual_network_client, block_storage_client]):
         raise ConnectionError("Um ou mais clientes OCI não puderam ser inicializados.")
-
     instance = _safe_api_call(compute_client.get_instance, instance_id)
     if not instance:
         raise oci.exceptions.ServiceError(status=404, message=f"Instância {instance_id} não encontrada.")
-
-    # Estrutura de dados para armazenar os detalhes, com valores padrão.
     details = {
-        "host_name": instance.display_name,
-        "shape": instance.shape,
-        "ocpus": str(int(instance.shape_config.ocpus)),
-        "memory": str(int(instance.shape_config.memory_in_gbs)),
+        "host_name": instance.display_name, "shape": instance.shape,
+        "ocpus": str(int(instance.shape_config.ocpus)), "memory": str(int(instance.shape_config.memory_in_gbs)),
         "os_name": "N/A", "boot_volume_gb": "N/A", "private_ip": "N/A", "public_ip": "N/A",
         "backup_policy_name": "N/A", "block_volumes": [], "security_lists": [],
         "network_security_groups": [], "route_table": None
     }
-
-    # Busca de detalhes do Sistema Operacional
     image = _safe_api_call(compute_client.get_image, instance.image_id)
     if image:
         details["os_name"] = f"{image.operating_system} {image.operating_system_version}"
-
-    # Busca de detalhes de Rede (VNIC, IPs, SL, NSG, RT)
     vnic_attachments = _safe_api_call(compute_client.list_vnic_attachments, instance.compartment_id, instance_id=instance_id)
     if vnic_attachments:
         vnic = _safe_api_call(virtual_network_client.get_vnic, vnic_attachments[0].vnic_id)
@@ -243,22 +227,19 @@ def get_instance_details(region: str, instance_id: str) -> Dict[str, Any]:
             details["public_ip"] = vnic.public_ip or "N/A"
             subnet = _safe_api_call(virtual_network_client.get_subnet, vnic.subnet_id)
             if subnet:
-                # Security Lists
                 for sl_id in subnet.security_list_ids:
                     sl = _safe_api_call(virtual_network_client.get_security_list, sl_id)
                     if sl:
                         rules = []
                         for r in sl.ingress_security_rules:
-                            rules.append({"direction": "INGRESS", "protocol": _translate_protocol(r.protocol), "source_or_destination": r.source, "description": r.description})
+                            rules.append({"direction": "INGRESS", "protocol": _translate_protocol(r.protocol), "source_or_destination": r.source, "ports": _format_rule_ports(r), "description": r.description})
                         for r in sl.egress_security_rules:
-                            rules.append({"direction": "EGRESS", "protocol": _translate_protocol(r.protocol), "source_or_destination": r.destination, "description": r.description})
+                            rules.append({"direction": "EGRESS", "protocol": _translate_protocol(r.protocol), "source_or_destination": r.destination, "ports": _format_rule_ports(r), "description": r.description})
                         details["security_lists"].append({"name": sl.display_name, "rules": rules})
-                # Route Table
                 rt = _safe_api_call(virtual_network_client.get_route_table, subnet.route_table_id)
                 if rt:
                     rt_rules = [{"destination": r.destination, "target": get_network_entity_name(virtual_network_client, r.network_entity_id), "description": r.description} for r in rt.route_rules]
                     details["route_table"] = {"name": rt.display_name, "rules": rt_rules}
-            # Network Security Groups
             for nsg_id in vnic.nsg_ids:
                 nsg = _safe_api_call(virtual_network_client.get_network_security_group, nsg_id)
                 if nsg:
@@ -267,10 +248,8 @@ def get_instance_details(region: str, instance_id: str) -> Dict[str, Any]:
                     if rules:
                         for r in rules:
                             source_dest = r.source if r.direction == 'INGRESS' else r.destination
-                            nsg_rules.append({"direction": r.direction, "protocol": _translate_protocol(r.protocol), "source_or_destination": _get_source_dest_name(virtual_network_client, source_dest), "description": r.description})
+                            nsg_rules.append({"direction": r.direction, "protocol": _translate_protocol(r.protocol), "source_or_destination": _get_source_dest_name(virtual_network_client, source_dest), "ports": _format_rule_ports(r), "description": r.description})
                     details["network_security_groups"].append({"name": nsg.display_name, "rules": nsg_rules})
-
-    # Busca de detalhes de Armazenamento e Backup
     boot_vol_attachments = _safe_api_call(compute_client.list_boot_volume_attachments, instance.availability_domain, instance.compartment_id, instance_id=instance_id)
     if boot_vol_attachments:
         boot_vol = _safe_api_call(block_storage_client.get_boot_volume, boot_vol_attachments[0].boot_volume_id)
@@ -282,15 +261,11 @@ def get_instance_details(region: str, instance_id: str) -> Dict[str, Any]:
                 details["backup_policy_name"] = policy.display_name if policy else "Política não encontrada"
             else:
                 details["backup_policy_name"] = "Nenhuma política associada"
-
-    # Busca de Block Volumes adicionais
     attachments = _safe_api_call(compute_client.list_volume_attachments, instance.compartment_id, instance_id=instance_id)
     if attachments:
         for att in attachments:
-            # Filtra para não incluir o boot volume novamente.
             if att.lifecycle_state == 'ATTACHED' and att.attachment_type != 'iscsi':
                 vol = _safe_api_call(block_storage_client.get_volume, att.volume_id)
                 if vol:
                     details["block_volumes"].append({"display_name": vol.display_name, "size_in_gbs": vol.size_in_gbs})
-
     return details
