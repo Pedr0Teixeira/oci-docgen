@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 01 de Setembro de 2025
+# Data: 02 de Setembro de 2025
 # Descrição: Define os modelos de dados (schemas) Pydantic para validação e serialização de dados na API.
 
 from typing import List, Optional
@@ -22,6 +22,7 @@ class SecurityRule(BaseModel):
     direction: str
     protocol: str
     source_or_destination: Optional[str] = "N/A"
+    ports: Optional[str] = ""  # ADICIONADO: Campo para armazenar as portas da regra.
     description: Optional[str] = None
 
 
@@ -77,3 +78,4 @@ class MultiDocRequest(BaseModel):
     permitindo que os dados de múltiplas instâncias sejam enviados de uma só vez.
     """
     instances_data: List[InstanceData]
+
