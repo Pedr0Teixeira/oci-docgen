@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Autor: Pedro Teixeira
- * Data: 01 de Setembro de 2025
+ * Data: 03 de Setembro de 2025
  * Descrição: Folha de estilos principal para a interface do OCI DocGen.
  */
 
@@ -25,6 +25,9 @@
   --hover-bg: rgba(79, 70, 229, 0.2);
   --border-radius: 8px;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  /* ADICIONADO: Cores para os status */
+  --status-running: #22c55e; /* green-500 */
+  --status-stopped: #ef4444; /* red-500 */
 }
 
 * {
@@ -342,12 +345,35 @@ body {
   align-items: center;
   gap: 8px;
   flex: 1;
+  overflow: hidden; /* Garante que o conteúdo não estoure */
 }
 
 .item-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-grow: 1; /* Permite que o nome da instância cresça */
+}
+
+/* Estilos para o indicador de status da instância */
+.instance-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-running {
+  background-color: var(--status-running);
+}
+.status-stopped {
+  background-color: var(--status-stopped);
+}
+.status-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: auto; /* Empurra o texto para a direita */
+  padding-left: 8px;
+  flex-shrink: 0;
 }
 
 /* ====================================================== */
@@ -776,3 +802,4 @@ legend {
     padding: 24px;
   }
 }
+
