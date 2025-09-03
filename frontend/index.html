@@ -48,7 +48,7 @@
         </div>
       </div>
 
-      <div class="step">
+      <div class="step" id="instance-step">
         <div class="step-number">4</div>
         <div class="step-content">
           <label>Selecione a(s) Instância(s)</label>
@@ -61,20 +61,13 @@
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" x2="16.65" y1="21" y2="16.65"></line>
         </svg>
-        Buscar Dados da(s) Instância(s)
+        <span>Buscar Dados da(s) Instância(s)</span>
       </button>
       
       <div id="details-container" class="hidden">
         <hr class="fieldset-divider">
-        <div class="summary-section">
-          <legend>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon">
-              <path d="M20 14.66V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5.34"></path>
-              <polygon points="18 2 22 6 12 16 8 16 8 12 18 2"></polygon>
-            </svg>
-            Resumo dos Dados Coletados
-          </legend>
-          <div id="fetched-data-summary"></div>
+        <div id="fetched-data-summary">
+          <!-- O conteúdo do resumo será inserido aqui pelo JavaScript -->
         </div>
 
         <hr class="fieldset-divider">
@@ -121,3 +114,4 @@
   <script src="js/app.js"></script>
 </body>
 </html>
+
