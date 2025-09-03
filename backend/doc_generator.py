@@ -86,7 +86,7 @@ def generate_documentation(
                 "Os backups gerados possuem retenção de 7 dias, permitindo a restauração de dados em "
                 "pontos específicos dentro desse período.\n\n"
                 "Essa política garante que, em caso de falhas, seja possível recuperar o volume "
-                "rapidamente, minimizando impacto e perda de informações."
+                "rapidamente, minimizando impacto e perda de informações.\n\n"
             )
         elif policy_name == "Nenhuma política associada":
             return "O volume não possui uma política de backup automatizada associada."
