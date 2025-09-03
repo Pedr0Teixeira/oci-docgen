@@ -6,7 +6,7 @@
 import json
 import os
 import traceback
-from typing import List
+from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,17 +14,16 @@ from fastapi.responses import FileResponse
 
 import doc_generator
 import oci_connector
-from schemas import MultiDocRequest
+from schemas import GenerateDocRequest, InfrastructureData
 
 # --- Configuração da Aplicação FastAPI ---
 app = FastAPI(
     title="OCI DocGen API",
-    version="1.4.0",
+    version="1.5.1", # Versão incrementada
     description="API para automatizar a coleta de dados da OCI e gerar documentação de infraestrutura."
 )
 
 # --- Configuração do CORS (Cross-Origin Resource Sharing) ---
-# Permite que o frontend (rodando em um endereço diferente) se comunique com esta API.
 origins = [
     "http://localhost",
     "http://localhost:5500",
@@ -43,66 +42,64 @@ app.add_middleware(
 
 @app.get("/api/regions", summary="Listar Regiões Disponíveis")
 async def get_regions():
-    """Retorna uma lista de todas as regiões da OCI disponíveis na tenancy."""
     return oci_connector.list_regions()
 
 
 @app.get("/api/{region}/compartments", summary="Listar Compartimentos em uma Região")
 async def get_compartments(region: str):
-    """Retorna uma lista hierárquica de compartimentos a partir da raiz (tenancy)."""
     return oci_connector.list_compartments(region)
 
 
 @app.get("/api/{region}/instances/{compartment_id}", summary="Listar Instâncias em um Compartimento")
 async def get_instances(region: str, compartment_id: str):
-    """Retorna uma lista de instâncias ativas (RUNNING) dentro de um compartimento específico."""
     return oci_connector.list_instances_in_compartment(region, compartment_id)
 
 
 @app.get("/api/{region}/instance-details/{instance_id}", summary="Obter Detalhes de uma Instância")
-async def get_details(region: str, instance_id: str):
+async def get_details(region: str, instance_id: str, compartment_name: Optional[str] = None):
     """
-    Coleta e retorna detalhes abrangentes de uma instância específica, incluindo
-    rede, armazenamento e configurações de backup.
+    Coleta detalhes de uma instância e retorna como um objeto InfrastructureData parcial
+    para manter a consistência com o frontend.
     """
     try:
-        return oci_connector.get_instance_details(region, instance_id)
+        c_name = compartment_name or "N/A"
+        instance_detail = oci_connector.get_instance_details(region, instance_id, compartment_name=c_name)
+        return InfrastructureData(instances=[instance_detail], vcns=[], drgs=[], cpes=[], ipsec_connections=[])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar detalhes da instância: {e}")
 
 
-@app.post("/api/generate-document", summary="Gerar Documento de Infraestrutura")
+@app.post("/api/{region}/infrastructure-details/{compartment_id}", summary="Obter Detalhes da Infraestrutura de um Compartimento", response_model=InfrastructureData)
+async def get_infrastructure_data(region: str, compartment_id: str):
+    try:
+        infra_details = oci_connector.get_infrastructure_details(region, compartment_id)
+        return infra_details
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar detalhes da infraestrutura: {e}")
+
+
+@app.post("/api/generate-document", summary="Gerar Documento de Infraestrutura ou Novo Host")
 async def create_document(
     json_data: str = Form(...),
     architecture_files: List[UploadFile] = File([]),
     antivirus_files: List[UploadFile] = File([])
 ):
-    """
-    Recebe os dados das instâncias (em formato JSON) e anexos de imagem para
-    gerar um arquivo .docx e retorná-lo para download.
-    """
     try:
-        # 1. Desserializa a string JSON recebida do formulário para o modelo Pydantic.
-        request_data = MultiDocRequest(**json.loads(json_data))
-
-        # 2. Lê os bytes de cada arquivo de imagem enviado de forma assíncrona.
+        request_data = GenerateDocRequest(**json.loads(json_data))
         architecture_image_bytes_list = [await f.read() for f in architecture_files]
         antivirus_image_bytes_list = [await f.read() for f in antivirus_files]
-
-        # 3. Chama a função geradora, passando os dados das instâncias e as listas de bytes das imagens.
         file_path = doc_generator.generate_documentation(
-            all_instances_data=request_data.instances_data,
+            doc_type=request_data.doc_type,
+            infra_data=request_data.infra_data,
             architecture_image_bytes_list=architecture_image_bytes_list,
             antivirus_image_bytes_list=antivirus_image_bytes_list
         )
-
-        # 4. Retorna o arquivo gerado para o cliente.
         return FileResponse(
             path=file_path,
             filename=os.path.basename(file_path),
             media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
     except Exception as e:
-        # Captura exceções para fornecer um erro claro no lado do cliente.
-        traceback.print_exc()  # Loga o traceback completo no console do servidor para depuração.
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno ao gerar o documento: {e}")
