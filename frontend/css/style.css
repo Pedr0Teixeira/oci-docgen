@@ -25,9 +25,13 @@
   --hover-bg: rgba(79, 70, 229, 0.2);
   --border-radius: 8px;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  /* ADICIONADO: Cores para os status */
   --status-running: #22c55e; /* green-500 */
   --status-stopped: #ef4444; /* red-500 */
+  --status-provisioning: #3b82f6; /* blue-500 */
+  --status-terminating: #f97316; /* orange-500 */
+  --validation-ok: #22c55e;
+  --validation-partial: #f97316;
+  --validation-bad: #ef4444;
 }
 
 * {
@@ -310,12 +314,12 @@ body {
   transition: opacity 0.2s, transform 0.2s;
 }
 
-.select-item input[type="checkbox"]:checked + .custom-checkbox {
+.select-item input[type="checkbox"]:checked+.custom-checkbox {
   background-color: var(--accent-color-end);
   border-color: var(--accent-color-end);
 }
 
-.select-item input[type="checkbox"]:checked + .custom-checkbox svg {
+.select-item input[type="checkbox"]:checked+.custom-checkbox svg {
   opacity: 1;
   transform: scale(1);
 }
@@ -345,33 +349,35 @@ body {
   align-items: center;
   gap: 8px;
   flex: 1;
-  overflow: hidden; /* Garante que o conteúdo não estoure */
+  overflow: hidden;
 }
 
 .item-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-grow: 1; /* Permite que o nome da instância cresça */
+  flex-grow: 1;
 }
 
-/* Estilos para o indicador de status da instância */
 .instance-status {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
+
 .status-running {
   background-color: var(--status-running);
 }
+
 .status-stopped {
   background-color: var(--status-stopped);
 }
+
 .status-text {
   font-size: 12px;
   color: var(--text-secondary);
-  margin-left: auto; /* Empurra o texto para a direita */
+  margin-left: auto;
   padding-left: 8px;
   flex-shrink: 0;
 }
@@ -427,6 +433,7 @@ body {
 
 fieldset {
   border: none;
+  padding: 0;
 }
 
 legend {
@@ -437,6 +444,7 @@ legend {
   font-weight: 600;
   color: var(--text-headers);
   margin-bottom: 16px;
+  padding: 0;
 }
 
 .legend-icon {
@@ -452,32 +460,23 @@ legend {
   margin: 24px 0;
 }
 
-.summary-section legend {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-headers);
-  margin-bottom: 16px;
+.instances-container,
+.vcn-container,
+.ipsec-container {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-#fetched-data-summary {
-  padding: 16px;
-  background-color: var(--bg-main);
-  border-radius: var(--border-radius);
+  flex-direction: column;
+  gap: 16px;
 }
 
 .instance-summary-card {
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
-  padding: 24px;
-  margin-bottom: 24px;
   background-color: var(--bg-card);
+  overflow: hidden;
 }
 
-.instance-summary-card:last-child {
-  margin-bottom: 0;
+.instance-summary-card:not(.collapsible) {
+  padding: 24px;
 }
 
 .instance-summary-title {
@@ -528,7 +527,8 @@ legend {
   width: 100%;
 }
 
-.bv-table {
+.bv-table,
+.resource-table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 8px;
@@ -536,22 +536,28 @@ legend {
 }
 
 .bv-table th,
-.bv-table td {
+.resource-table th,
+.bv-table td,
+.resource-table td {
   padding: 10px 14px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
 }
 
-.bv-table th {
+.bv-table th,
+.resource-table th {
   font-weight: 600;
   color: var(--text-secondary);
 }
 
-.bv-table td {
+.bv-table td,
+.resource-table td {
   color: var(--text-primary);
+  vertical-align: middle;
 }
 
-.bv-table tr:last-child td {
+.bv-table tr:last-child td,
+.resource-table tr:last-child td {
   border-bottom: none;
 }
 
@@ -609,6 +615,259 @@ legend {
   color: var(--text-secondary);
   background: transparent;
   font-style: italic;
+}
+
+/* --- ESTILOS PARA O RESUMO DE INFRAESTRUTURA --- */
+.infra-summary-main-title {
+  font-size: 22px;
+  color: var(--text-headers);
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.subheader,
+.vcn-card-body h5 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 20px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.subheader:first-of-type,
+.vcn-card-body h5:first-of-type {
+  margin-top: 0;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.status-badge.status-running,
+.status-badge.status-available {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: var(--status-running);
+}
+
+.status-badge.status-stopped {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--status-stopped);
+}
+
+.status-badge.status-provisioning,
+.status-badge.status-starting {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: var(--status-provisioning);
+}
+
+.status-badge.status-terminating,
+.status-badge.status-stopping {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: var(--status-terminating);
+}
+.status-badge.status-up {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: var(--status-running);
+}
+.status-badge.status-down {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: var(--status-stopped);
+}
+
+/* --- ESTILOS PARA OS CARDS COMPACTÁVEIS (ACORDEÃO) --- */
+.instance-card-header,
+.vcn-card-header,
+.ipsec-card-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.instance-card-header:hover,
+.vcn-card-header:hover,
+.ipsec-card-header:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.card-header-title,
+.vcn-card-header-title,
+.ipsec-card-header-title {
+  font-size: 18px;
+  color: var(--text-primary);
+  flex-grow: 1;
+}
+
+.card-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vcn-card-header-cidr {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-dot.running {
+  background-color: var(--status-running);
+}
+
+.status-dot.stopped {
+  background-color: var(--status-stopped);
+}
+
+.status-label.running {
+  color: var(--status-running);
+}
+
+.status-label.stopped {
+  color: var(--status-stopped);
+}
+
+.expand-arrow {
+  color: var(--text-secondary);
+  transition: transform 0.3s ease-in-out;
+  flex-shrink: 0;
+}
+
+.instance-card-body,
+.vcn-card-body,
+.ipsec-card-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
+  padding: 0 24px;
+}
+
+/* Adicionado padding-top para criar espaçamento */
+.collapsible.expanded .instance-card-body,
+.collapsible.expanded .vcn-card-body,
+.collapsible.expanded .ipsec-card-body {
+  max-height: 2500px; 
+  padding-top: 24px;
+  padding-bottom: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.collapsible.expanded .expand-arrow {
+  transform: rotate(180deg);
+}
+
+.vcn-summary-card,
+.ipsec-summary-card {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background-color: var(--bg-main); 
+    overflow: hidden;
+}
+
+.vcn-card-body h5 {
+  font-size: 15px;
+}
+
+/* --- ESTILOS PARA CONECTIVIDADE VPN --- */
+.ipsec-details {
+    display: flex;
+    flex-wrap: wrap; 
+    gap: 16px 24px; 
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+.ipsec-details .full-width {
+    flex-basis: 100%; 
+}
+.ipsec-details strong {
+    color: var(--text-primary);
+}
+
+.tunnel-details {
+    padding: 16px 0;
+}
+
+.tunnel-basic-info {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 8px 24px; 
+}
+.tunnel-basic-info li {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.tunnel-basic-info strong {
+  color: var(--text-primary);
+}
+
+
+.tunnel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.tunnel-header strong {
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.crypto-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 16px;
+}
+.tunnel-subheader {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-color);
+}
+.crypto-details-grid ul {
+    list-style: none;
+    padding-left: 0;
+}
+.crypto-details-grid li {
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.crypto-details-grid li strong {
+    color: var(--text-primary);
+}
+
+.tunnel-divider {
+    border: 0;
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 12px 0 0 0;
 }
 
 /* ====================================================== */
@@ -786,7 +1045,7 @@ legend {
 }
 
 @media (max-width: 700px) {
-  .summary-grid {
+  .summary-grid, .crypto-details-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -802,4 +1061,3 @@ legend {
     padding: 24px;
   }
 }
-
