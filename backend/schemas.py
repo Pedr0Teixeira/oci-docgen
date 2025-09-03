@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 02 de Setembro de 2025
+# Data: 03 de Setembro de 2025
 # Descrição: Define os modelos de dados (schemas) Pydantic para validação e serialização de dados na API.
 
 from typing import List, Optional
@@ -15,6 +15,7 @@ class BlockVolume(BaseModel):
     """Representa um Block Volume anexado a uma instância."""
     display_name: str
     size_in_gbs: float
+    backup_policy_name: str
 
 
 class SecurityRule(BaseModel):
@@ -22,7 +23,7 @@ class SecurityRule(BaseModel):
     direction: str
     protocol: str
     source_or_destination: Optional[str] = "N/A"
-    ports: Optional[str] = ""  # ADICIONADO: Campo para armazenar as portas da regra.
+    ports: Optional[str] = ""
     description: Optional[str] = None
 
 
@@ -63,13 +64,13 @@ class InstanceData(BaseModel):
     os_name: str
     boot_volume_gb: str
     private_ip: str
-    public_ip: Optional[str] = "N/A"  # Public IP pode não existir
+    public_ip: Optional[str] = "N/A"
     backup_policy_name: str
     block_volumes: List[BlockVolume]
     security_lists: List[SecurityList]
     network_security_groups: List[NetworkSecurityGroup]
     route_table: Optional[RouteTable] = None
-    compartment_name: str  # Adicionado para saber o contexto do cliente.
+    compartment_name: str
 
 
 class MultiDocRequest(BaseModel):

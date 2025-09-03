@@ -149,23 +149,18 @@ def list_compartments(region: str) -> List[Dict[str, Any]]:
 
 
 def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict[str, str]]:
-    """
-    # Busca instâncias com estado 'RUNNING' ou 'STOPPED'.
-    """
+    """Busca instâncias com estado 'RUNNING' ou 'STOPPED'."""
     compute_client = get_client(oci.core.ComputeClient, region)
     if not compute_client:
         raise ConnectionError("Cliente de Computação OCI não pôde ser inicializado.")
     
-    # Define os status que queremos buscar.
     valid_states = ["RUNNING", "STOPPED"]
     
-    # Removemos o filtro da chamada de API para pegar mais estados e filtramos depois.
     all_instances = oci.pagination.list_call_get_all_results(
         compute_client.list_instances,
         compartment_id=compartment_id
     ).data
     
-    # Filtra a lista para incluir apenas os estados desejados e retorna o status.
     filtered_instances = [
         {
             "id": i.id,
@@ -233,12 +228,26 @@ def get_instance_details(region: str, instance_id: str) -> Dict[str, Any]:
                 details["backup_policy_name"] = policy.display_name if policy else "Política não encontrada"
             else:
                 details["backup_policy_name"] = "Nenhuma política associada"
+    
+    # Adiciona a verificação de política de backup para cada Block Volume.
     attachments = _safe_api_call(compute_client.list_volume_attachments, instance.compartment_id, instance_id=instance_id)
     if attachments:
         for att in attachments:
             if att.lifecycle_state == 'ATTACHED' and att.attachment_type != 'iscsi':
                 vol = _safe_api_call(block_storage_client.get_volume, att.volume_id)
                 if vol:
-                    details["block_volumes"].append({"display_name": vol.display_name, "size_in_gbs": vol.size_in_gbs})
+                    # Lógica para buscar a política de backup do volume.
+                    vol_backup_policy_name = "Nenhuma política associada"
+                    vol_assignment = _safe_api_call(block_storage_client.get_volume_backup_policy_asset_assignment, vol.id)
+                    if vol_assignment:
+                        vol_policy = _safe_api_call(block_storage_client.get_volume_backup_policy, vol_assignment[0].policy_id)
+                        if vol_policy:
+                            vol_backup_policy_name = vol_policy.display_name
+                    
+                    details["block_volumes"].append({
+                        "display_name": vol.display_name,
+                        "size_in_gbs": vol.size_in_gbs,
+                        "backup_policy_name": vol_backup_policy_name
+                    })
     return details
 
