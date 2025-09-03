@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Autor: Pedro Teixeira
- * Data: 01 de Setembro de 2025
+ * Data: 03 de Setembro de 2025
  * Descrição: Script principal do frontend para interatividade da página, comunicação com a API e manipulação do DOM.
  */
 document.addEventListener('DOMContentLoaded', () => {
@@ -27,35 +27,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const antivirusUploadGroup = document.getElementById('antivirus-upload-group');
 
   // --- Variáveis de Estado da Aplicação ---
-  // Gerenciam os dados selecionados pelo usuário e os dados buscados da API.
   let selectedRegion = null;
   let selectedDocType = null;
   let selectedCompartmentId = null;
   let selectedCompartmentName = null;
-  let selectedInstances = {}; // Objeto para armazenar instâncias selecionadas: { id: nome }
-  let allInstancesData = []; // Array para armazenar os detalhes completos das instâncias buscadas.
-  let architectureImageFiles = []; // Array para armazenar os arquivos de imagem da arquitetura.
-  let antivirusImageFiles = []; // Array para armazenar os arquivos de imagem do antivírus.
+  let selectedInstances = {};
+  let allInstancesData = [];
+  let architectureImageFiles = [];
+  let antivirusImageFiles = [];
 
-  /**
-   * Controla a exibição do overlay de carregamento.
-   * @param {boolean} show - True para exibir, false para ocultar.
-   */
   const toggleLoading = (show) => {
     loadingOverlay.classList.toggle('hidden', !show);
   };
 
-  /**
-   * Cria e gerencia um componente de seleção customizado (dropdown).
-   * Esta função é altamente reutilizável e suporta seleção única ou múltipla,
-   * além de uma caixa de busca opcional.
-   * @param {HTMLElement} container - O elemento container onde o select será renderizado.
-   * @param {Array<Object>} options - Um array de objetos para popular as opções.
-   * @param {string} placeholder - O texto a ser exibido quando nada está selecionado.
-   * @param {Function} onSelectCallback - Função a ser chamada quando uma opção é selecionada.
-   * @param {boolean} isEnabled - Define se o select está habilitado ou desabilitado.
-   * @param {boolean} isMultiSelect - Define se o select permite múltiplas seleções.
-   */
   function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false) {
     container.innerHTML = '';
     const selected = document.createElement('div');
@@ -75,7 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const items = document.createElement('div');
     items.classList.add('select-items', 'select-hide');
 
-    // Adiciona uma caixa de busca para selects com muitos itens.
     const needsSearchBox = [regionContainer, compartmentContainer, instanceContainer].includes(container);
     if (needsSearchBox) {
       const searchBox = document.createElement('input');
@@ -102,9 +85,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let iconSvg = '';
       if (isMultiSelect) {
-        // Lógica para renderizar itens de um select de múltipla escolha (com checkboxes).
         item.classList.add('select-item');
         iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`;
+
+        // Adiciona indicador de status (RUNNING/STOPPED) na lista de instâncias.
+        const status = option.status || '';
+        const statusClass = status.toLowerCase(); // ex: 'running', 'stopped'
 
         item.innerHTML = `
           <input type="checkbox" value="${optionValue}" data-name="${optionName}" ${selectedInstances[optionValue] ? 'checked' : ''}>
@@ -113,18 +99,18 @@ document.addEventListener('DOMContentLoaded', () => {
           </span>
           <div class="instance-info">
              ${iconSvg}
+             <span class="instance-status status-${statusClass}"></span>
              <span class="item-text">${optionName}</span>
+             <span class="status-text">(${status})</span>
           </div>`;
 
       } else {
-        // Lógica para renderizar itens de um select de escolha única.
         item.classList.add('select-item-parent');
         if (container === regionContainer) {
           iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>`;
         } else if (container === docTypeContainer) {
           iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
         } else if (option.level !== undefined) {
-          // Lógica para a visualização em árvore dos compartimentos.
           item.classList.remove('select-item-parent');
           item.classList.add(option.level > 0 ? 'select-item' : 'select-item-parent');
           if (option.level > 0) {
@@ -141,7 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Adiciona os listeners de evento para os itens.
       if (isMultiSelect) {
         const checkbox = item.querySelector('input[type="checkbox"]');
         item.addEventListener('click', (e) => {
@@ -164,7 +149,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     container.appendChild(items);
 
-    // Listener para abrir/fechar o dropdown.
     selected.addEventListener('click', (e) => {
       e.stopPropagation();
       if (selected.classList.contains('disabled')) return;
@@ -177,10 +161,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /**
-   * Atualiza a exibição das instâncias selecionadas no modo multi-select,
-   * mostrando-as como tags.
-   */
   function updateMultiSelectDisplay() {
     const container = instanceContainer.querySelector('.selected-items-container');
     container.innerHTML = '';
@@ -197,11 +177,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /**
-   * Fecha todos os dropdowns abertos, com uma exceção opcional
-   * para evitar que um multi-select se feche ao clicar em um item.
-   * @param {HTMLElement | null} except - O elemento select a ser ignorado.
-   */
   function closeAllSelects(except = null) {
     document.querySelectorAll('.select-items').forEach(item => {
       if (item.parentElement !== except) {
@@ -214,8 +189,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-
-  // --- Funções de Busca de Dados (API Calls) ---
 
   const fetchRegions = async () => {
     try {
@@ -293,44 +266,32 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleLoading(false);
     }
   };
-  
-  /**
-   * Orquestra a busca dos detalhes de todas as instâncias selecionadas em paralelo
-   * usando Promise.all para otimizar o tempo de resposta.
-   */
+
   const fetchAllInstanceDetails = async () => {
     const instanceIds = Object.keys(selectedInstances);
     if (instanceIds.length === 0) return;
-
     toggleLoading(true);
     detailsContainer.classList.add('hidden');
     allInstancesData = [];
     summaryContainer.innerHTML = '<p>Buscando dados...</p>';
-
-    // Cria um array de promises, uma para cada requisição de instância.
     const promises = instanceIds.map(id => {
       const fullUrl = `${API_BASE_URL}/api/${selectedRegion}/instance-details/${id}`;
       return fetch(fullUrl)
         .then(res => {
           if (res.ok) return res.json();
-          // Se a resposta não for OK, rejeita a promise com a mensagem de erro da API.
           return res.json().then(err => Promise.reject(`Falha ao buscar ${selectedInstances[id]}: ${err.detail || JSON.stringify(err)}`));
         })
         .then(data => {
-          // Adiciona o nome do compartimento aos dados, pois não vem da API de detalhes.
           data.compartment_name = selectedCompartmentName;
           return data;
         });
     });
-
     try {
-      // Aguarda a resolução de todas as promises.
       allInstancesData = await Promise.all(promises);
       let finalHtml = ``;
       allInstancesData.forEach(data => {
         finalHtml += generateInstanceSummaryCard(data);
       });
-
       summaryContainer.innerHTML = finalHtml;
       detailsContainer.classList.remove('hidden');
     } catch (error) {
@@ -340,8 +301,6 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleLoading(false);
     }
   };
-  
-  // --- Funções de Reset de Estado ---
 
   const resetAndFetchCompartments = () => {
     selectedCompartmentId = null;
@@ -360,15 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchInstances();
   };
 
-  // --- Funções de Renderização e Geração de Documento ---
-
-  /**
-   * Gera o HTML para um card de resumo de uma única instância.
-   * @param {Object} data - O objeto com os detalhes da instância.
-   * @returns {string} O HTML do card.
-   */
   function generateInstanceSummaryCard(data) {
-    // Constrói a tabela de Block Volumes
     let blockVolumesHtml = data.block_volumes && data.block_volumes.length > 0 ?
       `<table class="bv-table">
           <thead><tr><th>Nome do Volume</th><th>Tamanho (GB)</th></tr></thead>
@@ -382,17 +333,14 @@ document.addEventListener('DOMContentLoaded', () => {
       </table>` :
       `<p class="no-data-message">Nenhum Block Volume adicional anexado.</p>`;
 
-    // Constrói as tags de Security Lists
     const securityListsHtml = data.security_lists && data.security_lists.length > 0 ?
       data.security_lists.map(sl => `<span class="summary-item">${sl.name}</span>`).join('') :
       `<span class="summary-item empty">Nenhuma</span>`;
 
-    // Constrói as tags de NSGs
     const nsgsHtml = data.network_security_groups && data.network_security_groups.length > 0 ?
       data.network_security_groups.map(nsg => `<span class="summary-item">${nsg.name}</span>`).join('') :
       `<span class="summary-item empty">Nenhum</span>`;
     
-    // Constrói a tag de Route Table
     const routeTableHtml = data.route_table && data.route_table.name ?
       `<span class="summary-item">${data.route_table.name}</span>` :
       `<span class="summary-item empty">Nenhuma</span>`;
@@ -439,10 +387,6 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>`;
   }
 
-  /**
-   * Envia os dados coletados e os arquivos de imagem para a API
-   * para gerar o documento .docx e iniciar o download.
-   */
   const generateDocument = async () => {
     if (!allInstancesData || allInstancesData.length === 0) {
       alert("Busque os dados da(s) instância(s) primeiro.");
@@ -450,38 +394,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     try {
       toggleLoading(true);
-
       const formData = new FormData();
       const payload = {
         instances_data: allInstancesData
       };
-      // Os dados JSON e os arquivos são enviados como 'multipart/form-data'.
       formData.append('json_data', JSON.stringify(payload));
-
       architectureImageFiles.forEach(file => {
         formData.append('architecture_files', file);
       });
       antivirusImageFiles.forEach(file => {
         formData.append('antivirus_files', file);
       });
-
       const response = await fetch(`${API_BASE_URL}/api/generate-document`, {
         method: 'POST',
         body: formData
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(JSON.stringify(errorData.detail || errorData));
       }
-
-      // Inicia o download do arquivo recebido da API.
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-
       const docName = `Doc_${allInstancesData[0].compartment_name.replace('SERVERS-','')}_multihost_${new Date().toISOString().split('T')[0]}.docx`;
       a.download = docName;
       document.body.appendChild(a);
@@ -496,17 +432,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // --- Funções para Manipulação de Upload de Arquivos ---
-
-  /**
-   * Atualiza a UI para exibir a lista de arquivos selecionados, incluindo previews e um botão de exclusão.
-   * @param {Array<File>} fileArray - O array de arquivos a ser exibido.
-   * @param {HTMLElement} fileListContainer - O elemento container para a lista.
-   */
   function updateFileListUI(fileArray, fileListContainer) {
     fileListContainer.innerHTML = '';
     if (fileArray.length === 0) return;
-
     fileArray.forEach((file, index) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -524,27 +452,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /**
-   * Lida com a seleção de arquivos via input de arquivo.
-   * @param {Event} event - O evento 'change' do input.
-   * @param {Array<File>} fileArray - O array de estado para adicionar os novos arquivos.
-   * @param {HTMLElement} fileListContainer - O container da UI a ser atualizado.
-   */
   function handleFileSelect(event, fileArray, fileListContainer) {
     const newFiles = event.target.files;
     if (!newFiles || newFiles.length === 0) return;
-
     Array.from(newFiles).forEach(file => fileArray.push(file));
     updateFileListUI(fileArray, fileListContainer);
-    event.target.value = ''; // Limpa o input para permitir selecionar o mesmo arquivo novamente.
+    event.target.value = '';
   }
 
-  /**
-   * Lida com imagens coladas (paste) na área de upload.
-   * @param {ClipboardEvent} event - O evento 'paste'.
-   * @param {Array<File>} fileArray - O array de estado para adicionar os novos arquivos.
-   * @param {HTMLElement} fileListContainer - O container da UI a ser atualizado.
-   */
   async function handlePaste(event, fileArray, fileListContainer) {
     event.preventDefault();
     const items = event.clipboardData.items;
@@ -554,23 +469,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const timestamp = new Date().getTime();
         const extension = blob.type.split('/')[1];
         const fileName = `colado_${timestamp}.${extension}`;
-        const imageFile = new File([blob], fileName, { type: blob.type });
+        const imageFile = new File([blob], fileName, {
+          type: blob.type
+        });
         fileArray.push(imageFile);
       }
     }
     updateFileListUI(fileArray, fileListContainer);
   }
 
-  /**
-   * Lida com a exclusão de um arquivo da lista.
-   * @param {Event} event - O evento 'click' delegado do container da lista.
-   * @param {Array<File>} fileArray - O array de estado de onde o arquivo será removido.
-   * @param {HTMLElement} fileListContainer - O container da UI a ser atualizado.
-   */
   function handleFileDelete(event, fileArray, fileListContainer) {
     const deleteButton = event.target.closest('.file-list-delete-btn');
     if (!deleteButton) return;
-
     const indexToRemove = parseInt(deleteButton.dataset.index, 10);
     if (!isNaN(indexToRemove)) {
       fileArray.splice(indexToRemove, 1);
@@ -578,9 +488,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /**
-   * Função de inicialização da aplicação.
-   */
   const initializeApp = () => {
     fetchRegions();
     populateDocTypes();
@@ -602,3 +509,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Início da Aplicação ---
   initializeApp();
 });
+
