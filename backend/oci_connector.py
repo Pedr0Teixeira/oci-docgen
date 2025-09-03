@@ -3,9 +3,16 @@
 # Data: 03 de Setembro de 2025
 # Descrição: Módulo de conector que interage com o SDK da OCI para buscar dados da infraestrutura.
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import oci
+
+# --- IMPORTAÇÃO DOS SCHEMAS ATUALIZADOS ---
+from schemas import (BlockVolume, CpeData, DrgAttachmentData, DrgData,
+                     InfrastructureData, InstanceData, IpsecData,
+                     NetworkSecurityGroup, PhaseOneDetails, PhaseTwoDetails,
+                     RouteRule, RouteTable, SecurityList, SecurityRule,
+                     SubnetData, TunnelData, VcnData)
 
 # --- Mapeamento de Protocolos IANA ---
 IANA_PROTOCOL_MAP = {
@@ -20,10 +27,13 @@ IANA_PROTOCOL_MAP = {
 try:
     config = oci.config.from_file()
     tenancy_id = config["tenancy"]
+    # Cliente de identidade global para buscar nomes de compartimento
+    identity_client_for_compartment = oci.identity.IdentityClient(config)
 except Exception as e:
     print(f"FATAL: Erro ao carregar a configuração da OCI a partir do arquivo: {e}")
     config = {}
     tenancy_id = None
+    identity_client_for_compartment = None
 
 
 # --- Funções Auxiliares (Helpers) ---
@@ -93,7 +103,7 @@ def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
             entity = _safe_api_call(func, entity_id)
             if entity:
                 display_attr = getattr(entity, 'ip_address', getattr(entity, 'display_name', None))
-                return f"{type_name}: {display_attr}"
+                return f"{type_name}: {display_attr}" if display_attr else type_name
             return entity_id
         elif entity_type == "drgattachment":
             attachment = _safe_api_call(virtual_network_client.get_drg_attachment, entity_id)
@@ -111,6 +121,62 @@ def _get_source_dest_name(virtual_network_client, source_dest: str) -> str:
         return source_dest
     nsg = _safe_api_call(virtual_network_client.get_network_security_group, source_dest)
     return nsg.display_name if nsg else source_dest
+
+def get_compartment_name(compartment_id: str) -> str:
+    """Busca o nome de um compartimento a partir do seu OCID."""
+    if not identity_client_for_compartment:
+        return "N/A"
+    if compartment_id == tenancy_id:
+        return "Raiz (Tenancy)"
+    compartment = _safe_api_call(identity_client_for_compartment.get_compartment, compartment_id)
+    return compartment.name if compartment else "N/A"
+
+def _validate_ipsec_parameters(tunnel: oci.core.models.IPSecConnectionTunnel) -> Tuple[str, Optional[str]]:
+    """Valida os parâmetros de um túnel IPSec contra as recomendações da Oracle, tratando casos especiais como GCM."""
+    
+    p1 = tunnel.phase_one_details
+    p2 = tunnel.phase_two_details
+    
+    if not p1 or not p2:
+        return "Indisponível", "Detalhes de IKE/IPSec não encontrados."
+
+    docs_link = "https://docs.oracle.com/pt-br/iaas/Content/Network/Reference/supportedIPsecparams.htm"
+    
+    # Se a Oracle gerencia, não há validação a ser feita pelo usuário.
+    if not p1.is_custom_phase_one_config:
+        return "Gerenciado pela Oracle (Padrão)", None
+        
+    # --- Validação da Fase 1 ---
+    # Valores conforme a documentação fornecida pelo usuário
+    recommended_p1 = {
+        "encryption": "AES_256_CBC",
+        "authentication": "SHA2_384",
+        "dh_group": "GROUP20"
+    }
+    is_p1_ok = (
+        p1.custom_encryption_algorithm == recommended_p1["encryption"] and
+        p1.custom_authentication_algorithm == recommended_p1["authentication"] and
+        p1.custom_dh_group == recommended_p1["dh_group"]
+    )
+    
+    # --- Validação da Fase 2 ---
+    is_p2_ok = False
+    p2_encryption = p2.custom_encryption_algorithm
+    p2_authentication = p2.custom_authentication_algorithm
+
+    if p2_encryption and "GCM" in p2_encryption:
+        # Para GCM, a autenticação é integrada. O valor de autenticação deve ser nulo.
+        if p2_encryption == "AES_256_GCM" and p2_authentication is None:
+            is_p2_ok = True
+    elif p2_encryption and "CBC" in p2_encryption:
+        # Para CBC, uma autenticação HMAC é necessária.
+        if p2_encryption == "AES_256_CBC" and p2_authentication == "HMAC_SHA2_256_128":
+            is_p2_ok = True
+    
+    if is_p1_ok and is_p2_ok:
+        return "Conforme a recomendação Oracle", None
+    else:
+        return "Fora da recomendação Oracle", docs_link
 
 
 # --- Funções Públicas de Coleta de Dados ---
@@ -171,83 +237,204 @@ def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict
     ]
     return filtered_instances
 
-
-def get_instance_details(region: str, instance_id: str) -> Dict[str, Any]:
+def get_instance_details(region: str, instance_id: str, compartment_name: str = "N/A") -> InstanceData:
     """Coleta um conjunto abrangente de detalhes para uma única instância."""
     compute_client = get_client(oci.core.ComputeClient, region)
     virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
     block_storage_client = get_client(oci.core.BlockstorageClient, region)
-    if not all([compute_client, virtual_network_client, block_storage_client]):
-        raise ConnectionError("Um ou mais clientes OCI não puderam ser inicializados.")
+
     instance = _safe_api_call(compute_client.get_instance, instance_id)
     if not instance:
         raise oci.exceptions.ServiceError(status=404, message=f"Instância {instance_id} não encontrada.")
-    details = {"host_name": instance.display_name, "shape": instance.shape, "ocpus": str(int(instance.shape_config.ocpus)), "memory": str(int(instance.shape_config.memory_in_gbs)), "os_name": "N/A", "boot_volume_gb": "N/A", "private_ip": "N/A", "public_ip": "N/A", "backup_policy_name": "N/A", "block_volumes": [], "security_lists": [], "network_security_groups": [], "route_table": None}
+
     image = _safe_api_call(compute_client.get_image, instance.image_id)
-    if image:
-        details["os_name"] = f"{image.operating_system} {image.operating_system_version}"
+    os_name = f"{image.operating_system} {image.operating_system_version}" if image else "N/A"
+
+    private_ip, public_ip = "N/A", "N/A"
+    security_lists, network_security_groups, route_table = [], [], None
     vnic_attachments = _safe_api_call(compute_client.list_vnic_attachments, instance.compartment_id, instance_id=instance_id)
     if vnic_attachments:
         vnic = _safe_api_call(virtual_network_client.get_vnic, vnic_attachments[0].vnic_id)
         if vnic:
-            details["private_ip"] = vnic.private_ip or "N/A"
-            details["public_ip"] = vnic.public_ip or "N/A"
+            private_ip, public_ip = vnic.private_ip or "N/A", vnic.public_ip or "N/A"
             subnet = _safe_api_call(virtual_network_client.get_subnet, vnic.subnet_id)
             if subnet:
                 for sl_id in subnet.security_list_ids:
                     sl = _safe_api_call(virtual_network_client.get_security_list, sl_id)
                     if sl:
-                        rules = []
-                        for r in sl.ingress_security_rules:
-                            rules.append({"direction": "INGRESS", "protocol": _translate_protocol(r.protocol), "source_or_destination": r.source, "ports": _format_rule_ports(r), "description": r.description})
-                        for r in sl.egress_security_rules:
-                            rules.append({"direction": "EGRESS", "protocol": _translate_protocol(r.protocol), "source_or_destination": r.destination, "ports": _format_rule_ports(r), "description": r.description})
-                        details["security_lists"].append({"name": sl.display_name, "rules": rules})
+                        rules = [SecurityRule(direction="INGRESS", protocol=_translate_protocol(r.protocol), source_or_destination=r.source, ports=_format_rule_ports(r), description=r.description) for r in sl.ingress_security_rules]
+                        rules.extend([SecurityRule(direction="EGRESS", protocol=_translate_protocol(r.protocol), source_or_destination=r.destination, ports=_format_rule_ports(r), description=r.description) for r in sl.egress_security_rules])
+                        security_lists.append(SecurityList(id=sl.id, name=sl.display_name, rules=rules))
+                
                 rt = _safe_api_call(virtual_network_client.get_route_table, subnet.route_table_id)
                 if rt:
-                    rt_rules = [{"destination": r.destination, "target": get_network_entity_name(virtual_network_client, r.network_entity_id), "description": r.description} for r in rt.route_rules]
-                    details["route_table"] = {"name": rt.display_name, "rules": rt_rules}
+                    rt_rules = [RouteRule(destination=r.destination, target=get_network_entity_name(virtual_network_client, r.network_entity_id), description=r.description) for r in rt.route_rules]
+                    route_table = RouteTable(id=rt.id, name=rt.display_name, rules=rt_rules)
+
             for nsg_id in vnic.nsg_ids:
                 nsg = _safe_api_call(virtual_network_client.get_network_security_group, nsg_id)
                 if nsg:
-                    rules = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_id)
+                    rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_id)
                     nsg_rules = []
-                    if rules:
-                        for r in rules:
+                    if rules_sdk:
+                        for r in rules_sdk:
                             source_dest = r.source if r.direction == 'INGRESS' else r.destination
-                            nsg_rules.append({"direction": r.direction, "protocol": _translate_protocol(r.protocol), "source_or_destination": _get_source_dest_name(virtual_network_client, source_dest), "ports": _format_rule_ports(r), "description": r.description})
-                    details["network_security_groups"].append({"name": nsg.display_name, "rules": nsg_rules})
+                            nsg_rules.append(SecurityRule(direction=r.direction, protocol=_translate_protocol(r.protocol), source_or_destination=_get_source_dest_name(virtual_network_client, source_dest), ports=_format_rule_ports(r), description=r.description))
+                    network_security_groups.append(NetworkSecurityGroup(id=nsg.id, name=nsg.display_name, rules=nsg_rules))
+
+    boot_volume_gb, backup_policy_name = "N/A", "Nenhuma política associada"
     boot_vol_attachments = _safe_api_call(compute_client.list_boot_volume_attachments, instance.availability_domain, instance.compartment_id, instance_id=instance_id)
     if boot_vol_attachments:
         boot_vol = _safe_api_call(block_storage_client.get_boot_volume, boot_vol_attachments[0].boot_volume_id)
         if boot_vol:
-            details["boot_volume_gb"] = str(int(boot_vol.size_in_gbs))
+            boot_volume_gb = str(int(boot_vol.size_in_gbs))
             assignment = _safe_api_call(block_storage_client.get_volume_backup_policy_asset_assignment, boot_vol.id)
             if assignment:
                 policy = _safe_api_call(block_storage_client.get_volume_backup_policy, assignment[0].policy_id)
-                details["backup_policy_name"] = policy.display_name if policy else "Política não encontrada"
-            else:
-                details["backup_policy_name"] = "Nenhuma política associada"
-    
-    # Adiciona a verificação de política de backup para cada Block Volume.
+                if policy: backup_policy_name = policy.display_name
+
+    block_volumes = []
     attachments = _safe_api_call(compute_client.list_volume_attachments, instance.compartment_id, instance_id=instance_id)
     if attachments:
         for att in attachments:
             if att.lifecycle_state == 'ATTACHED' and att.attachment_type != 'iscsi':
                 vol = _safe_api_call(block_storage_client.get_volume, att.volume_id)
                 if vol:
-                    # Lógica para buscar a política de backup do volume.
                     vol_backup_policy_name = "Nenhuma política associada"
                     vol_assignment = _safe_api_call(block_storage_client.get_volume_backup_policy_asset_assignment, vol.id)
                     if vol_assignment:
                         vol_policy = _safe_api_call(block_storage_client.get_volume_backup_policy, vol_assignment[0].policy_id)
-                        if vol_policy:
-                            vol_backup_policy_name = vol_policy.display_name
-                    
-                    details["block_volumes"].append({
-                        "display_name": vol.display_name,
-                        "size_in_gbs": vol.size_in_gbs,
-                        "backup_policy_name": vol_backup_policy_name
-                    })
-    return details
+                        if vol_policy: vol_backup_policy_name = vol_policy.display_name
+                    block_volumes.append(BlockVolume(display_name=vol.display_name, size_in_gbs=vol.size_in_gbs, backup_policy_name=vol_backup_policy_name))
 
+    return InstanceData(
+        host_name=instance.display_name, shape=instance.shape, ocpus=str(int(instance.shape_config.ocpus)),
+        memory=str(int(instance.shape_config.memory_in_gbs)), os_name=os_name, boot_volume_gb=boot_volume_gb,
+        private_ip=private_ip, public_ip=public_ip, backup_policy_name=backup_policy_name,
+        block_volumes=block_volumes, security_lists=security_lists, network_security_groups=network_security_groups,
+        route_table=route_table, compartment_name=compartment_name, lifecycle_state=instance.lifecycle_state
+    )
+
+# --- FUNÇÃO PRINCIPAL DE COLETA DE DADOS DE INFRAESTRUTURA ---
+
+def get_infrastructure_details(region: str, compartment_id: str) -> InfrastructureData:
+    """Orquestra a coleta de dados de infraestrutura de um compartimento."""
+    compute_client = get_client(oci.core.ComputeClient, region)
+    virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
+    
+    compartment_name = get_compartment_name(compartment_id)
+    oracle_managed_str = "Gerenciado pela Oracle (Padrão)"
+
+    # 1. Coletar detalhes completos de todas as instâncias
+    all_instances_sdk = oci.pagination.list_call_get_all_results(compute_client.list_instances, compartment_id=compartment_id).data
+    instances = [get_instance_details(region, i.id, compartment_name) for i in all_instances_sdk]
+
+    # 2. Coletar DRGs (são a nível de compartimento)
+    all_drgs_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_drgs, compartment_id=compartment_id).data
+    drgs = []
+    for drg_sdk in all_drgs_sdk:
+        attachments_sdk = oci.pagination.list_call_get_all_results(
+            virtual_network_client.list_drg_attachments, 
+            compartment_id=compartment_id,
+            drg_id=drg_sdk.id
+        ).data
+        attachments = [DrgAttachmentData(id=a.id, display_name=a.display_name, network_id=a.network_details.id, network_type=a.network_details.type) for a in attachments_sdk if a.network_details]
+        drgs.append(DrgData(id=drg_sdk.id, display_name=drg_sdk.display_name, attachments=attachments))
+        
+    # 3. Coletar CPEs (no nível do compartimento) - REQUISITO ATENDIDO
+    all_cpes_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_cpes, compartment_id=compartment_id).data
+    cpes = []
+    for cpe in all_cpes_sdk:
+        vendor = "N/A"
+        if cpe.cpe_device_shape_id:
+            shape = _safe_api_call(virtual_network_client.get_cpe_device_shape, cpe.cpe_device_shape_id)
+            if shape and hasattr(shape, 'cpe_device_info') and shape.cpe_device_info:
+                vendor = shape.cpe_device_info.vendor or "N/A"
+        cpes.append(CpeData(id=cpe.id, display_name=cpe.display_name, ip_address=cpe.ip_address, vendor=vendor))
+
+    # 4. Coletar Conexões IPSec (no nível do compartimento) - REQUISITOS ATENDIDOS
+    all_ipsec_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_ip_sec_connections, compartment_id=compartment_id).data
+    ipsec_connections = []
+    for ipsec in all_ipsec_sdk:
+        tunnels_sdk = _safe_api_call(virtual_network_client.list_ip_sec_connection_tunnels, ipsec.id)
+        tunnels = []
+        if tunnels_sdk:
+            for tunnel in tunnels_sdk:
+                validation_status, validation_details = _validate_ipsec_parameters(tunnel)
+                
+                # Detalhes Fase 1 (IKE)
+                p1_details = tunnel.phase_one_details
+                is_p1_custom = p1_details.is_custom_phase_one_config
+                phase_one = PhaseOneDetails(
+                    is_custom=is_p1_custom,
+                    authentication_algorithm=p1_details.custom_authentication_algorithm if is_p1_custom else oracle_managed_str,
+                    encryption_algorithm=p1_details.custom_encryption_algorithm if is_p1_custom else oracle_managed_str,
+                    dh_group=p1_details.custom_dh_group if is_p1_custom else oracle_managed_str,
+                    lifetime_in_seconds=p1_details.lifetime or 0
+                )
+                
+                # Detalhes Fase 2 (IPSec)
+                p2_details = tunnel.phase_two_details
+                is_p2_custom = p2_details.is_custom_phase_two_config
+                phase_two = PhaseTwoDetails(
+                    is_custom=is_p2_custom,
+                    authentication_algorithm=(p2_details.custom_authentication_algorithm if is_p2_custom else oracle_managed_str) or "N/A",
+                    encryption_algorithm=(p2_details.custom_encryption_algorithm if is_p2_custom else oracle_managed_str) or "N/A",
+                    lifetime_in_seconds=p2_details.lifetime or 0
+                )
+
+                tunnels.append(TunnelData(
+                    id=tunnel.id, display_name=tunnel.display_name, status=tunnel.status or "N/A",
+                    cpe_ip=tunnel.cpe_ip, vpn_oracle_ip=tunnel.vpn_ip, routing_type=tunnel.routing, 
+                    ike_version=tunnel.ike_version, validation_status=validation_status, validation_details=validation_details,
+                    phase_one_details=phase_one, phase_two_details=phase_two
+                ))
+        
+        # Rotas estáticas
+        ipsec_connections.append(IpsecData(
+            id=ipsec.id, display_name=ipsec.display_name, status=ipsec.lifecycle_state,
+            cpe_id=ipsec.cpe_id, drg_id=ipsec.drg_id, tunnels=tunnels, 
+            static_routes=ipsec.static_routes
+        ))
+
+    # 5. Coletar VCNs e aninhar seus recursos filhos
+    all_vcns_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_vcns, compartment_id=compartment_id, lifecycle_state="AVAILABLE").data
+    vcns = []
+    for vcn_sdk in all_vcns_sdk:
+        subnets_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_subnets, compartment_id=compartment_id, vcn_id=vcn_sdk.id, lifecycle_state="AVAILABLE").data
+        subnets = [SubnetData(id=s.id, display_name=s.display_name, cidr_block=s.cidr_block) for s in subnets_sdk]
+
+        sls_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_security_lists, compartment_id=compartment_id, vcn_id=vcn_sdk.id, lifecycle_state="AVAILABLE").data
+        security_lists = []
+        for sl_sdk in sls_sdk:
+            rules = [SecurityRule(direction="INGRESS", protocol=_translate_protocol(r.protocol), source_or_destination=r.source, ports=_format_rule_ports(r), description=r.description) for r in sl_sdk.ingress_security_rules]
+            rules.extend([SecurityRule(direction="EGRESS", protocol=_translate_protocol(r.protocol), source_or_destination=r.destination, ports=_format_rule_ports(r), description=r.description) for r in sl_sdk.egress_security_rules])
+            security_lists.append(SecurityList(id=sl_sdk.id, name=sl_sdk.display_name, rules=rules))
+
+        rts_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_route_tables, compartment_id=compartment_id, vcn_id=vcn_sdk.id, lifecycle_state="AVAILABLE").data
+        route_tables = [RouteTable(id=rt.id, name=rt.display_name, rules=[RouteRule(destination=r.destination, target=get_network_entity_name(virtual_network_client, r.network_entity_id), description=r.description) for r in rt.route_rules]) for rt in rts_sdk]
+            
+        nsgs_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_network_security_groups, compartment_id=compartment_id, vcn_id=vcn_sdk.id).data
+        nsgs = []
+        for nsg_sdk in nsgs_sdk:
+            rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_sdk.id)
+            rules = []
+            if rules_sdk:
+                for r in rules_sdk:
+                    source_dest = r.source if r.direction == 'INGRESS' else r.destination
+                    rules.append(SecurityRule(direction=r.direction, protocol=_translate_protocol(r.protocol), source_or_destination=_get_source_dest_name(virtual_network_client, source_dest), ports=_format_rule_ports(r), description=r.description))
+            nsgs.append(NetworkSecurityGroup(id=nsg_sdk.id, name=nsg_sdk.display_name, rules=rules))
+
+        vcns.append(VcnData(
+            id=vcn_sdk.id, display_name=vcn_sdk.display_name, cidr_block=vcn_sdk.cidr_block, 
+            subnets=subnets, security_lists=security_lists, route_tables=route_tables,
+            network_security_groups=nsgs
+        ))
+            
+    return InfrastructureData(
+        instances=instances,
+        vcns=vcns,
+        drgs=drgs,
+        cpes=cpes,
+        ipsec_connections=ipsec_connections
+    )
