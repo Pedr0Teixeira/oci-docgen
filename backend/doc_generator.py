@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 02 de Setembro de 2025
+# Data: 03 de Setembro de 2025
 # Descrição: Módulo responsável por gerar o documento .docx com base nos dados da infraestrutura coletados.
 
 import os
@@ -20,17 +20,8 @@ def generate_documentation(
     architecture_image_bytes_list: Optional[List[bytes]] = None,
     antivirus_image_bytes_list: Optional[List[bytes]] = None
 ) -> str:
-    """
-    Cria um documento Word (.docx) com base nos detalhes das instâncias e imagens fornecidas.
-
-    Args:
-        all_instances_data: Uma lista de objetos InstanceData contendo os detalhes de cada host.
-        architecture_image_bytes_list: Uma lista opcional de bytes de imagem para a seção de arquitetura.
-        antivirus_image_bytes_list: Uma lista opcional de bytes de imagem para a seção de antivírus.
-
-    Returns:
-        O caminho do arquivo .docx gerado.
-    """
+    """Cria um documento Word (.docx) com base nos detalhes das instâncias e imagens fornecidas."""
+    
     # --- 1. Configuração Inicial do Documento ---
     document = Document()
     style = document.styles['Normal']
@@ -38,10 +29,8 @@ def generate_documentation(
     font.name = 'Calibri'
     font.size = Pt(11)
 
-    # Ordena os dados por nome de host para consistência no documento.
     all_instances_data.sort(key=lambda x: x.host_name)
 
-    # Extrai o nome do cliente a partir do nome do compartimento.
     client_name = all_instances_data[0].compartment_name
     if client_name.upper().startswith("SERVERS-"):
         client_name = client_name[8:]
@@ -50,10 +39,8 @@ def generate_documentation(
     document.add_paragraph(f"Cliente: {client_name}")
     document.add_paragraph(f"Data de Geração: {datetime.now().strftime('%d/%m/%Y')}")
 
-    # --- 2. Geração Dinâmica de Tópicos ---
     topic_number = 1
 
-    # TÓPICO CONDICIONAL: Desenho da Arquitetura
     if architecture_image_bytes_list:
         document.add_heading(f'{topic_number}. Desenho da Arquitetura', level=2)
         for image_bytes in architecture_image_bytes_list:
@@ -65,12 +52,8 @@ def generate_documentation(
                 document.add_paragraph(f"Erro ao inserir uma imagem da arquitetura: {e}")
         topic_number += 1
 
-    # TÓPICO: Apresentação do Ambiente
     document.add_heading(f'{topic_number}. Apresentação do Ambiente', level=2)
-    document.add_paragraph(
-        "A tabela a seguir detalha as configurações de cada uma das instâncias "
-        "computacionais no escopo desta documentação."
-    )
+    document.add_paragraph("A tabela a seguir detalha as configurações de cada uma das instâncias computacionais no escopo desta documentação.")
     host_table = document.add_table(rows=1, cols=8, style='Table Grid')
     headers = ['HOST', 'SHAPE', 'OCPU', 'MEMÓRIA (GB)', 'BOOT VOL (GB)', 'S.O.', 'IP PRIVADO', 'IP PÚBLICO']
     for i, header in enumerate(headers):
@@ -89,51 +72,94 @@ def generate_documentation(
         row_cells[7].text = data.public_ip or "N/A"
     topic_number += 1
 
-    # TÓPICO: Backup da Infraestrutura
+    # --- Seção de Backup reestruturada ---
     document.add_heading(f'{topic_number}. Backup da Infraestrutura', level=2)
-    backup_policies = {data.backup_policy_name for data in all_instances_data}
-    if len(backup_policies) == 1:
-        policy_name = backup_policies.pop()
-        backup_description = ""
+    
+    def get_policy_description(policy_name: str) -> str:
         if policy_name == "CCM-7D":
-            backup_description = (
-                "O Backup da CCM-7D está configurado por meio de uma Backup Policy aplicada aos volumes "
-                "de boot de todos os hosts, garantindo a proteção contínua dos dados.\n\n"
+            return (
+                "O Backup da CCM-7D está configurado por meio de uma Backup Policy aplicada ao "
+                "volume, garantindo a proteção contínua dos dados.\n\n"
                 "A política atual define um agendamento diário do tipo Incremental, executado às 01:00 "
-                "(horário regional).\n\n"
-                "Os backups gerados possuem retenção de 7 dias."
+                "(horário regional). Esse tipo de backup copia apenas as alterações realizadas desde o "
+                "último backup, otimizando tempo de execução e uso de espaço de armazenamento.\n\n"
+                "Os backups gerados possuem retenção de 7 dias, permitindo a restauração de dados em "
+                "pontos específicos dentro desse período.\n\n"
+                "Essa política garante que, em caso de falhas, seja possível recuperar o volume "
+                "rapidamente, minimizando impacto e perda de informações."
             )
         elif policy_name == "Nenhuma política associada":
-            backup_description = "Nenhuma política de backup está atualmente associada aos volumes de boot dos hosts listados."
+            return "O volume não possui uma política de backup automatizada associada."
         else:
-            backup_description = f"Todos os hosts estão associados à política de backup customizada: {policy_name}."
-        document.add_paragraph(backup_description)
-    else:
-        document.add_paragraph("As instâncias possuem diferentes políticas de backup associadas:")
-        for data in all_instances_data:
-            document.add_paragraph(f"  •  Host {data.host_name}: {data.backup_policy_name}", style='List Bullet')
-    topic_number += 1
+            return f"O volume está protegido pela política de backup customizada: '{policy_name}'."
 
-    # TÓPICO: Block Volumes Anexados
-    document.add_heading(f'{topic_number}. Block Volumes Anexados', level=2)
-    all_block_volumes = [(data.host_name, vol) for data in all_instances_data for vol in data.block_volumes]
-    if all_block_volumes:
-        bv_table = document.add_table(rows=1, cols=3, style='Table Grid')
-        bv_table.cell(0, 0).text = 'Host de Origem'
-        bv_table.cell(0, 1).text = 'Nome do Volume'
-        bv_table.cell(0, 2).text = 'Tamanho (GB)'
-        for cell in bv_table.rows[0].cells:
+    # Subtópico para Boot Volumes
+    document.add_paragraph("Backup de Boot Volume", style='Heading 3')
+    boot_backup_policies = {data.backup_policy_name for data in all_instances_data}
+    if len(boot_backup_policies) == 1:
+        policy_name = boot_backup_policies.pop()
+        document.add_paragraph(get_policy_description(policy_name))
+    else:
+        document.add_paragraph("As instâncias possuem diferentes políticas de backup associadas aos seus Boot Volumes:")
+        # Lógica para usar a descrição detalhada para cada item da lista ---
+        for data in all_instances_data:
+            # Pega a descrição completa da política do host atual.
+            description = get_policy_description(data.backup_policy_name)
+            
+            # Cria um novo parágrafo com o estilo de lista (que adiciona o "•").
+            p = document.add_paragraph(style='List Bullet')
+            
+            # Adiciona o nome do host em negrito.
+            p.add_run(f"Host {data.host_name}: ").bold = True
+            
+            # Adiciona a descrição correspondente.
+            p.add_run(description)
+            
+    # Subtópico para Block Volumes
+    document.add_paragraph("Backup de Block Volumes Anexados", style='Heading 3')
+    bvs_with_backup = []
+    for data in all_instances_data:
+        for vol in data.block_volumes:
+            if vol.backup_policy_name != "Nenhuma política associada":
+                bvs_with_backup.append((data.host_name, vol))
+
+    if bvs_with_backup:
+        document.add_paragraph("A tabela a seguir detalha as políticas de backup aplicadas aos Block Volumes adicionais.")
+        bv_backup_table = document.add_table(rows=1, cols=3, style='Table Grid')
+        headers = ['Host de Origem', 'Nome do Volume', 'Política de Backup Aplicada']
+        for i, header in enumerate(headers):
+            cell = bv_backup_table.cell(0, i)
+            cell.text = header
             cell.paragraphs[0].runs[0].font.bold = True
-        for host_name, vol in all_block_volumes:
-            cells = bv_table.add_row().cells
+        
+        for host_name, vol in bvs_with_backup:
+            cells = bv_backup_table.add_row().cells
             cells[0].text = host_name
             cells[1].text = vol.display_name
-            cells[2].text = str(int(vol.size_in_gbs))
+            cells[2].text = vol.backup_policy_name
+    else:
+        document.add_paragraph("Nenhuma política de backup foi encontrada associada aos Block Volumes adicionais anexados às instâncias.")
+    topic_number += 1
+    # --- Fim da Seção de Backup ---
+
+    document.add_heading(f'{topic_number}. Block Volumes Anexados', level=2)
+    all_block_volumes = [vol for data in all_instances_data for vol in data.block_volumes]
+    if all_block_volumes:
+        bv_table = document.add_table(rows=1, cols=3, style='Table Grid')
+        headers = ['Host de Origem', 'Nome do Volume', 'Tamanho (GB)']
+        for i, header in enumerate(headers):
+            bv_table.cell(0, i).text = header
+            bv_table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+        for data in all_instances_data:
+            for vol in data.block_volumes:
+                cells = bv_table.add_row().cells
+                cells[0].text = data.host_name
+                cells[1].text = vol.display_name
+                cells[2].text = str(int(vol.size_in_gbs))
     else:
         document.add_paragraph("Nenhum Block Volume adicional foi encontrado anexado às instâncias.")
     topic_number += 1
 
-    # TÓPICO: Conectividade de Rede
     document.add_heading(f'{topic_number}. Conectividade de Rede', level=2)
     sl_map, nsg_map, rt_map = {}, {}, {}
     for data in all_instances_data:
@@ -142,44 +168,39 @@ def generate_documentation(
         for nsg in data.network_security_groups:
             nsg_map.setdefault(nsg.name, {'rules': nsg.rules, 'hosts': []})['hosts'].append(data.host_name)
         if data.route_table:
-            rt = data.route_table
-            rt_map.setdefault(rt.name, {'rules': rt.rules, 'hosts': []})['hosts'].append(data.host_name)
+            rt_map.setdefault(data.route_table.name, {'rules': data.route_table.rules, 'hosts': []})['hosts'].append(data.host_name)
 
-    # MODIFICADO: Definido novo cabeçalho com 5 colunas, incluindo "Portas".
-    network_headers = ["Direção", "Protocolo", "Origem/Destino", "Portas", "Descrição"]
-
+    headers_net = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
     for name, info in sorted(sl_map.items()):
         document.add_paragraph(f"Security List: {name}", style='Heading 3')
         p = document.add_paragraph()
         p.add_run(f"Aplicada a: {', '.join(sorted(list(set(info['hosts']))))}").italic = True
-        # MODIFICADO: Tabela agora tem 5 colunas.
-        sl_table = document.add_table(rows=1, cols=5, style='Table Grid')
-        for i, h in enumerate(network_headers):
+        sl_table = document.add_table(rows=1, cols=len(headers_net), style='Table Grid')
+        for i, h in enumerate(headers_net):
             sl_table.cell(0, i).text = h
             sl_table.cell(0, i).paragraphs[0].runs[0].font.bold = True
-        # MODIFICADO: Adicionada a célula para as portas (rule.ports).
         for rule in info['rules']:
             cells = sl_table.add_row().cells
             cells[0].text = rule.direction
             cells[1].text = rule.protocol
-            cells[2].text = rule.source_or_destination or "N/A"
-            cells[3].text = rule.ports or ""
+            cells[2].text = rule.ports or "N/A"
+            cells[3].text = rule.source_or_destination or "N/A"
             cells[4].text = rule.description or ''
             
     for name, info in sorted(nsg_map.items()):
         document.add_paragraph(f"NSG: {name}", style='Heading 3')
         p = document.add_paragraph()
         p.add_run(f"Aplicado a: {', '.join(sorted(list(set(info['hosts']))))}").italic = True
-        nsg_table = document.add_table(rows=1, cols=5, style='Table Grid')
-        for i, h in enumerate(network_headers):
+        nsg_table = document.add_table(rows=1, cols=len(headers_net), style='Table Grid')
+        for i, h in enumerate(headers_net):
             nsg_table.cell(0, i).text = h
             nsg_table.cell(0, i).paragraphs[0].runs[0].font.bold = True
         for rule in info['rules']:
             cells = nsg_table.add_row().cells
             cells[0].text = rule.direction
             cells[1].text = rule.protocol
-            cells[2].text = rule.source_or_destination or "N/A"
-            cells[3].text = rule.ports or ""
+            cells[2].text = rule.ports or "N/A"
+            cells[3].text = rule.source_or_destination or "N/A"
             cells[4].text = rule.description or ''
 
     for name, info in sorted(rt_map.items()):
@@ -187,7 +208,8 @@ def generate_documentation(
         p = document.add_paragraph()
         p.add_run(f"Aplicada a: {', '.join(sorted(list(set(info['hosts']))))}").italic = True
         rt_table = document.add_table(rows=1, cols=3, style='Table Grid')
-        for i, h in enumerate(["Destino", "Alvo", "Descrição"]):
+        headers_rt = ["Destino", "Alvo", "Descrição"]
+        for i, h in enumerate(headers_rt):
             rt_table.cell(0, i).text = h
             rt_table.cell(0, i).paragraphs[0].runs[0].font.bold = True
         for rule in info['rules']:
@@ -196,8 +218,7 @@ def generate_documentation(
             cells[1].text = rule.target
             cells[2].text = rule.description or ''
     topic_number += 1
-
-    # TÓPICO CONDICIONAL: Configuração do Antivírus
+    
     if antivirus_image_bytes_list:
         document.add_heading(f'{topic_number}. Configuração do Antivírus', level=2)
         for image_bytes in antivirus_image_bytes_list:
@@ -208,15 +229,12 @@ def generate_documentation(
             except Exception as e:
                 document.add_paragraph(f"Erro ao inserir uma imagem do antivírus: {e}")
 
-    # --- 3. Salvando o Documento ---
     output_dir = "generated_docs"
     os.makedirs(output_dir, exist_ok=True)
-
     host_identifier = "multihost" if len(all_instances_data) > 1 else all_instances_data[0].host_name.replace(' ', '_')
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_name = f"Doc_{client_name}_{host_identifier}_{timestamp}.docx"
     output_path = os.path.join(output_dir, file_name)
-
     document.save(output_path)
     return output_path
 
