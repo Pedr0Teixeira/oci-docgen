@@ -1,23 +1,16 @@
 # OCI DocGen: Automação de Documentação para Oracle Cloud
 
-```{=html}
 <p align="center">
-```
-`<strong>`{=html}Gere documentação técnica completa da sua
-infraestrutura OCI em minutos, não em dias.`</strong>`{=html}
-```{=html}
+  <strong>Gere documentação técnica completa da sua infraestrutura OCI em minutos, não em dias.</strong>
 </p>
-```
-```{=html}
+
 <p align="center">
-```
-`<img src="https://img.shields.io/badge/Oracle%20Cloud-Automation-red?style=for-the-badge&logo=oracle" alt="OCI Automation">`{=html}
-`<img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python" alt="Python">`{=html}
-`<img src="https://img.shields.io/badge/FastAPI-Web%20Backend-green?style=for-the-badge&logo=fastapi" alt="FastAPI">`{=html}
-`<img src="https://img.shields.io/badge/JavaScript-ES6-yellow?style=for-the-badge&logo=javascript" alt="JavaScript">`{=html}
-```{=html}
+  <img src="https://img.shields.io/badge/Oracle%20Cloud-Automation-red?style=for-the-badge&logo=oracle" alt="OCI Automation">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python" alt="Python">
+  <img src="https://img.shields.io/badge/FastAPI-Web%20Backend-green?style=for-the-badge&logo=fastapi" alt="FastAPI">
+  <img src="https://img.shields.io/badge/JavaScript-ES6-yellow?style=for-the-badge&logo=javascript" alt="JavaScript">
 </p>
-```
+
 OCI DocGen é uma ferramenta full-stack projetada para automatizar a
 criação de documentação de infraestrutura na Oracle Cloud Infrastructure
 (OCI). Com uma interface web intuitiva, a ferramenta realiza uma
