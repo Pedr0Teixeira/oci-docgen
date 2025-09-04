@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 03 de Setembro de 2025
+# Data: 04 de Setembro de 2025 (Fase 3: Geração de Documento Final)
 # Descrição: Módulo responsável por gerar documentos .docx detalhados.
 
 import os
@@ -48,8 +48,14 @@ def _add_instances_table(document, instances: List[InstanceData]):
         cell.paragraphs[0].runs[0].font.bold = True
     for data in instances:
         row_cells = host_table.add_row().cells
-        row_cells[0].text = data.host_name; row_cells[1].text = data.shape; row_cells[2].text = str(data.ocpus); row_cells[3].text = str(data.memory)
-        row_cells[4].text = str(data.boot_volume_gb); row_cells[5].text = data.os_name; row_cells[6].text = data.private_ip; row_cells[7].text = data.public_ip or "N/A"
+        row_cells[0].text = data.host_name
+        row_cells[1].text = data.shape
+        row_cells[2].text = str(data.ocpus)
+        row_cells[3].text = str(data.memory)
+        row_cells[4].text = str(data.boot_volume_gb)
+        row_cells[5].text = data.os_name
+        row_cells[6].text = data.private_ip
+        row_cells[7].text = data.public_ip or "N/A"
     document.add_paragraph()
 
 def _add_volume_and_backup_section(document, instances: List[InstanceData]):
@@ -106,12 +112,15 @@ def _add_volume_and_backup_section(document, instances: List[InstanceData]):
     document.add_paragraph()
 
 def _add_vcn_details_section(document, infra_data: InfrastructureData):
+    """Adiciona as seções de VCN, Subnets, Listas de Segurança, etc."""
     if not infra_data.vcns:
         document.add_paragraph("Nenhuma Virtual Cloud Network foi encontrada neste compartimento.")
         return
 
     for vcn in infra_data.vcns:
-        document.add_paragraph(f"VCN: {vcn.display_name}", style='Heading 3'); document.add_paragraph(f"CIDR Block: {vcn.cidr_block}")
+        document.add_paragraph(f"VCN: {vcn.display_name}", style='Heading 3')
+        document.add_paragraph(f"CIDR Block: {vcn.cidr_block}")
+
         document.add_paragraph("Subnets", style='Heading 4')
         if vcn.subnets:
             subnet_table = document.add_table(rows=1, cols=2, style='Table Grid'); headers = ['Nome da Subnet', 'CIDR Block']
@@ -156,21 +165,138 @@ def _add_vcn_details_section(document, infra_data: InfrastructureData):
                     cells = table.add_row().cells; cells[0].text = rule.direction; cells[1].text = rule.protocol; cells[2].text = rule.ports or "Todas"; cells[3].text = rule.source_or_destination or "N/A"; cells[4].text = rule.description or ''
                 document.add_paragraph()
         else: document.add_paragraph("Nenhum NSG encontrado.")
+        
+        document.add_paragraph("Local Peering Gateways (LPGs)", style='Heading 4')
+        if vcn.lpgs:
+            headers = ['Nome', 'Status do Peering', 'Route Table', 'CIDR Anunciado', 'Cross-Tenancy']
+            table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
+            for i, h in enumerate(headers):
+                table.cell(0, i).text = h
+                table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+            for lpg in vcn.lpgs:
+                cells = table.add_row().cells
+                cells[0].text = lpg.display_name
+                cells[1].text = lpg.peering_status_details or lpg.peering_status
+                cells[2].text = lpg.route_table_name
+                cells[3].text = lpg.peer_advertised_cidr or "N/A"
+                cells[4].text = "Sim" if lpg.is_cross_tenancy_peering else "Não"
+        else:
+            document.add_paragraph("Nenhum Local Peering Gateway encontrado nesta VCN.")
+        document.add_paragraph()
+
+def _add_load_balancers_section(document, infra_data: InfrastructureData):
+    """Adiciona a nova seção de Load Balancers ao documento."""
+    if not infra_data.load_balancers:
+        return
+
+    for lb in infra_data.load_balancers:
+        document.add_paragraph(f"Load Balancer: {lb.display_name}", style='Heading 3')
+        
+        # Tabela de Informações Gerais
+        info_table = document.add_table(rows=1, cols=2, style='Table Grid')
+        info_table.cell(0, 0).text = "Atributo"
+        info_table.cell(0, 0).paragraphs[0].runs[0].font.bold = True
+        info_table.cell(0, 1).text = "Valor"
+        info_table.cell(0, 1).paragraphs[0].runs[0].font.bold = True
+        
+        info_table.add_row().cells[0].text = "Nome"
+        info_table.add_row().cells[0].text = "Shape"
+        info_table.add_row().cells[0].text = "Estado"
+        info_table.add_row().cells[0].text = "Endereços IP"
+        info_table.cell(1, 1).text = lb.display_name
+        info_table.cell(2, 1).text = lb.shape_name
+        info_table.cell(3, 1).text = lb.lifecycle_state
+        ips_str = "\n".join([f"{ip.ip_address} ({'Público' if ip.is_public else 'Privado'})" for ip in lb.ip_addresses])
+        info_table.cell(4, 1).text = ips_str
+        document.add_paragraph()
+
+        # Tabela de Listeners
+        document.add_paragraph("Listeners", style='Heading 4')
+        if lb.listeners:
+            headers = ['Nome', 'Protocolo', 'Porta', 'Backend Set Padrão']
+            table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
+            for i, h in enumerate(headers):
+                table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+            for listener in lb.listeners:
+                cells = table.add_row().cells
+                cells[0].text = listener.name
+                cells[1].text = listener.protocol
+                cells[2].text = str(listener.port)
+                cells[3].text = listener.default_backend_set_name
+        else:
+            document.add_paragraph("Nenhum Listener configurado.")
+        document.add_paragraph()
+
+        # Seção de Backend Sets
+        document.add_paragraph("Backend Sets", style='Heading 4')
+        if lb.backend_sets:
+            for bs in lb.backend_sets:
+                document.add_paragraph(f"Configuração do Backend Set: {bs.name}", style='Heading 5')
+                p = document.add_paragraph()
+                p.add_run("Política de Balanceamento: ").bold = True
+                p.add_run(f"{bs.policy}\n")
+                p.add_run("Health Checker: ").bold = True
+                p.add_run(f"{bs.health_checker.protocol} na porta {bs.health_checker.port} (Path: {bs.health_checker.url_path})")
+                
+                if bs.backends:
+                    document.add_paragraph("Backends:", style='List Bullet')
+                    headers = ['Nome do Backend', 'IP', 'Porta', 'Peso']
+                    table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
+                    for i, h in enumerate(headers):
+                        table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+                    for backend in bs.backends:
+                        cells = table.add_row().cells
+                        cells[0].text = backend.name
+                        cells[1].text = backend.ip_address
+                        cells[2].text = str(backend.port)
+                        cells[3].text = str(backend.weight)
+                else:
+                    document.add_paragraph("Nenhum backend configurado neste set.")
+                document.add_paragraph()
+        else:
+            document.add_paragraph("Nenhum Backend Set configurado.")
+        document.add_paragraph()
 
 def _add_connectivity_section(document, infra_data: InfrastructureData):
     """Adiciona as seções de conectividade DRG, CPE e a tabela sumarizada de VPN."""
     document.add_paragraph("Dynamic Routing Gateways (DRGs)", style='Heading 3')
     if infra_data.drgs:
-        drg_table = document.add_table(rows=1, cols=2, style='Table Grid')
-        headers = ['Nome do DRG', 'Anexos']
-        for i, header_text in enumerate(headers):
-            cell = drg_table.cell(0, i)
-            cell.text = header_text
-            cell.paragraphs[0].runs[0].font.bold = True
         for drg in infra_data.drgs:
-            cells = drg_table.add_row().cells
-            cells[0].text = drg.display_name
-            cells[1].text = "\n".join([f"{a.display_name} ({a.network_type})" for a in drg.attachments]) or "Nenhum"
+            document.add_paragraph(f"DRG: {drg.display_name}", style='Heading 4')
+            
+            document.add_paragraph("Anexos", style='Heading 5')
+            if drg.attachments:
+                headers = ['Nome do Anexo', 'Tipo', 'DRG Route Table']
+                table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
+                for i, h in enumerate(headers):
+                    table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+                for attachment in drg.attachments:
+                    cells = table.add_row().cells
+                    cells[0].text = attachment.display_name
+                    cells[1].text = attachment.network_type
+                    cells[2].text = attachment.route_table_name or "N/A"
+            else:
+                document.add_paragraph("Nenhum anexo encontrado para este DRG.")
+            document.add_paragraph()
+
+            document.add_paragraph("Remote Peering Connections (RPCs)", style='Heading 5')
+            if drg.rpcs:
+                headers = ['Nome', 'Status', 'Status do Peering']
+                table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
+                for i, h in enumerate(headers):
+                    table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+                for rpc in drg.rpcs:
+                    status_text = rpc.peering_status_details or rpc.peering_status
+                    if rpc.peering_status == 'NEW':
+                        status_text = 'New (not peered)'
+                    
+                    cells = table.add_row().cells
+                    cells[0].text = rpc.display_name
+                    cells[1].text = rpc.lifecycle_state
+                    cells[2].text = status_text
+            else:
+                document.add_paragraph("Nenhuma Remote Peering Connection encontrada para este DRG.")
+            document.add_paragraph()
     else:
         document.add_paragraph("Nenhum DRG encontrado.")
     document.add_paragraph()
@@ -180,14 +306,9 @@ def _add_connectivity_section(document, infra_data: InfrastructureData):
         cpe_table = document.add_table(rows=1, cols=3, style='Table Grid')
         headers = ['Nome do CPE', 'Endereço IP', 'Fabricante']
         for i, header_text in enumerate(headers):
-            cell = cpe_table.cell(0, i)
-            cell.text = header_text
-            cell.paragraphs[0].runs[0].font.bold = True
+            cpe_table.cell(0, i).text = header_text; cpe_table.cell(0, i).paragraphs[0].runs[0].font.bold = True
         for cpe in infra_data.cpes:
-            cells = cpe_table.add_row().cells
-            cells[0].text = cpe.display_name
-            cells[1].text = cpe.ip_address
-            cells[2].text = cpe.vendor or "N/A"
+            cells = cpe_table.add_row().cells; cells[0].text = cpe.display_name; cells[1].text = cpe.ip_address; cells[2].text = cpe.vendor or "N/A"
     else:
         document.add_paragraph("Nenhum CPE encontrado.")
     document.add_paragraph()
