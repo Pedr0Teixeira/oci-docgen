@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 03 de Setembro de 2025
+# Data: 04 de Setembro de 2025
 # Descrição: Módulo de conector que interage com o SDK da OCI para buscar dados da infraestrutura.
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -8,11 +8,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import oci
 
 # --- IMPORTAÇÃO DOS SCHEMAS ATUALIZADOS ---
-from schemas import (BlockVolume, CpeData, DrgAttachmentData, DrgData,
-                     InfrastructureData, InstanceData, IpsecData,
+from schemas import (BackendData, BackendSetData, BlockVolume, CpeData,
+                     DrgAttachmentData, DrgData, HealthCheckerData, HostnameData,
+                     InfrastructureData, InstanceData, IpsecData, ListenerData,
+                     LoadBalancerData, LoadBalancerIpAddressData, LpgData,
                      NetworkSecurityGroup, PhaseOneDetails, PhaseTwoDetails,
-                     RouteRule, RouteTable, SecurityList, SecurityRule,
-                     SubnetData, TunnelData, VcnData)
+                     RouteRule, RouteTable, RpcData, SecurityList,
+                     SecurityRule, SubnetData, TunnelData, VcnData)
 
 # --- Mapeamento de Protocolos IANA ---
 IANA_PROTOCOL_MAP = {
@@ -107,16 +109,24 @@ def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
             return entity_id
         elif entity_type == "drgattachment":
             attachment = _safe_api_call(virtual_network_client.get_drg_attachment, entity_id)
-            if attachment:
+            if attachment and attachment.drg_id:
                 drg = _safe_api_call(virtual_network_client.get_drg, attachment.drg_id)
-                return f"DRG Attachment: {drg.display_name}" if drg else entity_id
+                return f"DRG Attachment: {drg.display_name if drg else ''}"
     except (IndexError, AttributeError):
         pass
     return entity_id
 
 
+def _get_drg_route_table_name(virtual_network_client, drg_route_table_id: str) -> str:
+    """Busca o nome de uma DRG Route Table a partir de seu OCID."""
+    if not drg_route_table_id:
+        return "N/A"
+    route_table = _safe_api_call(virtual_network_client.get_drg_route_table, drg_route_table_id)
+    return route_table.display_name if route_table else drg_route_table_id
+
+
 def _get_source_dest_name(virtual_network_client, source_dest: str) -> str:
-    """Traduz um OCID de um Network Security Group (NSG) para seu nome de exibição."""
+    """Translates a Network Security Group (NSG) OCID to its display name."""
     if not source_dest or not source_dest.startswith("ocid1.networksecuritygroup"):
         return source_dest
     nsg = _safe_api_call(virtual_network_client.get_network_security_group, source_dest)
@@ -142,12 +152,9 @@ def _validate_ipsec_parameters(tunnel: oci.core.models.IPSecConnectionTunnel) ->
 
     docs_link = "https://docs.oracle.com/pt-br/iaas/Content/Network/Reference/supportedIPsecparams.htm"
     
-    # Se a Oracle gerencia, não há validação a ser feita pelo usuário.
     if not p1.is_custom_phase_one_config:
         return "Gerenciado pela Oracle (Padrão)", None
         
-    # --- Validação da Fase 1 ---
-    # Valores conforme a documentação fornecida pelo usuário
     recommended_p1 = {
         "encryption": "AES_256_CBC",
         "authentication": "SHA2_384",
@@ -159,17 +166,14 @@ def _validate_ipsec_parameters(tunnel: oci.core.models.IPSecConnectionTunnel) ->
         p1.custom_dh_group == recommended_p1["dh_group"]
     )
     
-    # --- Validação da Fase 2 ---
     is_p2_ok = False
     p2_encryption = p2.custom_encryption_algorithm
     p2_authentication = p2.custom_authentication_algorithm
 
     if p2_encryption and "GCM" in p2_encryption:
-        # Para GCM, a autenticação é integrada. O valor de autenticação deve ser nulo.
         if p2_encryption == "AES_256_GCM" and p2_authentication is None:
             is_p2_ok = True
     elif p2_encryption and "CBC" in p2_encryption:
-        # Para CBC, uma autenticação HMAC é necessária.
         if p2_encryption == "AES_256_CBC" and p2_authentication == "HMAC_SHA2_256_128":
             is_p2_ok = True
     
@@ -276,8 +280,8 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
                 if nsg:
                     rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_id)
                     nsg_rules = []
-                    if rules_sdk:
-                        for r in rules_sdk:
+                    if rules_sdk and rules_sdk.items:
+                        for r in rules_sdk.items:
                             source_dest = r.source if r.direction == 'INGRESS' else r.destination
                             nsg_rules.append(SecurityRule(direction=r.direction, protocol=_translate_protocol(r.protocol), source_or_destination=_get_source_dest_name(virtual_network_client, source_dest), ports=_format_rule_ports(r), description=r.description))
                     network_security_groups.append(NetworkSecurityGroup(id=nsg.id, name=nsg.display_name, rules=nsg_rules))
@@ -321,6 +325,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
     """Orquestra a coleta de dados de infraestrutura de um compartimento."""
     compute_client = get_client(oci.core.ComputeClient, region)
     virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
+    load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region)
     
     compartment_name = get_compartment_name(compartment_id)
     oracle_managed_str = "Gerenciado pela Oracle (Padrão)"
@@ -329,19 +334,43 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
     all_instances_sdk = oci.pagination.list_call_get_all_results(compute_client.list_instances, compartment_id=compartment_id).data
     instances = [get_instance_details(region, i.id, compartment_name) for i in all_instances_sdk]
 
-    # 2. Coletar DRGs (são a nível de compartimento)
+    # 2. Coletar DRGs, seus Anexos e RPCs
     all_drgs_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_drgs, compartment_id=compartment_id).data
     drgs = []
     for drg_sdk in all_drgs_sdk:
         attachments_sdk = oci.pagination.list_call_get_all_results(
             virtual_network_client.list_drg_attachments, 
+            drg_id=drg_sdk.id,
+            compartment_id=compartment_id
+        ).data
+        attachments = []
+        for a in attachments_sdk:
+            network_id = a.network_details.id if a.network_details else None
+            route_table_name = _get_drg_route_table_name(virtual_network_client, a.drg_route_table_id)
+            attachments.append(DrgAttachmentData(
+                id=a.id, 
+                display_name=a.display_name, 
+                network_id=network_id, 
+                network_type=a.network_details.type if a.network_details else 'N/A',
+                route_table_id=a.drg_route_table_id,
+                route_table_name=route_table_name
+            ))
+        
+        rpcs_sdk = oci.pagination.list_call_get_all_results(
+            virtual_network_client.list_remote_peering_connections,
             compartment_id=compartment_id,
             drg_id=drg_sdk.id
         ).data
-        attachments = [DrgAttachmentData(id=a.id, display_name=a.display_name, network_id=a.network_details.id, network_type=a.network_details.type) for a in attachments_sdk if a.network_details]
-        drgs.append(DrgData(id=drg_sdk.id, display_name=drg_sdk.display_name, attachments=attachments))
+        rpcs = [RpcData(
+            id=r.id, 
+            display_name=r.display_name, 
+            lifecycle_state=r.lifecycle_state, 
+            peering_status=r.peering_status
+        ) for r in rpcs_sdk]
+
+        drgs.append(DrgData(id=drg_sdk.id, display_name=drg_sdk.display_name, attachments=attachments, rpcs=rpcs))
         
-    # 3. Coletar CPEs (no nível do compartimento) - REQUISITO ATENDIDO
+    # 3. Coletar CPEs
     all_cpes_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_cpes, compartment_id=compartment_id).data
     cpes = []
     for cpe in all_cpes_sdk:
@@ -352,7 +381,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                 vendor = shape.cpe_device_info.vendor or "N/A"
         cpes.append(CpeData(id=cpe.id, display_name=cpe.display_name, ip_address=cpe.ip_address, vendor=vendor))
 
-    # 4. Coletar Conexões IPSec (no nível do compartimento) - REQUISITOS ATENDIDOS
+    # 4. Coletar Conexões IPSec
     all_ipsec_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_ip_sec_connections, compartment_id=compartment_id).data
     ipsec_connections = []
     for ipsec in all_ipsec_sdk:
@@ -362,25 +391,23 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
             for tunnel in tunnels_sdk:
                 validation_status, validation_details = _validate_ipsec_parameters(tunnel)
                 
-                # Detalhes Fase 1 (IKE)
                 p1_details = tunnel.phase_one_details
-                is_p1_custom = p1_details.is_custom_phase_one_config
+                is_p1_custom = p1_details.is_custom_phase_one_config if p1_details else False
                 phase_one = PhaseOneDetails(
                     is_custom=is_p1_custom,
-                    authentication_algorithm=p1_details.custom_authentication_algorithm if is_p1_custom else oracle_managed_str,
-                    encryption_algorithm=p1_details.custom_encryption_algorithm if is_p1_custom else oracle_managed_str,
-                    dh_group=p1_details.custom_dh_group if is_p1_custom else oracle_managed_str,
-                    lifetime_in_seconds=p1_details.lifetime or 0
+                    authentication_algorithm=p1_details.custom_authentication_algorithm if is_p1_custom and p1_details else oracle_managed_str,
+                    encryption_algorithm=p1_details.custom_encryption_algorithm if is_p1_custom and p1_details else oracle_managed_str,
+                    dh_group=p1_details.custom_dh_group if is_p1_custom and p1_details else oracle_managed_str,
+                    lifetime_in_seconds=p1_details.lifetime if p1_details else 0
                 )
                 
-                # Detalhes Fase 2 (IPSec)
                 p2_details = tunnel.phase_two_details
-                is_p2_custom = p2_details.is_custom_phase_two_config
+                is_p2_custom = p2_details.is_custom_phase_two_config if p2_details else False
                 phase_two = PhaseTwoDetails(
                     is_custom=is_p2_custom,
-                    authentication_algorithm=(p2_details.custom_authentication_algorithm if is_p2_custom else oracle_managed_str) or "N/A",
-                    encryption_algorithm=(p2_details.custom_encryption_algorithm if is_p2_custom else oracle_managed_str) or "N/A",
-                    lifetime_in_seconds=p2_details.lifetime or 0
+                    authentication_algorithm=(p2_details.custom_authentication_algorithm if is_p2_custom and p2_details else oracle_managed_str) or "N/A",
+                    encryption_algorithm=(p2_details.custom_encryption_algorithm if is_p2_custom and p2_details else oracle_managed_str) or "N/A",
+                    lifetime_in_seconds=p2_details.lifetime if p2_details else 0
                 )
 
                 tunnels.append(TunnelData(
@@ -390,14 +417,13 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                     phase_one_details=phase_one, phase_two_details=phase_two
                 ))
         
-        # Rotas estáticas
         ipsec_connections.append(IpsecData(
             id=ipsec.id, display_name=ipsec.display_name, status=ipsec.lifecycle_state,
             cpe_id=ipsec.cpe_id, drg_id=ipsec.drg_id, tunnels=tunnels, 
             static_routes=ipsec.static_routes
         ))
 
-    # 5. Coletar VCNs e aninhar seus recursos filhos
+    # 5. Coletar VCNs, seus recursos filhos e LPGs
     all_vcns_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_vcns, compartment_id=compartment_id, lifecycle_state="AVAILABLE").data
     vcns = []
     for vcn_sdk in all_vcns_sdk:
@@ -413,22 +439,97 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
 
         rts_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_route_tables, compartment_id=compartment_id, vcn_id=vcn_sdk.id, lifecycle_state="AVAILABLE").data
         route_tables = [RouteTable(id=rt.id, name=rt.display_name, rules=[RouteRule(destination=r.destination, target=get_network_entity_name(virtual_network_client, r.network_entity_id), description=r.description) for r in rt.route_rules]) for rt in rts_sdk]
+        route_table_map = {rt.id: rt.name for rt in route_tables}
             
         nsgs_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_network_security_groups, compartment_id=compartment_id, vcn_id=vcn_sdk.id).data
         nsgs = []
         for nsg_sdk in nsgs_sdk:
             rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_sdk.id)
             rules = []
-            if rules_sdk:
-                for r in rules_sdk:
+            if rules_sdk and rules_sdk.items:
+                for r in rules_sdk.items:
                     source_dest = r.source if r.direction == 'INGRESS' else r.destination
                     rules.append(SecurityRule(direction=r.direction, protocol=_translate_protocol(r.protocol), source_or_destination=_get_source_dest_name(virtual_network_client, source_dest), ports=_format_rule_ports(r), description=r.description))
             nsgs.append(NetworkSecurityGroup(id=nsg_sdk.id, name=nsg_sdk.display_name, rules=rules))
+        
+        lpgs_sdk = oci.pagination.list_call_get_all_results(
+            virtual_network_client.list_local_peering_gateways,
+            compartment_id=compartment_id,
+            vcn_id=vcn_sdk.id
+        ).data
+        lpgs = [LpgData(
+            id=l.id,
+            display_name=l.display_name,
+            lifecycle_state=l.lifecycle_state,
+            peering_status=l.peering_status,
+            peering_status_details=l.peering_status_details,
+            peer_id=l.peer_id,
+            route_table_id=l.route_table_id,
+            peer_advertised_cidr=l.peer_advertised_cidr,
+            is_cross_tenancy_peering=l.is_cross_tenancy_peering,
+            route_table_name=route_table_map.get(l.route_table_id, "N/A")
+        ) for l in lpgs_sdk]
 
         vcns.append(VcnData(
             id=vcn_sdk.id, display_name=vcn_sdk.display_name, cidr_block=vcn_sdk.cidr_block, 
             subnets=subnets, security_lists=security_lists, route_tables=route_tables,
-            network_security_groups=nsgs
+            network_security_groups=nsgs, lpgs=lpgs
+        ))
+
+    # 6. Coletar Load Balancers e seus componentes
+    all_lbs_summary_sdk = oci.pagination.list_call_get_all_results(load_balancer_client.list_load_balancers, compartment_id=compartment_id).data
+    load_balancers = []
+    for lb_summary in all_lbs_summary_sdk:
+        lb_details = _safe_api_call(load_balancer_client.get_load_balancer, lb_summary.id)
+        if not lb_details:
+            continue
+
+        ip_addresses = [LoadBalancerIpAddressData(ip_address=ip.ip_address, is_public=ip.is_public) for ip in lb_details.ip_addresses]
+        hostnames = [HostnameData(name=h.name) for h in lb_details.hostnames.values()]
+
+        listeners = []
+        for listener_sdk in lb_details.listeners.values():
+            listeners.append(ListenerData(
+                name=listener_sdk.name,
+                protocol=listener_sdk.protocol,
+                port=listener_sdk.port,
+                default_backend_set_name=listener_sdk.default_backend_set_name,
+                hostname_names=list(listener_sdk.hostname_names.keys()) if listener_sdk.hostname_names else []
+            ))
+        
+        backend_sets = []
+        for bs_sdk in lb_details.backend_sets.values():
+            hc_sdk = bs_sdk.health_checker
+            health_checker = HealthCheckerData(
+                protocol=hc_sdk.protocol,
+                port=hc_sdk.port,
+                url_path=hc_sdk.url_path
+            )
+            
+            backends = []
+            for backend_sdk in bs_sdk.backends:
+                backends.append(BackendData(
+                    name=backend_sdk.name,
+                    ip_address=backend_sdk.ip_address,
+                    port=backend_sdk.port,
+                    weight=backend_sdk.weight
+                ))
+            
+            backend_sets.append(BackendSetData(
+                name=bs_sdk.name,
+                policy=bs_sdk.policy,
+                health_checker=health_checker,
+                backends=backends
+            ))
+        
+        load_balancers.append(LoadBalancerData(
+            display_name=lb_details.display_name,
+            lifecycle_state=lb_details.lifecycle_state,
+            shape_name=lb_details.shape_name,
+            ip_addresses=ip_addresses,
+            listeners=listeners,
+            backend_sets=backend_sets,
+            hostnames=hostnames
         ))
             
     return InfrastructureData(
@@ -436,5 +537,6 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         vcns=vcns,
         drgs=drgs,
         cpes=cpes,
-        ipsec_connections=ipsec_connections
+        ipsec_connections=ipsec_connections,
+        load_balancers=load_balancers
     )

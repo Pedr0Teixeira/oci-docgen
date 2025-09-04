@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Autor: Pedro Teixeira
- * Data: 03 de Setembro de 2025
+ * Data: 04 de Setembro de 2025 (Fase 2: Refinamento Final de UI/UX)
  * Descrição: Script principal do frontend para interatividade da página, comunicação com a API e manipulação do DOM.
  */
 document.addEventListener('DOMContentLoaded', () => {
@@ -33,8 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedCompartmentId = null;
   let selectedCompartmentName = null;
   let selectedInstances = {};
-  // Unifica o armazenamento de dados em um único objeto
-  let allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [] };
+  let allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
   let architectureImageFiles = [];
   let antivirusImageFiles = [];
 
@@ -219,13 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const populateDocTypes = () => {
-    const docTypes = [{
-      id: 'new_host',
-      name: 'Documentação de Novo Host'
-    }, {
-      id: 'full_infra',
-      name: 'Documentação de Infraestrutura'
-    }];
+    const docTypes = [{ id: 'new_host', name: 'Documentação de Novo Host' }, { id: 'full_infra', name: 'Documentação de Infraestrutura' }];
     createCustomSelect(docTypeContainer, docTypes, 'Selecione um tipo', (selectedValue) => {
       selectedDocType = selectedValue;
       updateUiForDocType();
@@ -296,9 +289,14 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleLoading(true);
     detailsContainer.classList.add('hidden');
     summaryContainer.innerHTML = `<p>Buscando dados completos da infraestrutura do compartimento <strong>${selectedCompartmentName}</strong>...</p>`;
-    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [] };
+    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
     try {
-      const data = await (await fetch(`${API_BASE_URL}/api/${selectedRegion}/infrastructure-details/${selectedCompartmentId}`, { method: 'POST' })).json();
+      const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/infrastructure-details/${selectedCompartmentId}`, { method: 'POST' });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Falha na API: ${errorData.detail || response.statusText}`);
+      }
+      const data = await response.json();
       allInfrastructureData = data;
       const summaryHtml = generateInfrastructureSummary(data, selectedCompartmentName);
       summaryContainer.innerHTML = summaryHtml;
@@ -316,10 +314,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (instanceIds.length === 0) return;
     toggleLoading(true);
     detailsContainer.classList.add('hidden');
-    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [] };
+    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
     summaryContainer.innerHTML = '<p>Buscando dados...</p>';
     
-    // Passa o nome do compartimento para a API
     const promises = instanceIds.map(id => {
       const encodedCompartmentName = encodeURIComponent(selectedCompartmentName);
       const fullUrl = `${API_BASE_URL}/api/${selectedRegion}/instance-details/${id}?compartment_name=${encodedCompartmentName}`;
@@ -364,37 +361,156 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Funções de Geração de Conteúdo e Documentos ---
 
   function generateInfrastructureSummary(data, compartmentName) {
-    const { instances, vcns, drgs, cpes, ipsec_connections } = data;
-    const instancesHtml = instances.length > 0 ? instances.map(instance => generateInstanceSummaryCard(instance, true)).join('') : '<p class="no-data-message">Nenhuma instância encontrada.</p>';
+    const { instances, vcns, drgs, cpes, ipsec_connections, load_balancers } = data;
+    
     const createTable = (headers, rows) => {
-      if (rows.length === 0) return '<p class="no-data-message">Nenhum recurso encontrado.</p>';
+      if (!rows || rows.length === 0) return '<p class="no-data-message">Nenhum recurso encontrado.</p>';
       const headerHtml = headers.map(h => `<th>${h}</th>`).join('');
       const bodyHtml = rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('');
       return `<div class="table-container"><table class="resource-table"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>`;
     };
-    const vcnsHtml = vcns.length > 0 ? vcns.map(vcn => {
-      const subnetsTable = createTable(['Nome da Subnet', 'CIDR Block'], vcn.subnets.map(s => [s.display_name, s.cidr_block]));
-      const slTable = createTable(['Nome', 'Nº de Regras'], vcn.security_lists.map(sl => [sl.name, `${sl.rules.length}`]));
-      const rtTable = createTable(['Nome', 'Nº de Regras'], vcn.route_tables.map(rt => [rt.name, `${rt.rules.length}`]));
-      const nsgTable = createTable(['Nome', 'Nº de Regras'], vcn.network_security_groups.map(nsg => [nsg.name, `${nsg.rules.length}`]));
-      return `<div class="vcn-summary-card collapsible"><div class="vcn-card-header"><h4 class="vcn-card-header-title">${vcn.display_name}</h4><span class="vcn-card-header-cidr">${vcn.cidr_block}</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="vcn-card-body"><div class="vcn-details"><span><strong>CIDR Block:</strong> ${vcn.cidr_block}</span></div><h5 class="subheader">Subnets</h5>${subnetsTable}<h5 class="subheader">Security Lists</h5>${slTable}<h5 class="subheader">Route Tables</h5>${rtTable}<h5 class="subheader">Network Security Groups (NSGs)</h5>${nsgTable}</div></div>`;
+
+    const instancesHtml = instances?.length > 0 ? instances.map(instance => generateInstanceSummaryCard(instance, true)).join('') : '<p class="no-data-message">Nenhuma instância encontrada.</p>';
+    
+    const vcnsHtml = vcns?.length > 0 ? vcns.map(vcn => {
+      const subnetsTable = createTable(['Nome da Subnet', 'CIDR Block'], vcn.subnets?.map(s => [s.display_name, s.cidr_block]));
+      const slTable = createTable(['Nome', 'Nº de Regras'], vcn.security_lists?.map(sl => [sl.name, `${sl.rules.length}`]));
+      const rtTable = createTable(['Nome', 'Nº de Regras'], vcn.route_tables?.map(rt => [rt.name, `${rt.rules.length}`]));
+      const nsgTable = createTable(['Nome', 'Nº de Regras'], vcn.network_security_groups?.map(nsg => [nsg.name, `${nsg.rules.length}`]));
+      
+      const lpgTable = createTable(
+        ['Nome', 'Status do Peering', 'Route Table', 'CIDR Anunciado', 'Cross-Tenancy'], 
+        vcn.lpgs?.map(lpg => {
+            const statusClass = lpg.peering_status?.toLowerCase() || 'unknown';
+            const statusText = lpg.peering_status_details || lpg.peering_status;
+            return [
+                `<span class="text-highlight">${lpg.display_name}</span>`, 
+                `<span class="status-badge status-${statusClass}">${statusText}</span>`,
+                lpg.route_table_name,
+                lpg.peer_advertised_cidr || 'N/A',
+                lpg.is_cross_tenancy_peering ? 'Sim' : 'Não'
+            ];
+        })
+      );
+
+      return `<div class="vcn-summary-card collapsible"><div class="vcn-card-header"><h4 class="card-header-title">${vcn.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${vcn.cidr_block}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="vcn-card-body"><h5 class="subheader">Subnets</h5>${subnetsTable}<h5 class="subheader">Security Lists</h5>${slTable}<h5 class="subheader">Route Tables</h5>${rtTable}<h5 class="subheader">Network Security Groups (NSGs)</h5>${nsgTable}<h5 class="subheader">Local Peering Gateways (LPGs)</h5>${lpgTable}</div></div>`;
     }).join('') : '<p class="no-data-message">Nenhuma VCN encontrada.</p>';
-    const drgsHtml = createTable(['Nome do DRG', 'Anexos'], drgs.map(drg => [drg.display_name, drg.attachments.map(a => `${a.display_name} (${a.network_type})`).join('<br>') || 'Nenhum']));
-    const cpesHtml = createTable(['Nome do CPE', 'Endereço IP', 'Fabricante'], cpes.map(cpe => [cpe.display_name, cpe.ip_address, cpe.vendor || 'N/A']));
-    const ipsecHtml = ipsec_connections.length > 0 ? ipsec_connections.map(ipsec => {
+
+    const loadBalancersHtml = load_balancers?.length > 0 ? load_balancers.map(lb => {
+        const statusClass = lb.lifecycle_state ? lb.lifecycle_state.toLowerCase().replace('_', '-') : 'unknown';
+        const cardContent = `
+            <fieldset>
+                <legend>Informações Gerais</legend>
+                <div class="grid-container">
+                    <div class="info-group full-width">
+                        <label>Endereços IP</label>
+                        <div class="info-value">
+                            <ul class="clean-list">
+                                ${lb.ip_addresses?.map(ip => `<li>${ip.ip_address} (${ip.is_public ? 'Público' : 'Privado'})</li>`).join('') || '<li>N/A</li>'}
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="info-group full-width">
+                        <label>Hostnames Virtuais</label>
+                        ${createTable([], lb.hostnames?.map(h => [`<span class="text-highlight">${h.name}</span>`]))}
+                    </div>
+                </div>
+            </fieldset>
+            <hr class="fieldset-divider">
+            <div class="content-block">
+                <h5 class="subheader">Listeners</h5>
+                ${createTable(['Nome', 'Protocolo', 'Porta', 'Backend Set Padrão'], lb.listeners?.map(l => [`<span class="text-highlight">${l.name}</span>`, l.protocol, l.port, l.default_backend_set_name]))}
+            </div>
+            <div class="content-block">
+                <h5 class="subheader">Backend Sets</h5>
+                ${(lb.backend_sets && lb.backend_sets.length > 0) ? lb.backend_sets.map(bs => `<div class="backend-set-details"><h6 class="tunnel-subheader">Backend Set: <span class="text-highlight">${bs.name}</span> (Política: ${bs.policy})</h6><ul class="tunnel-basic-info"><li><strong>Health Check:</strong> ${bs.health_checker.protocol}:${bs.health_checker.port}</li><li><strong>URL Path:</strong> ${bs.health_checker.url_path || 'N/A'}</li></ul>${createTable(['Nome', 'IP', 'Porta', 'Peso'], bs.backends?.map(b => [`<span class="text-highlight">${b.name}</span>`, b.ip_address, b.port, b.weight]))}</div>`).join('') : '<p class="no-data-message">Nenhum Backend Set encontrado.</p>'}
+            </div>
+        `;
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${lb.lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
+    }).join('') : '<p class="no-data-message">Nenhum Load Balancer encontrado.</p>';
+
+    const drgsHtml = drgs?.length > 0 ? drgs.map(drg => {
+        const attachmentsTable = createTable(
+            ['Nome do Anexo', 'Tipo', 'DRG Route Table'], 
+            drg.attachments?.map(a => [`<span class="text-highlight">${a.display_name}</span>`, a.network_type, a.route_table_name])
+        );
+        const rpcsTable = createTable(
+            ['Nome', 'Status', 'Status do Peering'], 
+            drg.rpcs?.map(rpc => {
+                const statusClass = rpc.peering_status?.toLowerCase() || 'unknown';
+                
+                let statusText = rpc.peering_status_details || rpc.peering_status;
+                if (rpc.peering_status === 'NEW') {
+                    statusText = 'New (not peered)';
+                } else if (rpc.peering_status === 'PEERED') {
+                    statusText = 'Peered';
+                }
+                
+                return [`<span class="text-highlight">${rpc.display_name}</span>`, rpc.lifecycle_state, `<span class="status-badge status-${statusClass}">${statusText}</span>`];
+            })
+        );
+
+        return `
+        <div class="instance-summary-card collapsible">
+            <div class="instance-card-header">
+                <h4 class="card-header-title">${drg.display_name}</h4>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="instance-card-body">
+                <h5 class="subheader">Anexos do DRG</h5>
+                ${attachmentsTable}
+                <h5 class="subheader">Remote Peering Connections (RPCs)</h5>
+                ${rpcsTable}
+            </div>
+        </div>`;
+    }).join('') : '<p class="no-data-message">Nenhum DRG encontrado.</p>';
+    
+    const cpesHtml = createTable(['Nome do CPE', 'Endereço IP', 'Fabricante'], cpes?.map(cpe => [`<span class="text-highlight">${cpe.display_name}</span>`, cpe.ip_address, cpe.vendor || 'N/A']));
+    
+    const ipsecHtml = ipsec_connections?.length > 0 ? ipsec_connections.map(ipsec => {
         const cpeName = cpes.find(c => c.id === ipsec.cpe_id)?.display_name || 'Não encontrado';
         const drgName = drgs.find(d => d.id === ipsec.drg_id)?.display_name || 'Não encontrado';
         const tunnelsHtml = ipsec.tunnels.map(tunnel => {
-            const p1Details = tunnel.phase_one_details;
-            const p2Details = tunnel.phase_two_details;
-            return `<div class="tunnel-details"><div class="tunnel-header"><strong>Túnel: ${tunnel.display_name}</strong><span class="status-badge status-${tunnel.status.toLowerCase()}">${tunnel.status}</span></div><ul class="tunnel-basic-info"><li><strong>IP Oracle:</strong> ${tunnel.vpn_oracle_ip}</li><li><strong>IP do CPE:</strong> ${tunnel.cpe_ip}</li><li><strong>Roteamento:</strong> ${tunnel.routing_type}</li><li><strong>IKE:</strong> ${tunnel.ike_version}</li></ul><div class="crypto-details-grid"><div><h6 class="tunnel-subheader">Criptografia Fase 1 (IKE)</h6><ul><li><strong>Autenticação:</strong> ${p1Details.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p1Details.encryption_algorithm}</li><li><strong>Grupo DH:</strong> ${p1Details.dh_group}</li><li><strong>Lifetime:</strong> ${p1Details.lifetime_in_seconds}s</li></ul></div><div><h6 class="tunnel-subheader">Criptografia Fase 2 (IPSec)</h6><ul><li><strong>Autenticação:</strong> ${p2Details.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p2Details.encryption_algorithm}</li><li><strong>Lifetime:</strong> ${p2Details.lifetime_in_seconds}s</li></ul></div></div></div>`}).join('<hr class="tunnel-divider">');
-        return `<div class="ipsec-summary-card collapsible"><div class="ipsec-card-header"><h4 class="ipsec-card-header-title">${ipsec.display_name}</h4><span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="ipsec-card-body"><div class="ipsec-details"><span><strong>CPE Associado:</strong> ${cpeName}</span><span><strong>DRG Associado:</strong> ${drgName}</span></div><div class="ipsec-details"><span class="full-width"><strong>Redes Remotas (Rotas Estáticas):</strong> ${ipsec.static_routes.join(', ') || 'Nenhuma'}</span></div><h5 class="subheader">Túneis</h5>${tunnelsHtml || '<p class="no-data-message">Nenhum túnel encontrado.</p>'}</div></div>`;
+            const p1 = tunnel.phase_one_details;
+            const p2 = tunnel.phase_two_details;
+            return `<div class="tunnel-details"><div class="tunnel-header"><strong>Túnel: <span class="text-highlight">${tunnel.display_name}</span></strong><span class="status-badge status-${tunnel.status.toLowerCase()}">${tunnel.status}</span></div><ul class="tunnel-basic-info"><li><strong>IP Oracle:</strong> ${tunnel.vpn_oracle_ip}</li><li><strong>IP do CPE:</strong> ${tunnel.cpe_ip}</li><li><strong>Roteamento:</strong> ${tunnel.routing_type}</li><li><strong>IKE:</strong> ${tunnel.ike_version}</li></ul><div class="crypto-details-grid"><div><h6 class="tunnel-subheader">Fase 1 (IKE)</h6><ul><li><strong>Autenticação:</strong> ${p1.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p1.encryption_algorithm}</li><li><strong>Grupo DH:</strong> ${p1.dh_group}</li><li><strong>Lifetime:</strong> ${p1.lifetime_in_seconds}s</li></ul></div><div><h6 class="tunnel-subheader">Fase 2 (IPSec)</h6><ul><li><strong>Autenticação:</strong> ${p2.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p2.encryption_algorithm}</li><li><strong>Lifetime:</strong> ${p2.lifetime_in_seconds}s</li></ul></div></div></div>`
+        }).join('<hr class="tunnel-divider">');
+        return `<div class="ipsec-summary-card collapsible"><div class="ipsec-card-header"><h4 class="card-header-title">${ipsec.display_name}</h4><div class="card-status-indicator"><span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="ipsec-card-body"><div class="ipsec-details"><span><strong>CPE Associado:</strong> ${cpeName}</span><span><strong>DRG Associado:</strong> ${drgName}</span></div><div class="ipsec-details"><span class="full-width"><strong>Rotas Estáticas:</strong> ${ipsec.static_routes.join(', ') || 'Nenhuma'}</span></div><h5 class="subheader">Túneis</h5>${tunnelsHtml || '<p class="no-data-message">Nenhum túnel encontrado.</p>'}</div></div>`;
     }).join('') : '<p class="no-data-message">Nenhuma conexão IPSec encontrada.</p>';
-    return `<div><h3 class="infra-summary-main-title">Resumo da Infraestrutura: ${compartmentName}</h3><fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>Instâncias Computacionais</legend><div class="instances-container">${instancesHtml}</div></fieldset><hr class="fieldset-divider"><fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Virtual Cloud Networks (VCNs)</legend><div class="vcn-container">${vcnsHtml}</div></fieldset><hr class="fieldset-divider"><fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>Conectividade de Roteamento</legend><h4 class="subheader">Dynamic Routing Gateways (DRGs)</h4>${drgsHtml}</fieldset><hr class="fieldset-divider"><fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>Conectividade VPN</legend><h4 class="subheader">Customer-Premises Equipment (CPEs)</h4>${cpesHtml}<h4 class="subheader">Conexões VPN IPSec</h4><div class="ipsec-container">${ipsecHtml}</div></fieldset></div>`;
+
+    return `<div>
+              <h3 class="infra-summary-main-title">Resumo da Infraestrutura: ${compartmentName}</h3>
+              <fieldset>
+                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>Instâncias Computacionais</legend>
+                <div class="instances-container">${instancesHtml}</div>
+              </fieldset>
+              <hr class="fieldset-divider">
+              <fieldset>
+                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Virtual Cloud Networks (VCNs)</legend>
+                <div class="vcn-container">${vcnsHtml}</div>
+              </fieldset>
+              <hr class="fieldset-divider">
+              <fieldset>
+                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 21a9 9 0 0 0 9-9 9 9 0 0 0-9-9 9 9 0 0 0-9 9 9 9 0 0 0 9 9Z"></path><path d="M8 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M15 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M12 2v2"></path><path d="M12 8v2"></path></svg>Load Balancers (LBaaS)</legend>
+                <div class="lb-container">${loadBalancersHtml}</div>
+              </fieldset>
+              <hr class="fieldset-divider">
+              <fieldset>
+                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>Conectividade de Roteamento</legend>
+                <div class="drg-container">${drgsHtml}</div>
+              </fieldset>
+              <hr class="fieldset-divider">
+              <fieldset>
+                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>Conectividade VPN</legend>
+                <h4 class="subheader">Customer-Premises Equipment (CPEs)</h4>${cpesHtml}
+                <h4 class="subheader">Conexões VPN IPSec</h4>
+                <div class="ipsec-container">${ipsecHtml}</div>
+              </fieldset>
+            </div>`;
   }
 
   function generateInstanceSummaryCard(data, isCollapsible = false) {
-    const cardContent = `<fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>Dados da Instância</legend><div class="grid-container"><div class="info-group"><label>Shape</label><div class="info-value">${data.shape}</div></div><div class="info-group"><label>OCPUs</label><div class="info-value">${data.ocpus}</div></div><div class="info-group"><label>Memória (GB)</label><div class="info-value">${data.memory}</div></div><div class="info-group"><label>Boot Volume (GB)</label><div class="info-value">${data.boot_volume_gb}</div></div><div class="info-group full-width"><label>Sistema Operacional</label><div class="info-value">${data.os_name}</div></div><div class="info-group"><label>IP Privado</label><div class="info-value">${data.private_ip}</div></div><div class="info-group"><label>IP Público</label><div class="info-value">${data.public_ip || 'N/A'}</div></div><div class="info-group full-width"><label>Política de Backup (Boot Volume)</label><div class="info-value">${data.backup_policy_name}</div></div></div></fieldset><hr class="fieldset-divider"><fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>Block Volumes Anexados</legend><div class="table-container">${data.block_volumes && data.block_volumes.length > 0 ? `<table class="bv-table"><thead><tr><th>Nome do Volume</th><th>Tamanho (GB)</th><th>Política de Backup</th></tr></thead><tbody>${data.block_volumes.map(vol => `<tr><td>${vol.display_name}</td><td>${vol.size_in_gbs}</td><td>${vol.backup_policy_name}</td></tr>`).join('')}</tbody></table>` : `<p class="no-data-message">Nenhum Block Volume adicional anexado.</p>`}</div></fieldset><hr class="fieldset-divider"><fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>Resumo de Conectividade de Rede</legend><div class="summary-grid"><div class="summary-group"><label>Security Lists</label><div class="summary-box">${data.security_lists && data.security_lists.length > 0 ? data.security_lists.map(sl => `<span class="summary-item">${sl.name}</span>`).join('') : `<span class="summary-item empty">Nenhuma</span>`}</div></div><div class="summary-group"><label>Network Security Groups (NSGs)</label><div class="summary-box">${data.network_security_groups && data.network_security_groups.length > 0 ? data.network_security_groups.map(nsg => `<span class="summary-item">${nsg.name}</span>`).join('') : `<span class="summary-item empty">Nenhum</span>`}</div></div><div class="summary-group full-width"><label>Route Table</label><div class="summary-box">${data.route_table && data.route_table.name ? `<span class="summary-item">${data.route_table.name}</span>` : `<span class="summary-item empty">Nenhuma</span>`}</div></div></div></fieldset>`;
+    const cardContent = `<fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>Dados da Instância</legend><div class="grid-container"><div class="info-group"><label>Shape</label><div class="info-value">${data.shape}</div></div><div class="info-group"><label>OCPUs</label><div class="info-value">${data.ocpus}</div></div><div class="info-group"><label>Memória (GB)</label><div class="info-value">${data.memory}</div></div><div class="info-group"><label>Boot Volume (GB)</label><div class="info-value">${data.boot_volume_gb}</div></div><div class="info-group full-width"><label>Sistema Operacional</label><div class="info-value">${data.os_name}</div></div><div class="info-group"><label>IP Privado</label><div class="info-value">${data.private_ip}</div></div><div class="info-group"><label>IP Público</label><div class="info-value">${data.public_ip || 'N/A'}</div></div><div class="info-group full-width"><label>Política de Backup (Boot Volume)</label><div class="info-value">${data.backup_policy_name}</div></div></div></fieldset><hr class="fieldset-divider"><fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>Block Volumes Anexados</legend><div class="table-container">${data.block_volumes && data.block_volumes.length > 0 ? `<table class="bv-table"><thead><tr><th>Nome do Volume</th><th>Tamanho (GB)</th><th>Política de Backup</th></tr></thead><tbody>${data.block_volumes.map(vol => `<tr><td>${vol.display_name}</td><td>${vol.size_in_gbs}</td><td>${vol.backup_policy_name}</td></tr>`).join('')}</tbody></table>` : `<p class="no-data-message">Nenhum Block Volume adicional anexado.</p>`}</div></fieldset><hr class="fieldset-divider"><fieldset><legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>Resumo de Conectividade de Rede</legend><div class="summary-grid"><div class="summary-group"><label>Security Lists</label><div class="summary-box">${data.security_lists && data.security_lists.length > 0 ? data.security_lists.map(sl => `<span class="summary-item">${sl.name}</span>`).join('') : `<span class="summary-item empty">Nenhuma</span>`}</div></div><div class="summary-group"><label>Network Security Groups (NSGs)</label><div class="summary-box">${data.network_security_groups && data.network_security_groups.length > 0 ? data.network_security_groups.map(nsg => `<span class="summary-item">${nsg.name}</span>`).join('') : `<span class="summary-item empty">Nenhuma</span>`}</div></div><div class="summary-group full-width"><label>Route Table</label><div class="summary-box">${data.route_table && data.route_table.name ? `<span class="summary-item">${data.route_table.name}</span>` : `<span class="summary-item empty">Nenhuma</span>`}</div></div></div></fieldset>`;
     if (isCollapsible) {
       const isRunning = data.lifecycle_state === 'RUNNING';
       const statusText = isRunning ? 'Ligada' : 'Desligada';
@@ -406,7 +522,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const generateDocument = async () => {
-    // Função unificada
     if (!allInfrastructureData || allInfrastructureData.instances.length === 0) {
         alert("Busque os dados da infraestrutura ou da(s) instância(s) primeiro.");
         return;
@@ -414,19 +529,12 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
         toggleLoading(true);
         const formData = new FormData();
-        // Monta o payload padronizado
-        const payload = {
-            doc_type: selectedDocType,
-            infra_data: allInfrastructureData
-        };
+        const payload = { doc_type: selectedDocType, infra_data: allInfrastructureData };
         formData.append('json_data', JSON.stringify(payload));
         architectureImageFiles.forEach(file => formData.append('architecture_files', file));
         antivirusImageFiles.forEach(file => formData.append('antivirus_files', file));
         
-        const response = await fetch(`${API_BASE_URL}/api/generate-document`, {
-            method: 'POST',
-            body: formData
-        });
+        const response = await fetch(`${API_BASE_URL}/api/generate-document`, { method: 'POST', body: formData });
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -438,7 +546,6 @@ document.addEventListener('DOMContentLoaded', () => {
         a.style.display = 'none';
         a.href = url;
         
-        // Nome do arquivo dinâmico
         const compartmentName = allInfrastructureData.instances[0].compartment_name.replace('SERVERS-','');
         const docIdentifier = selectedDocType === 'full_infra' ? 'Infraestrutura' : 'NovoHost';
         const timestamp = new Date().toISOString().split('T')[0];
@@ -456,8 +563,6 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleLoading(false);
     }
   };
-
-  // --- Funções de Manipulação de Arquivos ---
 
   function updateFileListUI(fileArray, fileListContainer) {
     fileListContainer.innerHTML = '';
@@ -491,9 +596,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const timestamp = new Date().getTime();
         const extension = blob.type.split('/')[1];
         const fileName = `colado_${timestamp}.${extension}`;
-        const imageFile = new File([blob], fileName, {
-          type: blob.type
-        });
+        const imageFile = new File([blob], fileName, { type: blob.type });
         fileArray.push(imageFile);
       }
     }
@@ -510,8 +613,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // --- Inicialização ---
-
   const initializeApp = () => {
     fetchRegions();
     populateDocTypes();
@@ -519,7 +620,6 @@ document.addEventListener('DOMContentLoaded', () => {
     createCustomSelect(instanceContainer, [], 'Selecione um compartimento primeiro', () => {}, false, true);
   };
 
-  // --- Adição dos Event Listeners ---
   fetchBtn.addEventListener('click', fetchAllDetails);
   generateBtn.addEventListener('click', generateDocument);
   document.addEventListener('click', closeAllSelects);
@@ -541,6 +641,5 @@ document.addEventListener('DOMContentLoaded', () => {
   architectureFileList.addEventListener('click', (e) => handleFileDelete(e, architectureImageFiles, architectureFileList));
   antivirusFileList.addEventListener('click', (e) => handleFileDelete(e, antivirusImageFiles, antivirusFileList));
 
-  // --- Início da Aplicação ---
   initializeApp();
 });
