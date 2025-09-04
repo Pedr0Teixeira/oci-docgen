@@ -38,28 +38,28 @@ padronizado.
 
 ### Compute
 
--   Instâncias (Shape, OCPUs, Memória, S.O., IPs)\
--   Boot Volumes (Tamanho, Política de Backup)\
+-   Instâncias (Shape, OCPUs, Memória, S.O., IPs)
+-   Boot Volumes (Tamanho, Política de Backup)
 -   Block Volumes (Tamanho, Política de Backup)
 
 ### Networking (VCN)
 
--   Virtual Cloud Networks (VCNs)\
--   Subnets\
--   Security Lists (todas as regras)\
--   Route Tables (todas as regras)\
--   Network Security Groups (NSGs) (todas as regras)\
+-   Virtual Cloud Networks (VCNs)
+-   Subnets
+-   Security Lists (todas as regras)
+-   Route Tables (todas as regras)
+-   Network Security Groups (NSGs) (todas as regras)
 -   Load Balancers (LBaaS)
-    -   IPs, Shape, Listeners\
-    -   Backend Sets, Backends e Health Checkers\
+    -   IPs, Shape, Listeners
+    -   Backend Sets, Backends e Health Checkers
 -   Local Peering Gateways (LPGs)
 
 ### Conectividade
 
--   Dynamic Routing Gateways (DRGs)\
--   Anexos de DRG (VCN, RPC, etc.)\
--   Remote Peering Connections (RPCs)\
--   Customer-Premises Equipment (CPEs)\
+-   Dynamic Routing Gateways (DRGs)
+-   Anexos de DRG (VCN, RPC, etc.)
+-   Remote Peering Connections (RPCs)
+-   Customer-Premises Equipment (CPEs)
 -   IPSec Connections (detalhes de túneis e criptografia)
 
 ## 🔄 Diagrama de Funcionamento
@@ -138,16 +138,16 @@ graph TD
 ### Backend
 
 -   **Python 3.10+**
--   **FastAPI**: Criação da API RESTful.\
--   **OCI Python SDK**: Interação com a API da Oracle Cloud.\
--   **Pydantic**: Validação e serialização de dados.\
--   **python-docx**: Geração e manipulação de arquivos .docx.\
+-   **FastAPI**: Criação da API RESTful.
+-   **OCI Python SDK**: Interação com a API da Oracle Cloud.
+-   **Pydantic**: Validação e serialização de dados.
+-   **python-docx**: Geração e manipulação de arquivos .docx.
 -   **Uvicorn**: Servidor ASGI para rodar a aplicação.
 
 ### Frontend
 
--   **HTML5**\
--   **CSS3**\
+-   **HTML5**
+-   **CSS3**
 -   **Vanilla JavaScript (ES6)**
 
 ## 📂 Estrutura do Projeto
@@ -172,7 +172,7 @@ graph TD
 
 ### Pré-requisitos
 
--   Python 3.8+\
+-   Python 3.8+
 -   Configuração do **OCI CLI** com `~/.oci/config` válido.
 
 ### 1. Backend
@@ -199,12 +199,12 @@ A interface estará em: `http://127.0.0.1:5500`
 
 ## 📖 Instruções de Uso
 
-1.  Selecione a **Região**.\
-2.  Escolha o **Tipo de Documentação**: Novo Host ou Infraestrutura.\
-3.  Selecione o **Compartimento**.\
-4.  Escolha as **Instâncias** (se aplicável).\
-5.  Clique em **Buscar Dados**.\
-6.  (Opcional) Anexe imagens/arquivos.\
+1.  Selecione a **Região**.
+2.  Escolha o **Tipo de Documentação**: Novo Host ou Infraestrutura.
+3.  Selecione o **Compartimento**.
+4.  Escolha as **Instâncias** (se aplicável).
+5.  Clique em **Buscar Dados**.
+6.  (Opcional) Anexe imagens/arquivos.
 7.  Clique em **Gerar Documento (.docx)**.
 
 ------------------------------------------------------------------------
