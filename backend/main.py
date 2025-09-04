@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 01 de Setembro de 2025
+# Data: 04 de Setembro de 2025
 # Descrição: API principal (backend) construída com FastAPI para servir os dados da OCI e gerar os documentos.
 
 import json
@@ -64,7 +64,14 @@ async def get_details(region: str, instance_id: str, compartment_name: Optional[
     try:
         c_name = compartment_name or "N/A"
         instance_detail = oci_connector.get_instance_details(region, instance_id, compartment_name=c_name)
-        return InfrastructureData(instances=[instance_detail], vcns=[], drgs=[], cpes=[], ipsec_connections=[])
+        return InfrastructureData(
+            instances=[instance_detail], 
+            vcns=[], 
+            drgs=[], 
+            cpes=[], 
+            ipsec_connections=[], 
+            load_balancers=[]
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar detalhes da instância: {e}")
 

@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 03 de Setembro de 2025
+# Data: 04 de Setembro de 2025
 # Descrição: Define os modelos de dados (schemas) Pydantic para validação e serialização de dados na API.
 
 from typing import List, Optional
@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 # Estes modelos garantem que os dados trocados entre o frontend e o backend
 # tenham uma estrutura consistente e tipos de dados corretos.
-
 
 class BlockVolume(BaseModel):
     """Representa um Block Volume anexado a uma instância."""
@@ -84,6 +83,35 @@ class SubnetData(BaseModel):
     display_name: str
     cidr_block: str
 
+class LpgData(BaseModel):
+    """Representa um Local Peering Gateway (LPG) dentro de uma VCN."""
+    id: str
+    display_name: str
+    lifecycle_state: str
+    peering_status: str
+    peering_status_details: Optional[str] = None
+    peer_id: Optional[str] = None
+    route_table_id: Optional[str] = None
+    peer_advertised_cidr: Optional[str] = None
+    is_cross_tenancy_peering: bool
+    route_table_name: Optional[str] = "N/A"
+
+class RpcData(BaseModel):
+    """Representa uma Remote Peering Connection (RPC) em um DRG."""
+    id: str
+    display_name: str
+    lifecycle_state: str
+    peering_status: str
+    peering_status_details: Optional[str] = None
+
+class DrgAttachmentData(BaseModel):
+    """Representa um anexo de um DRG a outro recurso (ex: VCN, RPC)."""
+    id: str
+    display_name: str
+    network_id: Optional[str] = None
+    network_type: str
+    route_table_id: Optional[str] = None
+    route_table_name: Optional[str] = "N/A"
 
 class VcnData(BaseModel):
     """Representa uma Virtual Cloud Network (VCN) e seus recursos aninhados."""
@@ -94,21 +122,14 @@ class VcnData(BaseModel):
     security_lists: List[SecurityList]
     route_tables: List[RouteTable]
     network_security_groups: List[NetworkSecurityGroup]
-
-
-class DrgAttachmentData(BaseModel):
-    """Representa um anexo de um DRG a outro recurso (ex: VCN)."""
-    id: str
-    display_name: str
-    network_id: str
-    network_type: str
-
+    lpgs: List[LpgData]
 
 class DrgData(BaseModel):
     """Representa um Dynamic Routing Gateway e seus anexos."""
     id: str
     display_name: str
     attachments: List[DrgAttachmentData]
+    rpcs: List[RpcData]
 
 
 class CpeData(BaseModel):
@@ -161,6 +182,53 @@ class IpsecData(BaseModel):
     static_routes: List[str]
     tunnels: List[TunnelData]
 
+class BackendData(BaseModel):
+    """Representa um servidor de backend dentro de um Backend Set."""
+    name: str
+    ip_address: str
+    port: int
+    weight: int
+
+class HealthCheckerData(BaseModel):
+    """Representa a configuração do Health Checker de um Backend Set."""
+    protocol: str
+    port: int
+    url_path: Optional[str] = "/"
+
+class BackendSetData(BaseModel):
+    """Representa um Backend Set de um Load Balancer."""
+    name: str
+    policy: str
+    health_checker: HealthCheckerData
+    backends: List[BackendData]
+
+class ListenerData(BaseModel):
+    """Representa um Listener de um Load Balancer."""
+    name: str
+    protocol: str
+    port: int
+    default_backend_set_name: str
+    hostname_names: List[str] = []
+
+class HostnameData(BaseModel):
+    """Representa um Virtual Hostname configurado em um Load Balancer."""
+    name: str
+
+class LoadBalancerIpAddressData(BaseModel):
+    """Representa um endereço IP associado a um Load Balancer."""
+    ip_address: str
+    is_public: bool
+
+class LoadBalancerData(BaseModel):
+    """Modelo principal para agregar todos os dados de um Load Balancer."""
+    display_name: str
+    lifecycle_state: str
+    shape_name: str
+    ip_addresses: List[LoadBalancerIpAddressData]
+    listeners: List[ListenerData]
+    backend_sets: List[BackendSetData]
+    hostnames: List[HostnameData]
+
 
 class InfrastructureData(BaseModel):
     """Modelo principal para agregar todos os dados de infraestrutura de um compartimento."""
@@ -169,6 +237,7 @@ class InfrastructureData(BaseModel):
     drgs: List[DrgData]
     cpes: List[CpeData]
     ipsec_connections: List[IpsecData]
+    load_balancers: List[LoadBalancerData]
 
 
 # --- SCHEMAS PARA REQUISIÇÕES DA API ---
