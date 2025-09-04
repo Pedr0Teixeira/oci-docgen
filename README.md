@@ -181,7 +181,9 @@ graph TD
 cd backend
 python3 -m venv venv
 source venv/bin/activate   # macOS/Linux
-.env\Scriptsctivate    # Windows
+source venv/bin/activate   # macOS/Linux
+.\venv\Scripts\activate    # Windows (PowerShell)
+venv\Scripts\activate      # Windows (CMD)
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
