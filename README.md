@@ -21,16 +21,16 @@ padronizado.
 ## ✨ Principais Funcionalidades
 
 -   **Descoberta Automática:** Mapeia e lista hierarquicamente as
-    regiões e compartimentos da sua tenancy.\
+    regiões e compartimentos da sua tenancy.
 -   **Dois Modos de Documentação:** Gere um documento focado em novas
     instâncias ou um relatório completo de toda a infraestrutura de um
-    compartimento.\
+    compartimento.
 -   **Coleta de Dados Abrangente:** Extrai informações detalhadas de
-    múltiplos serviços da OCI.\
+    múltiplos serviços da OCI.
 -   **Interface Web Interativa:** Um frontend limpo e reativo que guia o
-    usuário passo a passo no processo de seleção.\
+    usuário passo a passo no processo de seleção.
 -   **Anexos Manuais:** Permite o upload de evidências visuais, como
-    diagramas de arquitetura e prints de configuração.\
+    diagramas de arquitetura e prints de configuração.
 -   **Saída Profissional:** Gera um arquivo **.docx** bem formatado,
     pronto para ser entregue a clientes ou auditorias internas.
 
