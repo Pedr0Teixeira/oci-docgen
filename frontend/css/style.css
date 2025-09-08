@@ -186,9 +186,10 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
   z-index: 99;
-  max-height: 250px;
-  overflow-y: auto;
   box-shadow: var(--shadow);
+  display: flex;             /* Garante que é um container flex */
+  flex-direction: column;    /* Organiza os itens verticalmente */
+  max-height: 300px;         /* Altura máxima para TODO o dropdown */
 }
 
 .select-hide {
@@ -196,8 +197,7 @@ body {
 }
 
 .select-search {
-  width: calc(100% - 20px);
-  margin: 10px;
+  width: 100%;
   padding: 10px 14px;
   background-color: var(--bg-main);
   border: 1px solid var(--border-color);
@@ -221,6 +221,7 @@ body {
   transition: background-color 0.2s;
   font-size: 15px;
   gap: 10px;
+  white-space: nowrap;
 }
 
 .select-item-parent {
@@ -1057,6 +1058,19 @@ fieldset legend {
 
 .hidden {
   display: none !important;
+}
+
+.select-search-container {
+  padding: 10px 10px 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0; /* Garante que este elemento não encolha */
+}
+
+.select-items-list {
+  flex-grow: 1;      /* Ocupa o espaço restante verticalmente */
+  overflow-y: auto;  /* Aplica a barra de rolagem AQUI */
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 @keyframes spin {
