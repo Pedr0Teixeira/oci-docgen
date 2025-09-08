@@ -3,114 +3,142 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OCI DocGen | CCM Tecnologia</title>
+  <title>OCI DocGen</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <!-- Overlay de Carregamento/Progresso -->
   <div id="loading-overlay" class="hidden">
-    <div class="spinner"></div>
+    <div class="progress-container">
+      <div class="spinner"></div>
+      <span id="progress-text">Carregando...</span>
+      <div class="progress-bar-container">
+        <div id="progress-bar"></div>
+      </div>
+    </div>
   </div>
-  <div class="container">
-    <header class="app-header">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="header-icon">
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-        <polyline points="14 2 14 8 20 8"></polyline>
-      </svg>
-      <h1>OCI DocGen</h1>
-      <span class="header-subtitle">by CCM Tecnologia</span>
-    </header>
 
-    <main class="content-card">
-      <div class="step">
-        <div class="step-number">1</div>
-        <div class="step-content">
-          <label>Selecione a Região</label>
-          <div id="region-select-container" class="custom-select-container"></div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-number">2</div>
-        <div class="step-content">
-          <label>Selecione o Tipo de Documentação</label>
-          <div id="doctype-select-container" class="custom-select-container"></div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-number">3</div>
-        <div class="step-content">
-          <label>Selecione o Compartimento</label>
-          <div id="compartment-select-container" class="custom-select-container"></div>
-        </div>
-      </div>
-
-      <div class="step" id="instance-step">
-        <div class="step-number">4</div>
-        <div class="step-content">
-          <label>Selecione a(s) Instância(s)</label>
-          <div id="instance-select-container" class="custom-select-container"></div>
-        </div>
-      </div>
-
-      <button id="fetch-details-btn" class="button-primary" disabled>
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" x2="16.65" y1="21" y2="16.65"></line>
+  <!-- Container Principal da Aplicação -->
+  <div id="main-app-container">
+    <div class="container">
+      <header class="app-header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="header-icon">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
         </svg>
-        <span>Buscar Dados da(s) Instância(s)</span>
-      </button>
-      
-      <div id="details-container" class="hidden">
-        <hr class="fieldset-divider">
-        <div id="fetched-data-summary">
-          <!-- O conteúdo do resumo será inserido aqui pelo JavaScript -->
+        <h1>OCI DocGen</h1>
+        <span class="header-subtitle">by Pedro Teixeira</span>
+      </header>
+
+      <main class="content-card">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <label>Selecione a Região</label>
+            <div id="region-select-container" class="custom-select-container"></div>
+          </div>
         </div>
 
-        <hr class="fieldset-divider">
-
-        <fieldset>
-          <legend>
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-            Anexos Manuais
-          </legend>
-          <div class="attachments-grid">
-            <div class="file-upload-group" id="architecture-upload-group" tabindex="0">
-              <label for="architecture-upload" class="file-upload-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
-                <span>Adicionar Desenho(s) da Arquitetura</span>
-              </label>
-              <input type="file" id="architecture-upload" accept="image/png, image/jpeg, image/gif" multiple>
-              <p class="upload-note">Clique para selecionar ou cole uma imagem aqui (Ctrl+V).</p>
-              <div id="architecture-file-list" class="file-list-container"></div>
-            </div>
-
-            <div class="file-upload-group" id="antivirus-upload-group" tabindex="0">
-              <label for="antivirus-upload" class="file-upload-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
-                <span>Adicionar Print(s) do Antivírus</span>
-              </label>
-              <input type="file" id="antivirus-upload" accept="image/png, image/jpeg, image/gif" multiple>
-              <p class="upload-note">Clique para selecionar ou cole uma imagem aqui (Ctrl+V).</p>
-              <div id="antivirus-file-list" class="file-list-container"></div>
-            </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <label>Selecione o Tipo de Documentação</label>
+            <div id="doctype-select-container" class="custom-select-container"></div>
           </div>
-        </fieldset>
+        </div>
 
-        <button id="generate-doc-btn" type="button" class="button-primary generate-btn">
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <label>Selecione o Compartimento</label>
+            <div id="compartment-select-container" class="custom-select-container"></div>
+          </div>
+        </div>
+
+        <div class="step" id="instance-step">
+          <div class="step-number">4</div>
+          <div class="step-content">
+            <label>Selecione a(s) Instância(s)</label>
+            <div id="instance-select-container" class="custom-select-container"></div>
+          </div>
+        </div>
+
+        <button id="fetch-details-btn" class="button-primary" disabled>
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" x2="12" y1="15" y2="3"></line>
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" x2="16.65" y1="21" y2="16.65"></line>
           </svg>
-          Gerar Documento (.docx)
+          <span>Buscar Dados da(s) Instância(s)</span>
         </button>
-      </div>
-    </main>
+        
+        <div id="details-container" class="hidden">
+          <hr class="fieldset-divider">
+          <div id="fetched-data-summary">
+            <!-- O conteúdo do resumo será inserido aqui pelo JavaScript -->
+          </div>
+
+          <hr class="fieldset-divider">
+
+          <fieldset>
+            <legend>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+              Anexos Manuais
+            </legend>
+            <div class="attachments-grid">
+              <div class="file-upload-group" id="architecture-upload-group" tabindex="0">
+                <label for="architecture-upload" class="file-upload-label">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
+                  <span>Adicionar Desenho(s) da Arquitetura</span>
+                </label>
+                <input type="file" id="architecture-upload" accept="image/png, image/jpeg, image/gif" multiple>
+                <p class="upload-note">Clique para selecionar ou cole uma imagem aqui (Ctrl+V).</p>
+                <div id="architecture-file-list" class="file-list-container"></div>
+              </div>
+
+              <div class="file-upload-group" id="antivirus-upload-group" tabindex="0">
+                <label for="antivirus-upload" class="file-upload-label">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
+                  <span>Adicionar Print(s) do Antivírus</span>
+                </label>
+                <input type="file" id="antivirus-upload" accept="image/png, image/jpeg, image/gif" multiple>
+                <p class="upload-note">Clique para selecionar ou cole uma imagem aqui (Ctrl+V).</p>
+                <div id="antivirus-file-list" class="file-list-container"></div>
+              </div>
+            </div>
+          </fieldset>
+
+          <button id="generate-doc-btn" type="button" class="button-primary generate-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" x2="12" y1="15" y2="3"></line>
+            </svg>
+            Gerar Documento (.docx)
+          </button>
+        </div>
+      </main>
+    </div>
   </div>
+  
+  <!-- Tela de Sucesso (Modal) -->
+  <div id="success-screen" class="hidden">
+    <div class="success-modal">
+      <div class="success-icon">
+        <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+          <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+          <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+        </svg>
+      </div>
+      <h2>Sucesso!</h2>
+      <p>Operação realizada com sucesso.</p>
+      <button id="new-doc-btn" class="button-primary">OK</button>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
   <script src="js/app.js"></script>
 </body>
 </html>
