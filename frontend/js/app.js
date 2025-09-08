@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const API_BASE_URL = 'http://127.0.0.1:8000';
 
   // --- Seletores de Elementos do DOM ---
+  const mainAppContainer = document.getElementById('main-app-container');
   const regionContainer = document.getElementById('region-select-container');
   const docTypeContainer = document.getElementById('doctype-select-container');
   const instanceStep = document.getElementById('instance-step');
@@ -26,6 +27,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const antivirusFileList = document.getElementById('antivirus-file-list');
   const architectureUploadGroup = document.getElementById('architecture-upload-group');
   const antivirusUploadGroup = document.getElementById('antivirus-upload-group');
+  const toastContainer = document.getElementById('toast-container');
+  const progressText = document.getElementById('progress-text');
+  const progressBar = document.getElementById('progress-bar');
+  const progressSpinner = loadingOverlay.querySelector('.spinner');
+  const successScreen = document.getElementById('success-screen');
+  const newDocBtn = document.getElementById('new-doc-btn');
+
 
   // --- Variáveis de Estado da Aplicação ---
   let selectedRegion = null;
@@ -36,12 +44,94 @@ document.addEventListener('DOMContentLoaded', () => {
   let allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
   let architectureImageFiles = [];
   let antivirusImageFiles = [];
-
-  const toggleLoading = (show) => {
-    loadingOverlay.classList.toggle('hidden', !show);
-  };
+  let simulatedProgressInterval = null;
 
   // --- Funções de UI ---
+
+  function showToast(message, type = 'success') {
+    if (!toastContainer) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    const icon = type === 'success' 
+      ? `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toast-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`
+      : `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toast-icon"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>`;
+
+    toast.innerHTML = `${icon}<span>${message}</span>`;
+    
+    toastContainer.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.remove();
+    }, 5000);
+  }
+  
+  const showProgress = (isSimulated = false) => {
+    loadingOverlay.classList.remove('hidden');
+    progressSpinner.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressText.textContent = 'Iniciando...';
+    
+    if (isSimulated) {
+        progressSpinner.style.display = 'none';
+    }
+  };
+
+  const updateProgress = (percentage, text) => {
+    if (percentage > 0) progressSpinner.style.display = 'none';
+    progressBar.style.width = `${percentage}%`;
+    progressText.textContent = text;
+  };
+
+  const hideProgress = () => {
+    clearInterval(simulatedProgressInterval);
+    loadingOverlay.classList.add('hidden');
+  };
+  
+  const toggleLoading = (show) => {
+      if (show) {
+          progressSpinner.style.display = 'block';
+          progressText.textContent = 'Carregando...';
+          progressBar.style.width = '0%';
+          loadingOverlay.classList.remove('hidden');
+      } else {
+          loadingOverlay.classList.add('hidden');
+      }
+  };
+  
+  const showSuccessScreen = () => {
+    mainAppContainer.classList.add('hidden');
+    successScreen.classList.remove('hidden');
+    // Força o reinício da animação CSS
+    const icon = successScreen.querySelector('.success-icon');
+    const newIcon = icon.cloneNode(true);
+    icon.parentNode.replaceChild(newIcon, icon);
+  }
+
+  const resetApp = () => {
+    successScreen.classList.add('hidden');
+    mainAppContainer.classList.remove('hidden');
+    
+    // Reseta todas as variáveis de estado
+    selectedRegion = null;
+    selectedDocType = null;
+    selectedCompartmentId = null;
+    selectedCompartmentName = null;
+    selectedInstances = {};
+    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
+    architectureImageFiles = [];
+    antivirusImageFiles = [];
+
+    // Limpa a UI
+    detailsContainer.classList.add('hidden');
+    summaryContainer.innerHTML = '';
+    architectureFileList.innerHTML = '';
+    antivirusFileList.innerHTML = '';
+    
+    // Reinicia os selects
+    initializeApp();
+  }
 
   function updateUiForDocType() {
     const isInfraDoc = selectedDocType === 'full_infra';
@@ -60,157 +150,157 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false) {
-    container.innerHTML = '';
-    const selected = document.createElement('div');
-    selected.classList.add('select-selected');
-    if (isMultiSelect) {
-      selected.innerHTML = `<div class="selected-items-container"><span class="placeholder">${placeholder}</span></div><span class="select-arrow">▼</span>`;
-    } else {
-      selected.innerHTML = `<div class="selected-item-display"><span class="placeholder">${placeholder}</span></div><span class="select-arrow">▼</span>`;
-    }
-    if (!isEnabled) {
-      selected.classList.add('disabled');
-    }
-    container.appendChild(selected);
-    const items = document.createElement('div');
-    items.classList.add('select-items', 'select-hide');
-    const needsSearchBox = [regionContainer, compartmentContainer, instanceContainer].includes(container);
+  function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false) {
+      container.innerHTML = '';
+      const selected = document.createElement('div');
+      selected.classList.add('select-selected');
+      if (isMultiSelect) {
+        selected.innerHTML = `<div class="selected-items-container"><span class="placeholder">${placeholder}</span></div><span class="select-arrow">▼</span>`;
+      } else {
+        selected.innerHTML = `<div class="selected-item-display"><span class="placeholder">${placeholder}</span></div><span class="select-arrow">▼</span>`;
+      }
+      if (!isEnabled) {
+        selected.classList.add('disabled');
+      }
+      container.appendChild(selected);
+      const items = document.createElement('div');
+      items.classList.add('select-items', 'select-hide');
+      const needsSearchBox = [regionContainer, compartmentContainer, instanceContainer].includes(container);
 
-    const itemsListContainer = document.createElement('div');
-    itemsListContainer.className = 'select-items-list';
+      const itemsListContainer = document.createElement('div');
+      itemsListContainer.className = 'select-items-list';
 
-    if (needsSearchBox) {
-      const searchContainer = document.createElement('div');
-      searchContainer.className = 'select-search-container';
-      const searchBox = document.createElement('input');
-      searchBox.type = 'text';
-      searchBox.placeholder = 'Buscar...';
-      searchBox.className = 'select-search';
-      searchBox.addEventListener('click', e => e.stopPropagation());
-      searchBox.addEventListener('input', () => {
-        const filter = searchBox.value.toUpperCase();
-        const allListItems = Array.from(itemsListContainer.querySelectorAll('.select-item, .select-item-parent'));
+      if (needsSearchBox) {
+        const searchContainer = document.createElement('div');
+        searchContainer.className = 'select-search-container';
+        const searchBox = document.createElement('input');
+        searchBox.type = 'text';
+        searchBox.placeholder = 'Buscar...';
+        searchBox.className = 'select-search';
+        searchBox.addEventListener('click', e => e.stopPropagation());
+        searchBox.addEventListener('input', () => {
+          const filter = searchBox.value.toUpperCase();
+          const allListItems = Array.from(itemsListContainer.querySelectorAll('.select-item, .select-item-parent'));
+          
+          if (!filter) {
+              allListItems.forEach(item => item.style.display = "");
+              return;
+          }
+
+          let itemsToShow = new Set();
+          
+          allListItems.forEach(item => {
+            const txtValue = item.textContent || item.innerText;
+            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+              itemsToShow.add(item);
+            }
+          });
+
+          itemsToShow.forEach(item => {
+            let currentLevel = parseInt(item.dataset.level, 10);
+            if (isNaN(currentLevel) || currentLevel === 0) return;
+            let currentIndex = allListItems.indexOf(item);
+            for (let i = currentIndex - 1; i >= 0; i--) {
+              const potentialParent = allListItems[i];
+              const parentLevel = parseInt(potentialParent.dataset.level, 10);
+              if (parentLevel < currentLevel) {
+                itemsToShow.add(potentialParent);
+                currentLevel = parentLevel; 
+                if (currentLevel === 0) break;
+              }
+            }
+          });
+
+          allListItems.forEach(item => {
+            item.style.display = itemsToShow.has(item) ? "" : "none";
+          });
+        });
+        searchContainer.appendChild(searchBox);
+        items.appendChild(searchContainer);
+      }
+      
+      options.forEach(option => {
+        const item = document.createElement('div');
+        const optionValue = option.key || option.id;
+        const optionName = option.name || option.display_name;
+        item.setAttribute('data-value', optionValue);
+        item.setAttribute('data-name', optionName);
         
-        if (!filter) {
-            allListItems.forEach(item => item.style.display = "");
-            return;
+        let iconSvg = '';
+        if (option.level !== undefined) {
+          item.dataset.level = option.level;
         }
 
-        let itemsToShow = new Set();
-        
-        allListItems.forEach(item => {
-          const txtValue = item.textContent || item.innerText;
-          if (txtValue.toUpperCase().indexOf(filter) > -1) {
-            itemsToShow.add(item);
-          }
-        });
-
-        itemsToShow.forEach(item => {
-          let currentLevel = parseInt(item.dataset.level, 10);
-          if (isNaN(currentLevel) || currentLevel === 0) return;
-          let currentIndex = allListItems.indexOf(item);
-          for (let i = currentIndex - 1; i >= 0; i--) {
-            const potentialParent = allListItems[i];
-            const parentLevel = parseInt(potentialParent.dataset.level, 10);
-            if (parentLevel < currentLevel) {
-              itemsToShow.add(potentialParent);
-              currentLevel = parentLevel; 
-              if (currentLevel === 0) break;
+        if (isMultiSelect) {
+          item.classList.add('select-item');
+          iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`;
+          const status = option.status || '';
+          const statusClass = status.toLowerCase();
+          item.innerHTML = `
+            <input type="checkbox" value="${optionValue}" data-name="${optionName}" ${selectedInstances[optionValue] ? 'checked' : ''}>
+            <span class="custom-checkbox"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+            <div class="instance-info">
+               ${iconSvg}
+               <span class="instance-status status-${statusClass}"></span>
+               <span class="item-text">${optionName}</span>
+               <span class="status-text">(${status})</span>
+            </div>`;
+        } else {
+          item.classList.add('select-item-parent');
+          if (container === regionContainer) {
+            iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>`;
+          } else if (container === docTypeContainer) {
+            iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
+          } else if (option.level !== undefined) {
+            item.classList.remove('select-item-parent');
+            item.classList.add(option.level > 0 ? 'select-item' : 'select-item-parent');
+            if (option.level > 0) {
+              item.style.paddingLeft = `${option.level * 25}px`;
+              item.innerHTML = `<span class="item-tree-prefix"></span><span class="item-text">${optionName}</span>`;
+            } else {
+              iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>`;
             }
           }
-        });
-
-        allListItems.forEach(item => {
-          item.style.display = itemsToShow.has(item) ? "" : "none";
-        });
+          if (iconSvg) {
+            item.innerHTML = `${iconSvg}<span class="item-text">${optionName}</span>`;
+          } else if (!item.innerHTML) {
+            item.innerHTML = `<span class="item-text">${optionName}</span>`
+          }
+        }
+        if (isMultiSelect) {
+          const checkbox = item.querySelector('input[type="checkbox"]');
+          item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (e.target.tagName !== 'INPUT') {
+              checkbox.checked = !checkbox.checked;
+            }
+            onSelectCallback(checkbox.value, checkbox.dataset.name, checkbox.checked);
+          });
+        } else {
+          item.addEventListener('click', () => {
+            const selectedContent = selected.querySelector('.selected-item-display');
+            selectedContent.innerHTML = item.innerHTML;
+            selectedContent.classList.remove('placeholder');
+            onSelectCallback(optionValue, optionName);
+            closeAllSelects();
+          });
+        }
+        itemsListContainer.appendChild(item);
       });
-      searchContainer.appendChild(searchBox);
-      items.appendChild(searchContainer);
-    }
-    
-    options.forEach(option => {
-      const item = document.createElement('div');
-      const optionValue = option.key || option.id;
-      const optionName = option.name || option.display_name;
-      item.setAttribute('data-value', optionValue);
-      item.setAttribute('data-name', optionName);
-      
-      let iconSvg = '';
-      if (option.level !== undefined) {
-        item.dataset.level = option.level;
-      }
 
-      if (isMultiSelect) {
-        item.classList.add('select-item');
-        iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`;
-        const status = option.status || '';
-        const statusClass = status.toLowerCase();
-        item.innerHTML = `
-          <input type="checkbox" value="${optionValue}" data-name="${optionName}" ${selectedInstances[optionValue] ? 'checked' : ''}>
-          <span class="custom-checkbox"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-          <div class="instance-info">
-             ${iconSvg}
-             <span class="instance-status status-${statusClass}"></span>
-             <span class="item-text">${optionName}</span>
-             <span class="status-text">(${status})</span>
-          </div>`;
-      } else {
-        item.classList.add('select-item-parent');
-        if (container === regionContainer) {
-          iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>`;
-        } else if (container === docTypeContainer) {
-          iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
-        } else if (option.level !== undefined) {
-          item.classList.remove('select-item-parent');
-          item.classList.add(option.level > 0 ? 'select-item' : 'select-item-parent');
-          if (option.level > 0) {
-            item.style.paddingLeft = `${option.level * 25}px`;
-            item.innerHTML = `<span class="item-tree-prefix"></span><span class="item-text">${optionName}</span>`;
-          } else {
-            iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>`;
-          }
+      items.appendChild(itemsListContainer);
+      container.appendChild(items);
+
+      selected.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (selected.classList.contains('disabled')) return;
+        const wasOpen = !items.classList.contains('select-hide');
+        closeAllSelects(isMultiSelect ? container : null);
+        if (!wasOpen) {
+          items.classList.toggle('select-hide');
+          selected.classList.toggle('select-arrow-active');
         }
-        if (iconSvg) {
-          item.innerHTML = `${iconSvg}<span class="item-text">${optionName}</span>`;
-        } else if (!item.innerHTML) {
-          item.innerHTML = `<span class="item-text">${optionName}</span>`
-        }
-      }
-      if (isMultiSelect) {
-        const checkbox = item.querySelector('input[type="checkbox"]');
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (e.target.tagName !== 'INPUT') {
-            checkbox.checked = !checkbox.checked;
-          }
-          onSelectCallback(checkbox.value, checkbox.dataset.name, checkbox.checked);
-        });
-      } else {
-        item.addEventListener('click', () => {
-          const selectedContent = selected.querySelector('.selected-item-display');
-          selectedContent.innerHTML = item.innerHTML;
-          selectedContent.classList.remove('placeholder');
-          onSelectCallback(optionValue, optionName);
-          closeAllSelects();
-        });
-      }
-      itemsListContainer.appendChild(item);
-    });
-
-    items.appendChild(itemsListContainer);
-    container.appendChild(items);
-
-    selected.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (selected.classList.contains('disabled')) return;
-      const wasOpen = !items.classList.contains('select-hide');
-      closeAllSelects(isMultiSelect ? container : null);
-      if (!wasOpen) {
-        items.classList.toggle('select-hide');
-        selected.classList.toggle('select-arrow-active');
-      }
-    });
+      });
   }
 
   function updateMultiSelectDisplay() {
@@ -258,7 +348,7 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
       }, true);
     } catch (error) {
       console.error(error);
-      alert("Falha ao buscar regiões: " + error.message);
+      showToast("Falha ao buscar regiões: " + error.message, 'error');
     } finally {
       toggleLoading(false);
     }
@@ -276,7 +366,7 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
     if (!selectedRegion) return;
     try {
       toggleLoading(true);
-      createCustomSelect(compartmentContainer, [], 'Carregando...', () => {}, true, false);
+      createCustomSelect(compartmentContainer, [], 'Carregando...', () => {}, false, false);
       const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/compartments`);
       if (!response.ok) throw new Error('Erro ao buscar compartimentos');
       const compartments = await response.json();
@@ -288,7 +378,7 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
       }, true, false);
     } catch (error) {
       console.error(error);
-      alert(error.message);
+      showToast(error.message, 'error');
     } finally {
       toggleLoading(false);
     }
@@ -298,7 +388,7 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
     if (!selectedRegion || !selectedCompartmentId) return;
     try {
       toggleLoading(true);
-      createCustomSelect(instanceContainer, [], 'Carregando...', () => {}, true, true);
+      createCustomSelect(instanceContainer, [], 'Carregando...', () => {}, false, true);
       const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/instances/${selectedCompartmentId}`);
       if (!response.ok) throw new Error('Erro ao buscar instâncias');
       const instances = await response.json();
@@ -314,7 +404,7 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
       updateMultiSelectDisplay();
     } catch (error) {
       console.error(error);
-      alert(error.message);
+      showToast(error.message, 'error');
     } finally {
       toggleLoading(false);
     }
@@ -330,10 +420,27 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
 
   const fetchAllInfrastructureDetails = async () => {
     if (!selectedCompartmentId) return;
-    toggleLoading(true);
+    showProgress(true);
     detailsContainer.classList.add('hidden');
-    summaryContainer.innerHTML = `<p>Buscando dados completos da infraestrutura do compartimento <strong>${selectedCompartmentName}</strong>...</p>`;
     allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
+    
+    const steps = [
+        { pct: 15, msg: 'Analisando Redes (VCNs)...' },
+        { pct: 30, msg: 'Coletando Listas de Segurança...' },
+        { pct: 45, msg: 'Verificando Tabelas de Roteamento...' },
+        { pct: 60, msg: 'Mapeando Conectividade (DRGs & VPNs)...' },
+        { pct: 75, msg: 'Inspecionando Load Balancers...' },
+        { pct: 90, msg: 'Coletando detalhes das instâncias...' }
+    ];
+    let currentStep = 0;
+    simulatedProgressInterval = setInterval(() => {
+        if (currentStep < steps.length) {
+            const step = steps[currentStep];
+            updateProgress(step.pct, step.msg);
+            currentStep++;
+        }
+    }, 800);
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/infrastructure-details/${selectedCompartmentId}`, { method: 'POST' });
       if (!response.ok) {
@@ -345,26 +452,40 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
       const summaryHtml = generateInfrastructureSummary(data, selectedCompartmentName);
       summaryContainer.innerHTML = summaryHtml;
       detailsContainer.classList.remove('hidden');
+      updateProgress(100, 'Dados coletados com sucesso!');
     } catch (error) {
       console.error(error);
       summaryContainer.innerHTML = `<p class="error-message">${error.message}</p>`;
+      showToast(error.message, 'error');
     } finally {
-      toggleLoading(false);
+      clearInterval(simulatedProgressInterval);
+      setTimeout(hideProgress, 500);
     }
   };
 
   const fetchAllInstanceDetails = async () => {
     const instanceIds = Object.keys(selectedInstances);
     if (instanceIds.length === 0) return;
-    toggleLoading(true);
+    
+    showProgress();
     detailsContainer.classList.add('hidden');
     allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
-    summaryContainer.innerHTML = '<p>Buscando dados...</p>';
     
+    let completed = 0;
+    const total = instanceIds.length;
+    updateProgress(0, `Coletando 0 de ${total} instâncias...`);
+
     const promises = instanceIds.map(id => {
       const encodedCompartmentName = encodeURIComponent(selectedCompartmentName);
       const fullUrl = `${API_BASE_URL}/api/${selectedRegion}/instance-details/${id}?compartment_name=${encodedCompartmentName}`;
-      return fetch(fullUrl).then(res => res.ok ? res.json() : Promise.reject('Falha ao buscar instância'));
+      return fetch(fullUrl)
+        .then(res => res.ok ? res.json() : Promise.reject(new Error(`Falha ao buscar ${selectedInstances[id]}`)))
+        .then(data => {
+            completed++;
+            const percentage = Math.round((completed / total) * 100);
+            updateProgress(percentage, `Coletando ${completed} de ${total} instâncias...`);
+            return data;
+        });
     });
 
     try {
@@ -378,10 +499,10 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
       summaryContainer.innerHTML = finalHtml;
       detailsContainer.classList.remove('hidden');
     } catch (error) {
-      alert(error);
+      showToast(error.message, 'error');
       summaryContainer.innerHTML = `<p class="error-message">${error.message}</p>`;
     } finally {
-      toggleLoading(false);
+      setTimeout(hideProgress, 500);
     }
   };
 
@@ -567,11 +688,9 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
 
   const generateDocument = (event) => {
     if (!allInfrastructureData || allInfrastructureData.instances.length === 0) {
-        alert("Busque os dados da infraestrutura ou da(s) instância(s) primeiro.");
+        showToast("Busque os dados antes de gerar o documento.", 'error');
         return;
     }
-    
-    console.log("1. Clicou em 'Gerar Documento'. Iniciando o processo com XHR.");
     
     let xhr;
     try {
@@ -582,31 +701,23 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
         architectureImageFiles.forEach(file => formData.append('architecture_files', file));
         antivirusImageFiles.forEach(file => formData.append('antivirus_files', file));
         
-        console.log("2. Configurando XMLHttpRequest e enviando requisição...");
-        
         xhr = new XMLHttpRequest();
         xhr.open('POST', `${API_BASE_URL}/api/generate-document`, true);
         xhr.responseType = 'blob';
 
         xhr.onloadend = function() {
-            console.log("8. Processo XHR finalizado.");
             toggleLoading(false);
         };
         
         xhr.onload = function() {
-            console.log("3. Resposta do servidor recebida via XHR. Status:", xhr.status);
             if (this.status === 200) {
                 const blob = this.response;
-                console.log("4. Blob criado com sucesso. Tamanho:", blob.size, "Tipo:", blob.type);
-
                 if (blob.size === 0) {
-                    console.error("ERRO: O blob recebido está vazio.");
-                    alert("Erro: O servidor retornou uma resposta vazia.");
+                    showToast("Erro: O servidor retornou uma resposta vazia.", 'error');
                     return;
                 }
 
                 const url = window.URL.createObjectURL(blob);
-                console.log("5. URL do objeto criada:", url);
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
@@ -619,28 +730,25 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
                 a.download = docName;
                 
                 document.body.appendChild(a);
-                console.log(`6. Link preparado com nome: ${docName}. Clicando para iniciar download...`);
                 a.click();
                 
-                console.log("7. Download disparado. Limpando recursos.");
                 window.URL.revokeObjectURL(url);
                 a.remove();
+                
+                showSuccessScreen();
             } else {
-                console.error("ERRO: A resposta do servidor não foi 200 OK. Status:", this.status, this.statusText);
-                alert(`Erro do servidor: ${this.status} - ${this.statusText}`);
+                showToast(`Erro do servidor: ${this.status} - ${this.statusText}`, 'error');
             }
         };
 
         xhr.onerror = function() {
-            console.error("ERRO DE REDE: A requisição falhou.");
-            alert("Ocorreu um erro de rede que impediu o download.");
+            showToast("Ocorreu um erro de rede que impediu o download.", 'error');
         };
 
         xhr.send(formData);
 
     } catch (error) {
-        console.error("ERRO CRÍTICO no processo de download:", error);
-        alert("Ocorreu um erro crítico ao tentar processar o download: " + error.toString());
+        showToast("Erro crítico no download: " + error.toString(), 'error');
         toggleLoading(false);
     }
   };
@@ -703,9 +811,8 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
   };
 
   fetchBtn.addEventListener('click', fetchAllDetails);
-  
   generateBtn.addEventListener('click', generateDocument); 
-  
+  newDocBtn.addEventListener('click', resetApp);
   document.addEventListener('click', closeAllSelects);
   
   summaryContainer.addEventListener('click', (event) => {
@@ -727,3 +834,4 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
 
   initializeApp();
 });
+
