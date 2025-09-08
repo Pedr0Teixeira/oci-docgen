@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 04 de Setembro de 2025
+# Data: 08 de Setembro de 2025
 # Descrição: API principal (backend) construída com FastAPI para servir os dados da OCI e gerar os documentos.
 
 import json
@@ -8,18 +8,23 @@ import os
 import traceback
 from typing import List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+# A importação de 'Response' foi adicionada aqui
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+import logging
 
 import doc_generator
 import oci_connector
 from schemas import GenerateDocRequest, InfrastructureData
 
+# Configuração do logging
+logging.basicConfig(level=logging.INFO)
+
 # --- Configuração da Aplicação FastAPI ---
 app = FastAPI(
     title="OCI DocGen API",
-    version="1.5.1", # Versão incrementada
+    version="1.5.1",
     description="API para automatizar a coleta de dados da OCI e gerar documentação de infraestrutura."
 )
 
@@ -92,21 +97,45 @@ async def create_document(
     architecture_files: List[UploadFile] = File([]),
     antivirus_files: List[UploadFile] = File([])
 ):
+    logging.info("Endpoint /api/generate-document foi chamado.")
     try:
         request_data = GenerateDocRequest(**json.loads(json_data))
         architecture_image_bytes_list = [await f.read() for f in architecture_files]
         antivirus_image_bytes_list = [await f.read() for f in antivirus_files]
+        
+        logging.info("Chamando doc_generator.generate_documentation...")
         file_path = doc_generator.generate_documentation(
             doc_type=request_data.doc_type,
             infra_data=request_data.infra_data,
             architecture_image_bytes_list=architecture_image_bytes_list,
             antivirus_image_bytes_list=antivirus_image_bytes_list
         )
-        return FileResponse(
-            path=file_path,
-            filename=os.path.basename(file_path),
-            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        logging.info(f"doc_generator retornou o caminho do arquivo: {file_path}")
+
+        if not os.path.exists(file_path):
+            logging.error(f"ERRO CRÍTICO: O arquivo {file_path} não foi encontrado no disco após a geração.")
+            raise HTTPException(status_code=500, detail=f"Arquivo gerado não encontrado no servidor: {file_path}")
+        
+        logging.info(f"Arquivo {file_path} encontrado. Lendo o conteúdo para envio.")
+        
+        # --- INÍCIO DA MUDANÇA CRÍTICA ---
+        
+        with open(file_path, "rb") as f:
+            file_content = f.read()
+
+        file_name = os.path.basename(file_path)
+        headers = {
+            'Content-Disposition': f'attachment; filename="{file_name}"'
+        }
+        
+        return Response(
+            content=file_content,
+            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            headers=headers
         )
+        # --- FIM DA MUDANÇA CRÍTICA ---
+
     except Exception as e:
+        logging.error("Ocorreu uma exceção no endpoint /api/generate-document.")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro interno ao gerar o documento: {e}")
