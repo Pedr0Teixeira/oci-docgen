@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Autor: Pedro Teixeira
- * Data: 04 de Setembro de 2025 (Fase 2: Refinamento Final de UI/UX)
+ * Data: 08 de Setembro de 2025 
  * Descrição: Script principal do frontend para interatividade da página, comunicação com a API e manipulação do DOM.
  */
 document.addEventListener('DOMContentLoaded', () => {
@@ -45,7 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateUiForDocType() {
     const isInfraDoc = selectedDocType === 'full_infra';
-    instanceStep.classList.toggle('hidden', isInfraDoc);
+    const isNewHost = selectedDocType === 'new_host';
+    instanceStep.classList.toggle('hidden', !isNewHost);
     fetchBtn.querySelector('span').textContent = isInfraDoc ? 'Buscar Dados da Infraestrutura' : 'Buscar Dados da(s) Instância(s)';
     updateFetchButtonState();
   }
@@ -76,11 +77,12 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
     items.classList.add('select-items', 'select-hide');
     const needsSearchBox = [regionContainer, compartmentContainer, instanceContainer].includes(container);
 
-    // Cria o container para a lista rolável
     const itemsListContainer = document.createElement('div');
     itemsListContainer.className = 'select-items-list';
 
     if (needsSearchBox) {
+      const searchContainer = document.createElement('div');
+      searchContainer.className = 'select-search-container';
       const searchBox = document.createElement('input');
       searchBox.type = 'text';
       searchBox.placeholder = 'Buscar...';
@@ -90,9 +92,13 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
         const filter = searchBox.value.toUpperCase();
         const allListItems = Array.from(itemsListContainer.querySelectorAll('.select-item, .select-item-parent'));
         
+        if (!filter) {
+            allListItems.forEach(item => item.style.display = "");
+            return;
+        }
+
         let itemsToShow = new Set();
         
-        // Passo 1: Encontrar todos os itens que correspondem diretamente ao filtro
         allListItems.forEach(item => {
           const txtValue = item.textContent || item.innerText;
           if (txtValue.toUpperCase().indexOf(filter) > -1) {
@@ -100,14 +106,10 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
           }
         });
 
-        // Passo 2: Para cada item encontrado, encontrar e adicionar todos os seus pais à lista
         itemsToShow.forEach(item => {
           let currentLevel = parseInt(item.dataset.level, 10);
           if (isNaN(currentLevel) || currentLevel === 0) return;
-
           let currentIndex = allListItems.indexOf(item);
-
-          // Percorre os itens anteriores para encontrar os pais
           for (let i = currentIndex - 1; i >= 0; i--) {
             const potentialParent = allListItems[i];
             const parentLevel = parseInt(potentialParent.dataset.level, 10);
@@ -119,15 +121,14 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
           }
         });
 
-        // Passo 3: Aplicar a visibilidade
         allListItems.forEach(item => {
           item.style.display = itemsToShow.has(item) ? "" : "none";
         });
       });
-      items.appendChild(searchBox);
+      searchContainer.appendChild(searchBox);
+      items.appendChild(searchContainer);
     }
     
-    // Agora o loop de criação da lista é simples e correto
     options.forEach(option => {
       const item = document.createElement('div');
       const optionValue = option.key || option.id;
@@ -378,7 +379,7 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
       detailsContainer.classList.remove('hidden');
     } catch (error) {
       alert(error);
-      summaryContainer.innerHTML = `<p class="error-message">${error}</p>`;
+      summaryContainer.innerHTML = `<p class="error-message">${error.message}</p>`;
     } finally {
       toggleLoading(false);
     }
@@ -564,11 +565,15 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
     }
   }
 
-  const generateDocument = async () => {
+  const generateDocument = (event) => {
     if (!allInfrastructureData || allInfrastructureData.instances.length === 0) {
         alert("Busque os dados da infraestrutura ou da(s) instância(s) primeiro.");
         return;
     }
+    
+    console.log("1. Clicou em 'Gerar Documento'. Iniciando o processo com XHR.");
+    
+    let xhr;
     try {
         toggleLoading(true);
         const formData = new FormData();
@@ -577,32 +582,65 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
         architectureImageFiles.forEach(file => formData.append('architecture_files', file));
         antivirusImageFiles.forEach(file => formData.append('antivirus_files', file));
         
-        const response = await fetch(`${API_BASE_URL}/api/generate-document`, { method: 'POST', body: formData });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(JSON.stringify(errorData.detail || errorData));
-        }
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
+        console.log("2. Configurando XMLHttpRequest e enviando requisição...");
         
-        const compartmentName = allInfrastructureData.instances[0].compartment_name.replace('SERVERS-','');
-        const docIdentifier = selectedDocType === 'full_infra' ? 'Infraestrutura' : 'NovoHost';
-        const timestamp = new Date().toISOString().split('T')[0];
-        const docName = `Doc_${docIdentifier}_${compartmentName}_${timestamp}.docx`;
-        a.download = docName;
+        xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE_URL}/api/generate-document`, true);
+        xhr.responseType = 'blob';
 
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        a.remove();
+        xhr.onloadend = function() {
+            console.log("8. Processo XHR finalizado.");
+            toggleLoading(false);
+        };
+        
+        xhr.onload = function() {
+            console.log("3. Resposta do servidor recebida via XHR. Status:", xhr.status);
+            if (this.status === 200) {
+                const blob = this.response;
+                console.log("4. Blob criado com sucesso. Tamanho:", blob.size, "Tipo:", blob.type);
+
+                if (blob.size === 0) {
+                    console.error("ERRO: O blob recebido está vazio.");
+                    alert("Erro: O servidor retornou uma resposta vazia.");
+                    return;
+                }
+
+                const url = window.URL.createObjectURL(blob);
+                console.log("5. URL do objeto criada:", url);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+
+                const compartmentName = allInfrastructureData.instances[0].compartment_name.replace('SERVERS-','').replace(/[^a-zA-Z0-9_-]/g, '');
+                const docIdentifier = selectedDocType === 'full_infra' ? 'Infraestrutura' : 'NovoHost';
+                const now = new Date();
+                const timestamp = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0') + '_' + now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0') + now.getSeconds().toString().padStart(2, '0');
+                const docName = `Doc_${docIdentifier}_${compartmentName}_${timestamp}.docx`;
+                a.download = docName;
+                
+                document.body.appendChild(a);
+                console.log(`6. Link preparado com nome: ${docName}. Clicando para iniciar download...`);
+                a.click();
+                
+                console.log("7. Download disparado. Limpando recursos.");
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            } else {
+                console.error("ERRO: A resposta do servidor não foi 200 OK. Status:", this.status, this.statusText);
+                alert(`Erro do servidor: ${this.status} - ${this.statusText}`);
+            }
+        };
+
+        xhr.onerror = function() {
+            console.error("ERRO DE REDE: A requisição falhou.");
+            alert("Ocorreu um erro de rede que impediu o download.");
+        };
+
+        xhr.send(formData);
+
     } catch (error) {
-        console.error(error);
-        alert("Erro ao gerar documento: " + error.message);
-    } finally {
+        console.error("ERRO CRÍTICO no processo de download:", error);
+        alert("Ocorreu um erro crítico ao tentar processar o download: " + error.toString());
         toggleLoading(false);
     }
   };
@@ -665,7 +703,9 @@ function createCustomSelect(container, options, placeholder, onSelectCallback, i
   };
 
   fetchBtn.addEventListener('click', fetchAllDetails);
-  generateBtn.addEventListener('click', generateDocument);
+  
+  generateBtn.addEventListener('click', generateDocument); 
+  
   document.addEventListener('click', closeAllSelects);
   
   summaryContainer.addEventListener('click', (event) => {
