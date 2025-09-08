@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Variáveis de Estado da Aplicação ---
   let selectedRegion = null;
-  let selectedDocType = 'new_host';
+  let selectedDocType = null;
   let selectedCompartmentId = null;
   let selectedCompartmentName = null;
   let selectedInstances = {};
@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false) {
+function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false) {
     container.innerHTML = '';
     const selected = document.createElement('div');
     selected.classList.add('select-selected');
@@ -75,6 +75,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const items = document.createElement('div');
     items.classList.add('select-items', 'select-hide');
     const needsSearchBox = [regionContainer, compartmentContainer, instanceContainer].includes(container);
+
+    // Cria o container para a lista rolável
+    const itemsListContainer = document.createElement('div');
+    itemsListContainer.className = 'select-items-list';
+
     if (needsSearchBox) {
       const searchBox = document.createElement('input');
       searchBox.type = 'text';
@@ -83,20 +88,58 @@ document.addEventListener('DOMContentLoaded', () => {
       searchBox.addEventListener('click', e => e.stopPropagation());
       searchBox.addEventListener('input', () => {
         const filter = searchBox.value.toUpperCase();
-        items.querySelectorAll('.select-item, .select-item-parent').forEach(item => {
+        const allListItems = Array.from(itemsListContainer.querySelectorAll('.select-item, .select-item-parent'));
+        
+        let itemsToShow = new Set();
+        
+        // Passo 1: Encontrar todos os itens que correspondem diretamente ao filtro
+        allListItems.forEach(item => {
           const txtValue = item.textContent || item.innerText;
-          item.style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
+          if (txtValue.toUpperCase().indexOf(filter) > -1) {
+            itemsToShow.add(item);
+          }
+        });
+
+        // Passo 2: Para cada item encontrado, encontrar e adicionar todos os seus pais à lista
+        itemsToShow.forEach(item => {
+          let currentLevel = parseInt(item.dataset.level, 10);
+          if (isNaN(currentLevel) || currentLevel === 0) return;
+
+          let currentIndex = allListItems.indexOf(item);
+
+          // Percorre os itens anteriores para encontrar os pais
+          for (let i = currentIndex - 1; i >= 0; i--) {
+            const potentialParent = allListItems[i];
+            const parentLevel = parseInt(potentialParent.dataset.level, 10);
+            if (parentLevel < currentLevel) {
+              itemsToShow.add(potentialParent);
+              currentLevel = parentLevel; 
+              if (currentLevel === 0) break;
+            }
+          }
+        });
+
+        // Passo 3: Aplicar a visibilidade
+        allListItems.forEach(item => {
+          item.style.display = itemsToShow.has(item) ? "" : "none";
         });
       });
       items.appendChild(searchBox);
     }
+    
+    // Agora o loop de criação da lista é simples e correto
     options.forEach(option => {
       const item = document.createElement('div');
       const optionValue = option.key || option.id;
       const optionName = option.name || option.display_name;
       item.setAttribute('data-value', optionValue);
       item.setAttribute('data-name', optionName);
+      
       let iconSvg = '';
+      if (option.level !== undefined) {
+        item.dataset.level = option.level;
+      }
+
       if (isMultiSelect) {
         item.classList.add('select-item');
         iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`;
@@ -151,9 +194,12 @@ document.addEventListener('DOMContentLoaded', () => {
           closeAllSelects();
         });
       }
-      items.appendChild(item);
+      itemsListContainer.appendChild(item);
     });
+
+    items.appendChild(itemsListContainer);
     container.appendChild(items);
+
     selected.addEventListener('click', (e) => {
       e.stopPropagation();
       if (selected.classList.contains('disabled')) return;
@@ -223,9 +269,6 @@ document.addEventListener('DOMContentLoaded', () => {
       selectedDocType = selectedValue;
       updateUiForDocType();
     });
-    const selectedDisplay = docTypeContainer.querySelector('.selected-item-display');
-    selectedDisplay.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg><span class="item-text">Documentação de Novo Host</span>`;
-    selectedDisplay.classList.remove('placeholder');
   };
 
   const fetchCompartments = async () => {
@@ -618,6 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populateDocTypes();
     createCustomSelect(compartmentContainer, [], 'Selecione uma região primeiro', () => {}, false, false);
     createCustomSelect(instanceContainer, [], 'Selecione um compartimento primeiro', () => {}, false, true);
+    instanceStep.classList.add('hidden');
   };
 
   fetchBtn.addEventListener('click', fetchAllDetails);
