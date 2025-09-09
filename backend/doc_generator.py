@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 08 de Setembro de 2025
+# Data: 09 de Setembro de 2025
 # Descrição: Módulo responsável por gerar documentos .docx detalhados com sumário clicável.
 
 import os

@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Autor: Pedro Teixeira
- * Data: 08 de Setembro de 2025 
+ * Data: 09 de Setembro de 2025 
  * Descrição: Script principal do frontend para interatividade da página, comunicação com a API e manipulação do DOM.
  */
 document.addEventListener('DOMContentLoaded', () => {
