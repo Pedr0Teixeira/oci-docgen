@@ -141,7 +141,6 @@ def _add_volume_and_backup_section(document: Document, instances: List[InstanceD
     
     if all_block_volumes:
         document.add_paragraph("A tabela abaixo detalha os Block Volumes anexados às instâncias.")
-        # MODIFICADO: Adicionada a coluna de Política de Backup
         table = document.add_table(rows=1, cols=4, style='Table Grid')
         headers = ['Host de Origem', 'Nome do Volume', 'Tamanho (GB)', 'Política de Backup']
         for i, h in enumerate(headers): 
