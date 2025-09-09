@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Autor: Pedro Teixeira
- * Data: 08 de Setembro de 2025
+ * Data: 09 de Setembro de 2025
  * Descrição: Folha de estilos principal para a interface do OCI DocGen.
  */
 
@@ -34,6 +34,7 @@
   --status-revoked: #f97316;
   --status-pending: #3b82f6;
   --status-new: #f97316; /* Laranja para status que requerem atenção */
+  --text-highlight-color: #c7d2fe;
 }
 
 * {
@@ -482,7 +483,8 @@ fieldset legend {
 .vcn-container,
 .ipsec-container,
 .lb-container,
-.drg-container {
+.drg-container,
+.vg-container {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -646,6 +648,12 @@ fieldset legend {
   font-style: italic;
 }
 
+.text-highlight {
+  color: var(--text-highlight-color);
+  font-weight: 500;
+}
+
+
 /* --- ESTILOS PARA O RESUMO DE INFRAESTRUTURA --- */
 .infra-summary-main-title {
   font-size: 22px;
@@ -656,6 +664,7 @@ fieldset legend {
 }
 
 .subheader,
+.instance-card-body h5, /* Seletor mais genérico */
 .vcn-card-body h5 {
   font-size: 16px;
   font-weight: 600;
@@ -667,6 +676,7 @@ fieldset legend {
 }
 
 .subheader:first-of-type,
+.instance-card-body h5:first-of-type,
 .vcn-card-body h5:first-of-type {
   margin-top: 0;
 }
@@ -1327,3 +1337,64 @@ fieldset legend {
   }
 }
 
+/* ====================================================== */
+/* 11. ESTILOS PARA VOLUME GROUPS (NOVOS)                 */
+/* ====================================================== */
+.member-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0 0;
+}
+
+.member-list li {
+  font-size: 14px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.member-list li:last-child {
+  border-bottom: none;
+}
+
+.validation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-top: 12px;
+}
+
+.validation-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.validation-item label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.validation-value {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.validation-ok {
+  color: var(--status-running);
+}
+
+.validation-fail {
+  color: var(--status-stopped);
+}
+
+.validation-value svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}

@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <!-- Overlay de Carregamento/Progresso -->
   <div id="loading-overlay" class="hidden">
     <div class="progress-container">
       <div class="spinner"></div>
@@ -21,7 +20,6 @@
     </div>
   </div>
 
-  <!-- Container Principal da Aplicação -->
   <div id="main-app-container">
     <div class="container">
       <header class="app-header">
@@ -77,9 +75,21 @@
         <div id="details-container" class="hidden">
           <hr class="fieldset-divider">
           <div id="fetched-data-summary">
-            <!-- O conteúdo do resumo será inserido aqui pelo JavaScript -->
-          </div>
+            </div>
 
+          <hr class="fieldset-divider">
+
+          <fieldset>
+            <legend>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              Informações do Documento
+            </legend>
+            <div class="info-group full-width">
+              <label for="responsible-name-input" style="color: var(--text-primary); font-weight: 600;">Nome do Responsável (Obrigatório)</label>
+              <input type="text" id="responsible-name-input" class="info-value" placeholder="Digite seu nome completo" required style="background-color: #3c3e4f; padding: 12px 16px; font-size: 16px; border-radius: var(--border-radius); border: 1px solid var(--border-color); color: var(--text-primary);">
+            </div>
+          </fieldset>
+          
           <hr class="fieldset-divider">
 
           <fieldset>
@@ -123,7 +133,6 @@
     </div>
   </div>
   
-  <!-- Tela de Sucesso (Modal) -->
   <div id="success-screen" class="hidden">
     <div class="success-modal">
       <div class="success-icon">
@@ -142,4 +151,3 @@
   <script src="js/app.js"></script>
 </body>
 </html>
-
