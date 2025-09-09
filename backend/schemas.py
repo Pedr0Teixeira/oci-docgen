@@ -1,17 +1,18 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 04 de Setembro de 2025
+# Data: 09 de Setembro de 2025
 # Descrição: Define os modelos de dados (schemas) Pydantic para validação e serialização de dados na API.
 
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Estes modelos garantem que os dados trocados entre o frontend e o backend
 # tenham uma estrutura consistente e tipos de dados corretos.
 
 class BlockVolume(BaseModel):
     """Representa um Block Volume anexado a uma instância."""
+    id: str
     display_name: str
     size_in_gbs: float
     backup_policy_name: str
@@ -65,6 +66,7 @@ class InstanceData(BaseModel):
     memory: str
     os_name: str
     boot_volume_gb: str
+    boot_volume_id: Optional[str] = None
     private_ip: str
     public_ip: Optional[str] = "N/A"
     backup_policy_name: str
@@ -230,6 +232,25 @@ class LoadBalancerData(BaseModel):
     hostnames: List[HostnameData]
 
 
+# --- SCHEMAS PARA VOLUME GROUPS ---
+class VolumeGroupValidation(BaseModel):
+    """Resultados da validação de um Volume Group."""
+    has_backup_policy: bool
+    policy_name: Optional[str] = "Nenhuma"
+    is_cross_region_replication_enabled: bool
+    cross_region_target: Optional[str] = "Desabilitada"
+
+class VolumeGroupData(BaseModel):
+    """Representa um Volume Group e seus detalhes."""
+    id: str
+    display_name: str
+    availability_domain: str
+    lifecycle_state: str
+    members: List[str]
+    member_ids: List[str]
+    validation: VolumeGroupValidation
+
+
 class InfrastructureData(BaseModel):
     """Modelo principal para agregar todos os dados de infraestrutura de um compartimento."""
     instances: List[InstanceData]
@@ -238,9 +259,17 @@ class InfrastructureData(BaseModel):
     cpes: List[CpeData]
     ipsec_connections: List[IpsecData]
     load_balancers: List[LoadBalancerData]
+    volume_groups: List[VolumeGroupData]
 
 
 # --- SCHEMAS PARA REQUISIÇÕES DA API ---
+
+class NewHostRequest(BaseModel):
+    """Modelo para a requisição de detalhes de novos hosts."""
+    instance_ids: List[str]
+    compartment_id: str
+    compartment_name: str
+
 
 class GenerateDocRequest(BaseModel):
     """
@@ -248,3 +277,4 @@ class GenerateDocRequest(BaseModel):
     """
     doc_type: str
     infra_data: InfrastructureData
+    responsible_name: str = Field(..., min_length=1)
