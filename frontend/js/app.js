@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressSpinner = loadingOverlay.querySelector('.spinner');
   const successScreen = document.getElementById('success-screen');
   const newDocBtn = document.getElementById('new-doc-btn');
+  const responsibleNameInput = document.getElementById('responsible-name-input');
 
 
   // --- Variáveis de Estado da Aplicação ---
@@ -41,11 +42,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedCompartmentId = null;
   let selectedCompartmentName = null;
   let selectedInstances = {};
-  let allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
+  let allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [], volume_groups: [] };
   let architectureImageFiles = [];
   let antivirusImageFiles = [];
-  let simulatedProgressInterval = null;
-
+  
   // --- Funções de UI ---
 
   function showToast(message, type = 'success') {
@@ -85,7 +85,6 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const hideProgress = () => {
-    clearInterval(simulatedProgressInterval);
     loadingOverlay.classList.add('hidden');
   };
   
@@ -103,7 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const showSuccessScreen = () => {
     mainAppContainer.classList.add('hidden');
     successScreen.classList.remove('hidden');
-    // Força o reinício da animação CSS
     const icon = successScreen.querySelector('.success-icon');
     const newIcon = icon.cloneNode(true);
     icon.parentNode.replaceChild(newIcon, icon);
@@ -113,23 +111,21 @@ document.addEventListener('DOMContentLoaded', () => {
     successScreen.classList.add('hidden');
     mainAppContainer.classList.remove('hidden');
     
-    // Reseta todas as variáveis de estado
     selectedRegion = null;
     selectedDocType = null;
     selectedCompartmentId = null;
     selectedCompartmentName = null;
     selectedInstances = {};
-    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
+    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [], volume_groups: [] };
     architectureImageFiles = [];
     antivirusImageFiles = [];
 
-    // Limpa a UI
     detailsContainer.classList.add('hidden');
     summaryContainer.innerHTML = '';
     architectureFileList.innerHTML = '';
     antivirusFileList.innerHTML = '';
+    responsibleNameInput.value = '';
     
-    // Reinicia os selects
     initializeApp();
   }
 
@@ -422,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!selectedCompartmentId) return;
     showProgress(true);
     detailsContainer.classList.add('hidden');
-    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
+    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [], volume_groups: [] };
     
     const steps = [
         { pct: 15, msg: 'Analisando Redes (VCNs)...' },
@@ -433,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { pct: 90, msg: 'Coletando detalhes das instâncias...' }
     ];
     let currentStep = 0;
-    simulatedProgressInterval = setInterval(() => {
+    const simulatedProgressInterval = setInterval(() => {
         if (currentStep < steps.length) {
             const step = steps[currentStep];
             updateProgress(step.pct, step.msg);
@@ -449,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const data = await response.json();
       allInfrastructureData = data;
-      const summaryHtml = generateInfrastructureSummary(data, selectedCompartmentName);
+      const summaryHtml = generateInfrastructureSummary(data);
       summaryContainer.innerHTML = summaryHtml;
       detailsContainer.classList.remove('hidden');
       updateProgress(100, 'Dados coletados com sucesso!');
@@ -465,45 +461,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const fetchAllInstanceDetails = async () => {
     const instanceIds = Object.keys(selectedInstances);
-    if (instanceIds.length === 0) return;
-    
-    showProgress();
-    detailsContainer.classList.add('hidden');
-    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [] };
-    
-    let completed = 0;
     const total = instanceIds.length;
+    if (total === 0) return;
+    
+    let progressInterval = null;
+    let simulatedProgress = 0;
+    let instancesProcessed = 0;
+    
+    showProgress(false);
     updateProgress(0, `Coletando 0 de ${total} instâncias...`);
+    detailsContainer.classList.add('hidden');
+    allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [], volume_groups: [] };
 
-    const promises = instanceIds.map(id => {
-      const encodedCompartmentName = encodeURIComponent(selectedCompartmentName);
-      const fullUrl = `${API_BASE_URL}/api/${selectedRegion}/instance-details/${id}?compartment_name=${encodedCompartmentName}`;
-      return fetch(fullUrl)
-        .then(res => res.ok ? res.json() : Promise.reject(new Error(`Falha ao buscar ${selectedInstances[id]}`)))
-        .then(data => {
-            completed++;
-            const percentage = Math.round((completed / total) * 100);
-            updateProgress(percentage, `Coletando ${completed} de ${total} instâncias...`);
-            return data;
-        });
-    });
+    progressInterval = setInterval(() => {
+        if (simulatedProgress < 90) {
+            simulatedProgress += 2;
+            instancesProcessed = Math.min(total, Math.floor((simulatedProgress / 90) * total));
+            updateProgress(simulatedProgress, `Coletando ${instancesProcessed} de ${total} instâncias...`);
+        }
+    }, 150);
+
+    const payload = {
+        instance_ids: instanceIds,
+        compartment_id: selectedCompartmentId,
+        compartment_name: selectedCompartmentName
+    };
 
     try {
-      const results = await Promise.all(promises);
-      allInfrastructureData.instances = results.map(data => data.instances[0]);
-      
-      let finalHtml = `<div class="instances-container">`;
-      allInfrastructureData.instances.forEach(instanceData => {
-        finalHtml += generateInstanceSummaryCard(instanceData, true);
-      });
-      finalHtml += `</div>`;
-      summaryContainer.innerHTML = finalHtml;
-      detailsContainer.classList.remove('hidden');
+        const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/new-host-details`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        clearInterval(progressInterval);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Falha na API: ${errorData.detail || response.statusText}`);
+        }
+        
+        updateProgress(95, 'Processando dados recebidos...');
+        const data = await response.json();
+        allInfrastructureData = data;
+        
+        const summaryHtml = generateInfrastructureSummary(data, true);
+        summaryContainer.innerHTML = summaryHtml;
+        detailsContainer.classList.remove('hidden');
+        updateProgress(100, 'Dados coletados com sucesso!');
+
     } catch (error) {
-      showToast(error.message, 'error');
-      summaryContainer.innerHTML = `<p class="error-message">${error.message}</p>`;
+        clearInterval(progressInterval);
+        console.error(error);
+        summaryContainer.innerHTML = `<p class="error-message">${error.message}</p>`;
+        showToast(error.message, 'error');
     } finally {
-      setTimeout(hideProgress, 500);
+        setTimeout(hideProgress, 500);
     }
   };
 
@@ -526,8 +539,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Funções de Geração de Conteúdo e Documentos ---
 
-  function generateInfrastructureSummary(data, compartmentName) {
-    const { instances, vcns, drgs, cpes, ipsec_connections, load_balancers } = data;
+  function generateInfrastructureSummary(data, isNewHostFlow = false) {
+    const { instances, vcns, drgs, cpes, ipsec_connections, load_balancers, volume_groups } = data;
     
     const createTable = (headers, rows) => {
       if (!rows || rows.length === 0) return '<p class="no-data-message">Nenhum recurso encontrado.</p>';
@@ -538,140 +551,195 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const instancesHtml = instances?.length > 0 ? instances.map(instance => generateInstanceSummaryCard(instance, true)).join('') : '<p class="no-data-message">Nenhuma instância encontrada.</p>';
     
-    const vcnsHtml = vcns?.length > 0 ? vcns.map(vcn => {
-      const subnetsTable = createTable(['Nome da Subnet', 'CIDR Block'], vcn.subnets?.map(s => [s.display_name, s.cidr_block]));
-      const slTable = createTable(['Nome', 'Nº de Regras'], vcn.security_lists?.map(sl => [sl.name, `${sl.rules.length}`]));
-      const rtTable = createTable(['Nome', 'Nº de Regras'], vcn.route_tables?.map(rt => [rt.name, `${rt.rules.length}`]));
-      const nsgTable = createTable(['Nome', 'Nº de Regras'], vcn.network_security_groups?.map(nsg => [nsg.name, `${nsg.rules.length}`]));
-      
-      const lpgTable = createTable(
-        ['Nome', 'Status do Peering', 'Route Table', 'CIDR Anunciado', 'Cross-Tenancy'], 
-        vcn.lpgs?.map(lpg => {
-            const statusClass = lpg.peering_status?.toLowerCase() || 'unknown';
-            const statusText = lpg.peering_status_details || lpg.peering_status;
-            return [
-                `<span class="text-highlight">${lpg.display_name}</span>`, 
-                `<span class="status-badge status-${statusClass}">${statusText}</span>`,
-                lpg.route_table_name,
-                lpg.peer_advertised_cidr || 'N/A',
-                lpg.is_cross_tenancy_peering ? 'Sim' : 'Não'
-            ];
-        })
-      );
+    const volumeGroupsHtml = volume_groups?.length > 0 ? volume_groups.map(vg => {
+        const validation = vg.validation;
+        const statusClass = vg.lifecycle_state ? vg.lifecycle_state.toLowerCase().replace('_', '-') : 'unknown';
 
-      return `<div class="vcn-summary-card collapsible"><div class="vcn-card-header"><h4 class="card-header-title">${vcn.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${vcn.cidr_block}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="vcn-card-body"><h5 class="subheader">Subnets</h5>${subnetsTable}<h5 class="subheader">Security Lists</h5>${slTable}<h5 class="subheader">Route Tables</h5>${rtTable}<h5 class="subheader">Network Security Groups (NSGs)</h5>${nsgTable}<h5 class="subheader">Local Peering Gateways (LPGs)</h5>${lpgTable}</div></div>`;
-    }).join('') : '<p class="no-data-message">Nenhuma VCN encontrada.</p>';
+        const backupHtml = validation.has_backup_policy
+            ? `<span class="validation-ok"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> ${validation.policy_name}</span>`
+            : `<span class="validation-fail"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Nenhuma</span>`;
+        
+        const crossRegionHtml = validation.is_cross_region_replication_enabled
+            ? `<span class="validation-ok"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Habilitada</span>`
+            : `<span class="validation-fail"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Desabilitada</span>`;
 
-    const loadBalancersHtml = load_balancers?.length > 0 ? load_balancers.map(lb => {
-        const statusClass = lb.lifecycle_state ? lb.lifecycle_state.toLowerCase().replace('_', '-') : 'unknown';
+        const membersListHtml = vg.members && vg.members.length > 0
+            ? `<ul class="member-list">${vg.members.map(m => `<li>${m}</li>`).join('')}</ul>`
+            : `<p class="no-data-message">Nenhum membro encontrado.</p>`;
+
         const cardContent = `
-            <fieldset>
-                <legend>Informações Gerais</legend>
-                <div class="grid-container">
-                    <div class="info-group full-width">
-                        <label>Endereços IP</label>
-                        <div class="info-value">
-                            <ul class="clean-list">
-                                ${lb.ip_addresses?.map(ip => `<li>${ip.ip_address} (${ip.is_public ? 'Público' : 'Privado'})</li>`).join('') || '<li>N/A</li>'}
-                            </ul>
-                        </div>
+            <div class="content-block">
+                <h5 class="subheader">Membros do Grupo</h5>
+                ${membersListHtml}
+            </div>
+            <div class="content-block">
+                <h5 class="subheader">Validação de Proteção de Dados</h5>
+                <div class="validation-grid">
+                    <div class="validation-item">
+                        <label>Política de Backup</label>
+                        <div class="validation-value">${backupHtml}</div>
                     </div>
-                    <div class="info-group full-width">
-                        <label>Hostnames Virtuais</label>
-                        ${createTable([], lb.hostnames?.map(h => [`<span class="text-highlight">${h.name}</span>`]))}
+                    <div class="validation-item">
+                        <label>Replicação Cross-Region</label>
+                        <div class="validation-value">${crossRegionHtml}</div>
+                    </div>
+                    <div class="validation-item">
+                        <label>Destino da Replicação</label>
+                        <div class="validation-value">${validation.cross_region_target}</div>
                     </div>
                 </div>
-            </fieldset>
-            <hr class="fieldset-divider">
-            <div class="content-block">
-                <h5 class="subheader">Listeners</h5>
-                ${createTable(['Nome', 'Protocolo', 'Porta', 'Backend Set Padrão'], lb.listeners?.map(l => [`<span class="text-highlight">${l.name}</span>`, l.protocol, l.port, l.default_backend_set_name]))}
-            </div>
-            <div class="content-block">
-                <h5 class="subheader">Backend Sets</h5>
-                ${(lb.backend_sets && lb.backend_sets.length > 0) ? lb.backend_sets.map(bs => `<div class="backend-set-details"><h6 class="tunnel-subheader">Backend Set: <span class="text-highlight">${bs.name}</span> (Política: ${bs.policy})</h6><ul class="tunnel-basic-info"><li><strong>Health Check:</strong> ${bs.health_checker.protocol}:${bs.health_checker.port}</li><li><strong>URL Path:</strong> ${bs.health_checker.url_path || 'N/A'}</li></ul>${createTable(['Nome', 'IP', 'Porta', 'Peso'], bs.backends?.map(b => [`<span class="text-highlight">${b.name}</span>`, b.ip_address, b.port, b.weight]))}</div>`).join('') : '<p class="no-data-message">Nenhum Backend Set encontrado.</p>'}
-            </div>
-        `;
-        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${lb.lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
-    }).join('') : '<p class="no-data-message">Nenhum Load Balancer encontrado.</p>';
+            </div>`;
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${vg.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${vg.availability_domain}</span><span class="status-badge status-${statusClass}">${vg.lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
+    }).join('') : (isNewHostFlow ? '' : '<p class="no-data-message">Nenhum Volume Group encontrado.</p>');
 
-    const drgsHtml = drgs?.length > 0 ? drgs.map(drg => {
-        const attachmentsTable = createTable(
-            ['Nome do Anexo', 'Tipo', 'DRG Route Table'], 
-            drg.attachments?.map(a => [`<span class="text-highlight">${a.display_name}</span>`, a.network_type, a.route_table_name])
+    const vcnsHtml = vcns?.length > 0 ? vcns.map(vcn => {
+        const subnetsTable = createTable(['Nome da Subnet', 'CIDR Block'], vcn.subnets?.map(s => [s.display_name, s.cidr_block]));
+        const slTable = createTable(['Nome', 'Nº de Regras'], vcn.security_lists?.map(sl => [sl.name, `${sl.rules.length}`]));
+        const rtTable = createTable(['Nome', 'Nº de Regras'], vcn.route_tables?.map(rt => [rt.name, `${rt.rules.length}`]));
+        const nsgTable = createTable(['Nome', 'Nº de Regras'], vcn.network_security_groups?.map(nsg => [nsg.name, `${nsg.rules.length}`]));
+        const lpgTable = createTable(
+          ['Nome', 'Status do Peering', 'Route Table', 'CIDR Anunciado', 'Cross-Tenancy'], 
+          vcn.lpgs?.map(lpg => {
+              const statusClass = lpg.peering_status?.toLowerCase() || 'unknown';
+              const statusText = lpg.peering_status_details || lpg.peering_status;
+              return [
+                  `<span class="text-highlight">${lpg.display_name}</span>`, 
+                  `<span class="status-badge status-${statusClass}">${statusText}</span>`,
+                  lpg.route_table_name,
+                  lpg.peer_advertised_cidr || 'N/A',
+                  lpg.is_cross_tenancy_peering ? 'Sim' : 'Não'
+              ];
+          })
         );
-        const rpcsTable = createTable(
-            ['Nome', 'Status', 'Status do Peering'], 
-            drg.rpcs?.map(rpc => {
-                const statusClass = rpc.peering_status?.toLowerCase() || 'unknown';
-                
-                let statusText = rpc.peering_status_details || rpc.peering_status;
-                if (rpc.peering_status === 'NEW') {
-                    statusText = 'New (not peered)';
-                } else if (rpc.peering_status === 'PEERED') {
-                    statusText = 'Peered';
-                }
-                
-                return [`<span class="text-highlight">${rpc.display_name}</span>`, rpc.lifecycle_state, `<span class="status-badge status-${statusClass}">${statusText}</span>`];
-            })
-        );
+  
+        return `<div class="vcn-summary-card collapsible"><div class="vcn-card-header"><h4 class="card-header-title">${vcn.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${vcn.cidr_block}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="vcn-card-body"><h5 class="subheader">Subnets</h5>${subnetsTable}<h5 class="subheader">Security Lists</h5>${slTable}<h5 class="subheader">Route Tables</h5>${rtTable}<h5 class="subheader">Network Security Groups (NSGs)</h5>${nsgTable}<h5 class="subheader">Local Peering Gateways (LPGs)</h5>${lpgTable}</div></div>`;
+      }).join('') : '';
+  
+      const loadBalancersHtml = load_balancers?.length > 0 ? load_balancers.map(lb => {
+          const statusClass = lb.lifecycle_state ? lb.lifecycle_state.toLowerCase().replace('_', '-') : 'unknown';
+          const cardContent = `
+              <fieldset>
+                  <legend>Informações Gerais</legend>
+                  <div class="grid-container">
+                      <div class="info-group full-width">
+                          <label>Endereços IP</label>
+                          <div class="info-value">
+                              <ul class="clean-list">
+                                  ${lb.ip_addresses?.map(ip => `<li>${ip.ip_address} (${ip.is_public ? 'Público' : 'Privado'})</li>`).join('') || '<li>N/A</li>'}
+                              </ul>
+                          </div>
+                      </div>
+                      <div class="info-group full-width">
+                          <label>Hostnames Virtuais</label>
+                          ${createTable([], lb.hostnames?.map(h => [`<span class="text-highlight">${h.name}</span>`]))}
+                      </div>
+                  </div>
+              </fieldset>
+              <hr class="fieldset-divider">
+              <div class="content-block">
+                  <h5 class="subheader">Listeners</h5>
+                  ${createTable(['Nome', 'Protocolo', 'Porta', 'Backend Set Padrão'], lb.listeners?.map(l => [`<span class="text-highlight">${l.name}</span>`, l.protocol, l.port, l.default_backend_set_name]))}
+              </div>
+              <div class="content-block">
+                  <h5 class="subheader">Backend Sets</h5>
+                  ${(lb.backend_sets && lb.backend_sets.length > 0) ? lb.backend_sets.map(bs => `<div class="backend-set-details"><h6 class="tunnel-subheader">Backend Set: <span class="text-highlight">${bs.name}</span> (Política: ${bs.policy})</h6><ul class="tunnel-basic-info"><li><strong>Health Check:</strong> ${bs.health_checker.protocol}:${bs.health_checker.port}</li><li><strong>URL Path:</strong> ${bs.health_checker.url_path || 'N/A'}</li></ul>${createTable(['Nome', 'IP', 'Porta', 'Peso'], bs.backends?.map(b => [`<span class="text-highlight">${b.name}</span>`, b.ip_address, b.port, b.weight]))}</div>`).join('') : '<p class="no-data-message">Nenhum Backend Set encontrado.</p>'}
+              </div>
+          `;
+          return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${lb.lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
+      }).join('') : '';
+  
+      const drgsHtml = drgs?.length > 0 ? drgs.map(drg => {
+          const attachmentsTable = createTable(
+              ['Nome do Anexo', 'Tipo', 'DRG Route Table'], 
+              drg.attachments?.map(a => [`<span class="text-highlight">${a.display_name}</span>`, a.network_type, a.route_table_name])
+          );
+          const rpcsTable = createTable(
+              ['Nome', 'Status', 'Status do Peering'], 
+              drg.rpcs?.map(rpc => {
+                  const statusClass = rpc.peering_status?.toLowerCase() || 'unknown';
+                  
+                  let statusText = rpc.peering_status_details || rpc.peering_status;
+                  if (rpc.peering_status === 'NEW') {
+                      statusText = 'New (not peered)';
+                  } else if (rpc.peering_status === 'PEERED') {
+                      statusText = 'Peered';
+                  }
+                  
+                  return [`<span class="text-highlight">${rpc.display_name}</span>`, rpc.lifecycle_state, `<span class="status-badge status-${statusClass}">${statusText}</span>`];
+              })
+          );
+  
+          return `
+          <div class="instance-summary-card collapsible">
+              <div class="instance-card-header">
+                  <h4 class="card-header-title">${drg.display_name}</h4>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </div>
+              <div class="instance-card-body">
+                  <h5 class="subheader">Anexos do DRG</h5>
+                  ${attachmentsTable}
+                  <h5 class="subheader">Remote Peering Connections (RPCs)</h5>
+                  ${rpcsTable}
+              </div>
+          </div>`;
+      }).join('') : '';
+      
+      const cpesHtml = createTable(['Nome do CPE', 'Endereço IP', 'Fabricante'], cpes?.map(cpe => [`<span class="text-highlight">${cpe.display_name}</span>`, cpe.ip_address, cpe.vendor || 'N/A']));
+      
+      const ipsecHtml = ipsec_connections?.length > 0 ? ipsec_connections.map(ipsec => {
+          const cpeName = cpes.find(c => c.id === ipsec.cpe_id)?.display_name || 'Não encontrado';
+          const drgName = drgs.find(d => d.id === ipsec.drg_id)?.display_name || 'Não encontrado';
+          const tunnelsHtml = ipsec.tunnels.map(tunnel => {
+              const p1 = tunnel.phase_one_details;
+              const p2 = tunnel.phase_two_details;
+              return `<div class="tunnel-details"><div class="tunnel-header"><strong>Túnel: <span class="text-highlight">${tunnel.display_name}</span></strong><span class="status-badge status-${tunnel.status.toLowerCase()}">${tunnel.status}</span></div><ul class="tunnel-basic-info"><li><strong>IP Oracle:</strong> ${tunnel.vpn_oracle_ip}</li><li><strong>IP do CPE:</strong> ${tunnel.cpe_ip}</li><li><strong>Roteamento:</strong> ${tunnel.routing_type}</li><li><strong>IKE:</strong> ${tunnel.ike_version}</li></ul><div class="crypto-details-grid"><div><h6 class="tunnel-subheader">Fase 1 (IKE)</h6><ul><li><strong>Autenticação:</strong> ${p1.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p1.encryption_algorithm}</li><li><strong>Grupo DH:</strong> ${p1.dh_group}</li><li><strong>Lifetime:</strong> ${p1.lifetime_in_seconds}s</li></ul></div><div><h6 class="tunnel-subheader">Fase 2 (IPSec)</h6><ul><li><strong>Autenticação:</strong> ${p2.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p2.encryption_algorithm}</li><li><strong>Lifetime:</strong> ${p2.lifetime_in_seconds}s</li></ul></div></div></div>`
+          }).join('<hr class="tunnel-divider">');
+          return `<div class="ipsec-summary-card collapsible"><div class="ipsec-card-header"><h4 class="card-header-title">${ipsec.display_name}</h4><div class="card-status-indicator"><span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="ipsec-card-body"><div class="ipsec-details"><span><strong>CPE Associado:</strong> ${cpeName}</span><span><strong>DRG Associado:</strong> ${drgName}</span></div><div class="ipsec-details"><span class="full-width"><strong>Rotas Estáticas:</strong> ${ipsec.static_routes.join(', ') || 'Nenhuma'}</span></div><h5 class="subheader">Túneis</h5>${tunnelsHtml || '<p class="no-data-message">Nenhum túnel encontrado.</p>'}</div></div>`;
+      }).join('') : '';
 
-        return `
-        <div class="instance-summary-card collapsible">
-            <div class="instance-card-header">
-                <h4 class="card-header-title">${drg.display_name}</h4>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-            <div class="instance-card-body">
-                <h5 class="subheader">Anexos do DRG</h5>
-                ${attachmentsTable}
-                <h5 class="subheader">Remote Peering Connections (RPCs)</h5>
-                ${rpcsTable}
-            </div>
-        </div>`;
-    }).join('') : '<p class="no-data-message">Nenhum DRG encontrado.</p>';
+    const fullInfraHtml = !isNewHostFlow ? `
+        <hr class="fieldset-divider">
+        <fieldset>
+            <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Virtual Cloud Networks (VCNs)</legend>
+            <div class="vcn-container">${vcnsHtml || '<p class="no-data-message">Nenhuma VCN encontrada.</p>'}</div>
+        </fieldset>
+        <hr class="fieldset-divider">
+        <fieldset>
+            <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 21a9 9 0 0 0 9-9 9 9 0 0 0-9-9 9 9 0 0 0-9 9 9 9 0 0 0 9 9Z"></path><path d="M8 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M15 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M12 2v2"></path><path d="M12 8v2"></path></svg>Load Balancers (LBaaS)</legend>
+            <div class="lb-container">${loadBalancersHtml || '<p class="no-data-message">Nenhum Load Balancer encontrado.</p>'}</div>
+        </fieldset>
+        <hr class="fieldset-divider">
+        <fieldset>
+            <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>Conectividade de Roteamento</legend>
+            <div class="drg-container">${drgsHtml || '<p class="no-data-message">Nenhum DRG encontrado.</p>'}</div>
+        </fieldset>
+        <hr class="fieldset-divider">
+        <fieldset>
+            <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>Conectividade VPN</legend>
+            <h4 class="subheader">Customer-Premises Equipment (CPEs)</h4>${cpesHtml}
+            <h4 class="subheader">Conexões VPN IPSec</h4>
+            <div class="ipsec-container">${ipsecHtml || '<p class="no-data-message">Nenhuma conexão IPSec encontrada.</p>'}</div>
+        </fieldset>
+    ` : '';
     
-    const cpesHtml = createTable(['Nome do CPE', 'Endereço IP', 'Fabricante'], cpes?.map(cpe => [`<span class="text-highlight">${cpe.display_name}</span>`, cpe.ip_address, cpe.vendor || 'N/A']));
-    
-    const ipsecHtml = ipsec_connections?.length > 0 ? ipsec_connections.map(ipsec => {
-        const cpeName = cpes.find(c => c.id === ipsec.cpe_id)?.display_name || 'Não encontrado';
-        const drgName = drgs.find(d => d.id === ipsec.drg_id)?.display_name || 'Não encontrado';
-        const tunnelsHtml = ipsec.tunnels.map(tunnel => {
-            const p1 = tunnel.phase_one_details;
-            const p2 = tunnel.phase_two_details;
-            return `<div class="tunnel-details"><div class="tunnel-header"><strong>Túnel: <span class="text-highlight">${tunnel.display_name}</span></strong><span class="status-badge status-${tunnel.status.toLowerCase()}">${tunnel.status}</span></div><ul class="tunnel-basic-info"><li><strong>IP Oracle:</strong> ${tunnel.vpn_oracle_ip}</li><li><strong>IP do CPE:</strong> ${tunnel.cpe_ip}</li><li><strong>Roteamento:</strong> ${tunnel.routing_type}</li><li><strong>IKE:</strong> ${tunnel.ike_version}</li></ul><div class="crypto-details-grid"><div><h6 class="tunnel-subheader">Fase 1 (IKE)</h6><ul><li><strong>Autenticação:</strong> ${p1.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p1.encryption_algorithm}</li><li><strong>Grupo DH:</strong> ${p1.dh_group}</li><li><strong>Lifetime:</strong> ${p1.lifetime_in_seconds}s</li></ul></div><div><h6 class="tunnel-subheader">Fase 2 (IPSec)</h6><ul><li><strong>Autenticação:</strong> ${p2.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p2.encryption_algorithm}</li><li><strong>Lifetime:</strong> ${p2.lifetime_in_seconds}s</li></ul></div></div></div>`
-        }).join('<hr class="tunnel-divider">');
-        return `<div class="ipsec-summary-card collapsible"><div class="ipsec-card-header"><h4 class="card-header-title">${ipsec.display_name}</h4><div class="card-status-indicator"><span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="ipsec-card-body"><div class="ipsec-details"><span><strong>CPE Associado:</strong> ${cpeName}</span><span><strong>DRG Associado:</strong> ${drgName}</span></div><div class="ipsec-details"><span class="full-width"><strong>Rotas Estáticas:</strong> ${ipsec.static_routes.join(', ') || 'Nenhuma'}</span></div><h5 class="subheader">Túneis</h5>${tunnelsHtml || '<p class="no-data-message">Nenhum túnel encontrado.</p>'}</div></div>`;
-    }).join('') : '<p class="no-data-message">Nenhuma conexão IPSec encontrada.</p>';
+    const title = isNewHostFlow ? `Resumo do(s) Novo(s) Host(s): ${selectedCompartmentName}` : `Resumo da Infraestrutura: ${selectedCompartmentName}`;
 
     return `<div>
-              <h3 class="infra-summary-main-title">Resumo da Infraestrutura: ${compartmentName}</h3>
+              <h3 class="infra-summary-main-title">${title}</h3>
               <fieldset>
                 <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>Instâncias Computacionais</legend>
                 <div class="instances-container">${instancesHtml}</div>
               </fieldset>
+              
+              ${volumeGroupsHtml ? `
               <hr class="fieldset-divider">
               <fieldset>
-                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Virtual Cloud Networks (VCNs)</legend>
-                <div class="vcn-container">${vcnsHtml}</div>
+                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line><path d="M5 22v-5"></path><path d="M19 22v-5"></path></svg>Volume Groups Associados</legend>
+                <div class="vg-container">${volumeGroupsHtml}</div>
               </fieldset>
-              <hr class="fieldset-divider">
-              <fieldset>
-                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 21a9 9 0 0 0 9-9 9 9 0 0 0-9-9 9 9 0 0 0-9 9 9 9 0 0 0 9 9Z"></path><path d="M8 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M15 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M12 2v2"></path><path d="M12 8v2"></path></svg>Load Balancers (LBaaS)</legend>
-                <div class="lb-container">${loadBalancersHtml}</div>
-              </fieldset>
-              <hr class="fieldset-divider">
-              <fieldset>
-                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>Conectividade de Roteamento</legend>
-                <div class="drg-container">${drgsHtml}</div>
-              </fieldset>
-              <hr class="fieldset-divider">
-              <fieldset>
-                <legend><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>Conectividade VPN</legend>
-                <h4 class="subheader">Customer-Premises Equipment (CPEs)</h4>${cpesHtml}
-                <h4 class="subheader">Conexões VPN IPSec</h4>
-                <div class="ipsec-container">${ipsecHtml}</div>
-              </fieldset>
+              ` : ''}
+
+              ${fullInfraHtml}
             </div>`;
   }
 
@@ -688,6 +756,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const generateDocument = (event) => {
+    const responsibleName = responsibleNameInput.value.trim();
+    if (!responsibleName) {
+        showToast("Por favor, preencha o nome do responsável.", 'error');
+        responsibleNameInput.focus();
+        return;
+    }
+    
     if (!allInfrastructureData || allInfrastructureData.instances.length === 0) {
         showToast("Busque os dados antes de gerar o documento.", 'error');
         return;
@@ -697,7 +772,11 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
         toggleLoading(true);
         const formData = new FormData();
-        const payload = { doc_type: selectedDocType, infra_data: allInfrastructureData };
+        const payload = { 
+            doc_type: selectedDocType, 
+            infra_data: allInfrastructureData,
+            responsible_name: responsibleName
+        };
         formData.append('json_data', JSON.stringify(payload));
         architectureImageFiles.forEach(file => formData.append('architecture_files', file));
         antivirusImageFiles.forEach(file => formData.append('antivirus_files', file));
