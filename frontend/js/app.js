@@ -492,10 +492,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const results = await Promise.all(promises);
       allInfrastructureData.instances = results.map(data => data.instances[0]);
       
-      let finalHtml = ``;
+      let finalHtml = `<div class="instances-container">`;
       allInfrastructureData.instances.forEach(instanceData => {
-        finalHtml += generateInstanceSummaryCard(instanceData, false);
+        finalHtml += generateInstanceSummaryCard(instanceData, true);
       });
+      finalHtml += `</div>`;
       summaryContainer.innerHTML = finalHtml;
       detailsContainer.classList.remove('hidden');
     } catch (error) {
@@ -834,4 +835,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initializeApp();
 });
-

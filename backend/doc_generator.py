@@ -132,56 +132,90 @@ def _add_instances_table(document: Document, instances: List[InstanceData]):
     document.add_paragraph()
 
 def _add_volume_and_backup_section(document: Document, instances: List[InstanceData], toc_list: list, counters: Dict[int, int]):
-    """Adiciona as seções de gerenciamento de volumes e políticas de backup."""
+    """Adiciona as seções de gerenciamento de volumes e a tabela consolidada de políticas de backup."""
     if not instances: return
+    
+    # --- Seção 1: Tabela de Gerenciamento de Volumes ---
+    _add_and_bookmark_heading(document, "Gerenciamento de Volumes Anexados", 3, toc_list, counters)
     all_block_volumes = [vol for data in instances for vol in data.block_volumes]
     
-    _add_and_bookmark_heading(document, "Gerenciamento de Volumes", 3, toc_list, counters)
     if all_block_volumes:
         document.add_paragraph("A tabela abaixo detalha os Block Volumes anexados às instâncias.")
-        table = document.add_table(rows=1, cols=3, style='Table Grid')
-        headers = ['Host de Origem', 'Nome do Volume', 'Tamanho (GB)']
-        for i, h in enumerate(headers): table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+        # MODIFICADO: Adicionada a coluna de Política de Backup
+        table = document.add_table(rows=1, cols=4, style='Table Grid')
+        headers = ['Host de Origem', 'Nome do Volume', 'Tamanho (GB)', 'Política de Backup']
+        for i, h in enumerate(headers): 
+            table.cell(0, i).text = h
+            table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+        
         for data in instances:
             for vol in data.block_volumes:
-                cells = table.add_row().cells; cells[0].text = data.host_name; cells[1].text = vol.display_name; cells[2].text = str(int(vol.size_in_gbs))
+                cells = table.add_row().cells
+                cells[0].text = data.host_name
+                cells[1].text = vol.display_name
+                cells[2].text = str(int(vol.size_in_gbs))
+                cells[3].text = vol.backup_policy_name
         document.add_paragraph()
     else:
         document.add_paragraph("Nenhum Block Volume adicional foi encontrado anexado às instâncias.")
 
+    # --- Seção 2: Tabela Consolidada de Políticas de Backup ---
     _add_and_bookmark_heading(document, "Políticas de Backup", 3, toc_list, counters)
-    _add_and_bookmark_heading(document, "Backup de Boot Volume", 4, toc_list, counters)
-    boot_backup_policies = {data.backup_policy_name for data in instances}
-    if len(boot_backup_policies) == 1:
-        document.add_paragraph(f"Todas as instâncias utilizam a política de backup: {boot_backup_policies.pop()}.")
-    else:
-        document.add_paragraph("As instâncias possuem diferentes políticas de backup:")
-        for data in instances:
-            p = document.add_paragraph(style='List Bullet'); p.add_run(f"Host {data.host_name}: ").bold = True; p.add_run(data.backup_policy_name)
+    document.add_paragraph("A tabela a seguir consolida as políticas de backup para todos os volumes (Boot e Block) das instâncias.")
     
-    if all_block_volumes:
-        _add_and_bookmark_heading(document, "Backup de Block Volumes Anexados", 4, toc_list, counters)
-        bvs_with_backup = [(d.host_name, v) for d in instances for v in d.block_volumes if v.backup_policy_name != "Nenhuma política associada"]
-        if bvs_with_backup:
-            table = document.add_table(rows=1, cols=3, style='Table Grid')
-            headers = ['Host de Origem', 'Nome do Volume', 'Política de Backup Aplicada']
-            for i, h in enumerate(headers): table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
-            for host_name, vol in bvs_with_backup:
-                cells = table.add_row().cells; cells[0].text = host_name; cells[1].text = vol.display_name; cells[2].text = vol.backup_policy_name
-        else:
-            document.add_paragraph("Nenhuma política de backup foi encontrada para Block Volumes adicionais.")
+    table = document.add_table(rows=1, cols=3, style='Table Grid')
+    headers = ['Host Associado', 'Nome do Volume', 'Política de Backup Aplicada']
+    for i, h in enumerate(headers):
+        table.cell(0, i).text = h
+        table.cell(0, i).paragraphs[0].runs[0].font.bold = True
+
+    # Adicionar linhas para cada Boot Volume e Block Volume
+    for instance in instances:
+        # Linha para o Boot Volume
+        boot_cells = table.add_row().cells
+        boot_cells[0].text = instance.host_name
+        boot_cells[1].text = "Boot Volume"
+        boot_cells[2].text = instance.backup_policy_name
+        
+        # Linhas para os Block Volumes
+        for vol in instance.block_volumes:
+            block_cells = table.add_row().cells
+            block_cells[0].text = instance.host_name
+            block_cells[1].text = vol.display_name
+            block_cells[2].text = vol.backup_policy_name
+            
+    document.add_paragraph()
+
+    # --- Seção 3: Detalhes da Política CCM-7D (se aplicável) ---
+    ccm_policy_found = any(
+        i.backup_policy_name == "CCM-7D" or any(bv.backup_policy_name == "CCM-7D" for bv in i.block_volumes) 
+        for i in instances
+    )
     
-    if any(i.backup_policy_name == "CCM-7D" or any(bv.backup_policy_name == "CCM-7D" for bv in i.block_volumes) for i in instances):
-        document.add_paragraph()
+    if ccm_policy_found:
         _add_and_bookmark_heading(document, "Detalhes da Política de Backup CCM-7D", 4, toc_list, counters)
         document.add_paragraph("O Backup CCM-7D está configurado por meio de uma Backup Policy, garantindo a proteção contínua dos dados.")
         document.add_paragraph("A política define um agendamento diário Incremental, executado à 01:00 (horário regional).")
         document.add_paragraph("Os backups gerados possuem retenção de 7 dias.")
         document.add_paragraph("Essa política garante que, em caso de falhas, seja possível recuperar o volume rapidamente.")
+    
     document.add_paragraph()
+
 
 def _add_vcn_details_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
     """Adiciona as seções de VCN, Subnets, Listas de Segurança, etc."""
+    sl_to_hosts: Dict[str, List[str]] = {}
+    nsg_to_hosts: Dict[str, List[str]] = {}
+    rt_to_hosts: Dict[str, List[str]] = {}
+
+    for instance in infra_data.instances:
+        for sl in instance.security_lists:
+            sl_to_hosts.setdefault(sl.name, []).append(instance.host_name)
+        for nsg in instance.network_security_groups:
+            nsg_to_hosts.setdefault(nsg.name, []).append(instance.host_name)
+        if instance.route_table:
+            rt_to_hosts.setdefault(instance.route_table.name, []).append(instance.host_name)
+
     if not infra_data.vcns:
         document.add_paragraph("Nenhuma Virtual Cloud Network foi encontrada neste compartimento."); return
     for vcn in infra_data.vcns:
@@ -203,6 +237,10 @@ def _add_vcn_details_section(document: Document, infra_data: InfrastructureData,
             headers = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
             for sl in sorted(vcn.security_lists, key=lambda s: s.name):
                 document.add_paragraph(f"Regras da Security List: {sl.name}", style='Heading 5')
+                if sl.name in sl_to_hosts:
+                    p = document.add_paragraph()
+                    p.add_run("Hosts Associados: ").bold = True
+                    p.add_run(", ".join(sorted(sl_to_hosts[sl.name])))
                 table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
                 for i, h in enumerate(headers): table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
                 for rule in sl.rules:
@@ -215,6 +253,10 @@ def _add_vcn_details_section(document: Document, infra_data: InfrastructureData,
             headers = ["Destino", "Alvo (Target)", "Descrição"]
             for rt in sorted(vcn.route_tables, key=lambda r: r.name):
                 document.add_paragraph(f"Regras da Route Table: {rt.name}", style='Heading 5')
+                if rt.name in rt_to_hosts:
+                    p = document.add_paragraph()
+                    p.add_run("Hosts Associados: ").bold = True
+                    p.add_run(", ".join(sorted(rt_to_hosts[rt.name])))
                 table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
                 for i, h in enumerate(headers): table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
                 for rule in rt.rules:
@@ -227,6 +269,10 @@ def _add_vcn_details_section(document: Document, infra_data: InfrastructureData,
             headers = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
             for nsg in sorted(vcn.network_security_groups, key=lambda n: n.name):
                 document.add_paragraph(f"Regras do NSG: {nsg.name}", style='Heading 5')
+                if nsg.name in nsg_to_hosts:
+                    p = document.add_paragraph()
+                    p.add_run("Hosts Associados: ").bold = True
+                    p.add_run(", ".join(sorted(nsg_to_hosts[nsg.name])))
                 table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
                 for i, h in enumerate(headers): table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
                 for rule in nsg.rules:
@@ -335,14 +381,12 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
                 p2 = tunnel.phase_two_details; p2_table = document.add_table(rows=3, cols=2, style='Table Grid'); p2_table.cell(0, 0).text = "Fase 2 - Autenticação"; p2_table.cell(0, 1).text = p2.authentication_algorithm or "N/A"; p2_table.cell(1, 0).text = "Fase 2 - Criptografia"; p2_table.cell(1, 1).text = p2.encryption_algorithm; p2_table.cell(2, 0).text = "Fase 2 - Lifetime (s)"; p2_table.cell(2, 1).text = str(p2.lifetime_in_seconds)
                 
                 if tunnel.validation_status == 'Fora da recomendação Oracle' and tunnel.validation_details:
-                    # Adiciona a nota de configuração
                     p = document.add_paragraph()
                     p.add_run("Nota de Configuração: ").bold = True
                     p.add_run("Os parâmetros de criptografia customizados para este túnel divergem das recomendações padrão da Oracle. Consulte a documentação oficial no endereço abaixo:")
                     
-                    # Adiciona o link por extenso em um novo parágrafo para facilitar a seleção
                     url_p = document.add_paragraph(tunnel.validation_details)
-                    url_p.style = 'Intense Quote' # Aplica um estilo para destacar o link
+                    url_p.style = 'Intense Quote'
                 
                 document.add_paragraph()
 
@@ -369,7 +413,6 @@ def generate_documentation(
     headings_for_toc: List[Tuple[str, str, int]] = []
     numbering_counters: Dict[int, int] = {2: 0, 3: 0, 4: 0}
     
-    # Gerar o corpo do documento para popular a lista do sumário
     body_doc = Document()
 
     if architecture_image_bytes_list:
@@ -397,14 +440,26 @@ def generate_documentation(
         _add_and_bookmark_heading(body_doc, "Conectividade de Rede da(s) Instância(s)", 2, headings_for_toc, numbering_counters)
         sl_map, nsg_map, rt_map = {}, {}, {}
         for data in instances:
-            for sl in data.security_lists: sl_map.setdefault(sl.name, {'rules': sl.rules})
-            for nsg in data.network_security_groups: nsg_map.setdefault(nsg.name, {'rules': nsg.rules})
-            if data.route_table: rt_map.setdefault(data.route_table.name, {'rules': data.route_table.rules})
+            for sl in data.security_lists:
+                entry = sl_map.setdefault(sl.name, {'rules': sl.rules, 'hosts': []})
+                if data.host_name not in entry['hosts']:
+                    entry['hosts'].append(data.host_name)
+            for nsg in data.network_security_groups:
+                entry = nsg_map.setdefault(nsg.name, {'rules': nsg.rules, 'hosts': []})
+                if data.host_name not in entry['hosts']:
+                    entry['hosts'].append(data.host_name)
+            if data.route_table:
+                entry = rt_map.setdefault(data.route_table.name, {'rules': data.route_table.rules, 'hosts': []})
+                if data.host_name not in entry['hosts']:
+                    entry['hosts'].append(data.host_name)
         
         headers_sl_nsg = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
         _add_and_bookmark_heading(body_doc, "Security Lists", 3, headings_for_toc, numbering_counters)
         for name, info in sorted(sl_map.items()):
             p = body_doc.add_paragraph(); p.add_run(f"Regras da Security List: {name}").bold = True
+            p_hosts = body_doc.add_paragraph()
+            p_hosts.add_run("Hosts Associados: ").bold = True
+            p_hosts.add_run(", ".join(sorted(info['hosts'])))
             table = body_doc.add_table(rows=1, cols=len(headers_sl_nsg), style='Table Grid')
             for i, h in enumerate(headers_sl_nsg): table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
             for rule in info['rules']:
@@ -414,6 +469,9 @@ def generate_documentation(
         _add_and_bookmark_heading(body_doc, "Network Security Groups", 3, headings_for_toc, numbering_counters)
         for name, info in sorted(nsg_map.items()):
             p = body_doc.add_paragraph(); p.add_run(f"Regras do NSG: {name}").bold = True
+            p_hosts = body_doc.add_paragraph()
+            p_hosts.add_run("Hosts Associados: ").bold = True
+            p_hosts.add_run(", ".join(sorted(info['hosts'])))
             table = body_doc.add_table(rows=1, cols=len(headers_sl_nsg), style='Table Grid')
             for i, h in enumerate(headers_sl_nsg): table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
             for rule in info['rules']:
@@ -423,6 +481,9 @@ def generate_documentation(
         _add_and_bookmark_heading(body_doc, "Route Tables", 3, headings_for_toc, numbering_counters)
         for name, info in sorted(rt_map.items()):
             p = body_doc.add_paragraph(); p.add_run(f"Regras da Route Table: {name}").bold = True
+            p_hosts = body_doc.add_paragraph()
+            p_hosts.add_run("Hosts Associados: ").bold = True
+            p_hosts.add_run(", ".join(sorted(info['hosts'])))
             table = body_doc.add_table(rows=1, cols=3, style='Table Grid')
             headers_rt = ["Destino", "Alvo", "Descrição"]
             for i, h in enumerate(headers_rt): table.cell(0, i).text = h; table.cell(0, i).paragraphs[0].runs[0].font.bold = True
@@ -436,15 +497,12 @@ def generate_documentation(
             try: body_doc.add_picture(BytesIO(image_bytes), width=Inches(6.0)); body_doc.add_paragraph()
             except Exception as e: body_doc.add_paragraph(f"Erro ao inserir imagem: {e}")
 
-    # Montar o documento final na ordem correta
-    
-    # 2.1 Página de Título
+    # Montar o documento final
     title_p = document.add_paragraph(doc_title, style='Title')
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph(f"Cliente: {client_name}\nData de Geração: {datetime.now().strftime('%d/%m/%Y')}")
     document.add_page_break()
 
-    # 2.2 Sumário
     document.add_paragraph("Sumário", style='Heading 1')
     for text, bookmark, level in headings_for_toc:
         toc_level = level - 1
@@ -454,7 +512,6 @@ def generate_documentation(
             _add_internal_hyperlink(p, text, bookmark)
     document.add_page_break()
 
-    # 2.3 Corpo do Documento (copiando do documento temporário)
     for element in body_doc.element.body:
         document.element.body.append(element)
 
