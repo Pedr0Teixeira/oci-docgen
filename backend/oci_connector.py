@@ -1,20 +1,21 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 04 de Setembro de 2025
+# Data: 09 de Setembro de 2025
 # Descrição: Módulo de conector que interage com o SDK da OCI para buscar dados da infraestrutura.
 
 from typing import Any, Dict, List, Optional, Tuple
 
 import oci
 
-# --- IMPORTAÇÃO DOS SCHEMAS ATUALIZADOS ---
+# --- IMPORTAÇÃO DOS SCHEMAS ---
 from schemas import (BackendData, BackendSetData, BlockVolume, CpeData,
                      DrgAttachmentData, DrgData, HealthCheckerData, HostnameData,
                      InfrastructureData, InstanceData, IpsecData, ListenerData,
                      LoadBalancerData, LoadBalancerIpAddressData, LpgData,
                      NetworkSecurityGroup, PhaseOneDetails, PhaseTwoDetails,
                      RouteRule, RouteTable, RpcData, SecurityList,
-                     SecurityRule, SubnetData, TunnelData, VcnData)
+                     SecurityRule, SubnetData, TunnelData, VcnData,
+                     VolumeGroupData, VolumeGroupValidation)
 
 # --- Mapeamento de Protocolos IANA ---
 IANA_PROTOCOL_MAP = {
@@ -286,10 +287,11 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
                             nsg_rules.append(SecurityRule(direction=r.direction, protocol=_translate_protocol(r.protocol), source_or_destination=_get_source_dest_name(virtual_network_client, source_dest), ports=_format_rule_ports(r), description=r.description))
                     network_security_groups.append(NetworkSecurityGroup(id=nsg.id, name=nsg.display_name, rules=nsg_rules))
 
-    boot_volume_gb, backup_policy_name = "N/A", "Nenhuma política associada"
+    boot_volume_gb, backup_policy_name, boot_volume_id = "N/A", "Nenhuma política associada", None
     boot_vol_attachments = _safe_api_call(compute_client.list_boot_volume_attachments, instance.availability_domain, instance.compartment_id, instance_id=instance_id)
     if boot_vol_attachments:
-        boot_vol = _safe_api_call(block_storage_client.get_boot_volume, boot_vol_attachments[0].boot_volume_id)
+        boot_volume_id = boot_vol_attachments[0].boot_volume_id
+        boot_vol = _safe_api_call(block_storage_client.get_boot_volume, boot_volume_id)
         if boot_vol:
             boot_volume_gb = str(int(boot_vol.size_in_gbs))
             assignment = _safe_api_call(block_storage_client.get_volume_backup_policy_asset_assignment, boot_vol.id)
@@ -309,15 +311,69 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
                     if vol_assignment:
                         vol_policy = _safe_api_call(block_storage_client.get_volume_backup_policy, vol_assignment[0].policy_id)
                         if vol_policy: vol_backup_policy_name = vol_policy.display_name
-                    block_volumes.append(BlockVolume(display_name=vol.display_name, size_in_gbs=vol.size_in_gbs, backup_policy_name=vol_backup_policy_name))
+                    block_volumes.append(BlockVolume(id=vol.id, display_name=vol.display_name, size_in_gbs=vol.size_in_gbs, backup_policy_name=vol_backup_policy_name))
 
     return InstanceData(
         host_name=instance.display_name, shape=instance.shape, ocpus=str(int(instance.shape_config.ocpus)),
         memory=str(int(instance.shape_config.memory_in_gbs)), os_name=os_name, boot_volume_gb=boot_volume_gb,
+        boot_volume_id=boot_volume_id,
         private_ip=private_ip, public_ip=public_ip, backup_policy_name=backup_policy_name,
         block_volumes=block_volumes, security_lists=security_lists, network_security_groups=network_security_groups,
         route_table=route_table, compartment_name=compartment_name, lifecycle_state=instance.lifecycle_state
     )
+
+def _get_volume_groups(block_storage_client: oci.core.BlockstorageClient, compartment_id: str, all_volumes_map: Dict[str, str]) -> List[VolumeGroupData]:
+    """Coleta e valida todos os Volume Groups em um compartimento."""
+    volume_groups_data = []
+    
+    all_vgs_sdk = oci.pagination.list_call_get_all_results(
+        block_storage_client.list_volume_groups,
+        compartment_id=compartment_id
+    ).data
+
+    for vg_summary in all_vgs_sdk:
+        vg = _safe_api_call(block_storage_client.get_volume_group, vg_summary.id)
+        if not vg:
+            continue
+
+        policy_name = "Nenhuma"
+        has_backup_policy = False
+        assignment = _safe_api_call(block_storage_client.get_volume_backup_policy_asset_assignment, vg.id)
+        if assignment:
+            policy = _safe_api_call(block_storage_client.get_volume_backup_policy, assignment[0].policy_id)
+            if policy:
+                policy_name = policy.display_name
+                has_backup_policy = True
+
+        cross_region_target = "Desabilitada"
+        is_cross_region_replication_enabled = False
+        replicas = getattr(vg, 'volume_group_replicas', [])
+        if replicas and len(replicas) > 0:
+            is_cross_region_replication_enabled = True
+            replica_region_key = replicas[0].availability_domain.rsplit('-', 1)[0]
+            cross_region_target = replica_region_key.replace("AD", "").strip()
+
+        member_names = [all_volumes_map.get(vol_id, vol_id) for vol_id in vg.volume_ids]
+
+        validation_data = VolumeGroupValidation(
+            has_backup_policy=has_backup_policy,
+            policy_name=policy_name,
+            is_cross_region_replication_enabled=is_cross_region_replication_enabled,
+            cross_region_target=cross_region_target
+        )
+
+        volume_groups_data.append(VolumeGroupData(
+            id=vg.id,
+            display_name=vg.display_name,
+            availability_domain=vg.availability_domain,
+            lifecycle_state=vg.lifecycle_state,
+            members=sorted(member_names),
+            member_ids=vg.volume_ids,
+            validation=validation_data
+        ))
+        
+    return volume_groups_data
+
 
 # --- FUNÇÃO PRINCIPAL DE COLETA DE DADOS DE INFRAESTRUTURA ---
 
@@ -326,6 +382,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
     compute_client = get_client(oci.core.ComputeClient, region)
     virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
     load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region)
+    block_storage_client = get_client(oci.core.BlockstorageClient, region)
     
     compartment_name = get_compartment_name(compartment_id)
     oracle_managed_str = "Gerenciado pela Oracle (Padrão)"
@@ -333,6 +390,16 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
     # 1. Coletar detalhes completos de todas as instâncias
     all_instances_sdk = oci.pagination.list_call_get_all_results(compute_client.list_instances, compartment_id=compartment_id).data
     instances = [get_instance_details(region, i.id, compartment_name) for i in all_instances_sdk]
+
+    # 1.5 Mapeamento de Volumes e Coleta de Volume Groups
+    all_volumes_map = {}
+    for instance in instances:
+        if instance.boot_volume_id:
+            all_volumes_map[instance.boot_volume_id] = f"Boot Volume ({instance.host_name})"
+        for bv in instance.block_volumes:
+            all_volumes_map[bv.id] = f"Block Volume ({bv.display_name})"
+    
+    volume_groups = _get_volume_groups(block_storage_client, compartment_id, all_volumes_map)
 
     # 2. Coletar DRGs, seus Anexos e RPCs
     all_drgs_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_drgs, compartment_id=compartment_id).data
@@ -538,5 +605,44 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         drgs=drgs,
         cpes=cpes,
         ipsec_connections=ipsec_connections,
-        load_balancers=load_balancers
+        load_balancers=load_balancers,
+        volume_groups=volume_groups
+    )
+
+# --- NOVA FUNÇÃO PARA O FLUXO DE "NOVO HOST" ---
+def get_new_host_details(region: str, compartment_id: str, compartment_name: str, instance_ids: List[str]) -> InfrastructureData:
+    """Orquestra a coleta de dados para um conjunto específico de instâncias (Novo Host)."""
+    block_storage_client = get_client(oci.core.BlockstorageClient, region)
+    
+    # 1. Coletar detalhes para as instâncias selecionadas
+    instances = [get_instance_details(region, i_id, compartment_name) for i_id in instance_ids]
+
+    # 2. Construir o mapa de volumes apenas para as instâncias selecionadas
+    all_volumes_map = {}
+    selected_volume_ids = set()
+    for instance in instances:
+        if instance.boot_volume_id:
+            all_volumes_map[instance.boot_volume_id] = f"Boot Volume ({instance.host_name})"
+            selected_volume_ids.add(instance.boot_volume_id)
+        for bv in instance.block_volumes:
+            all_volumes_map[bv.id] = f"Block Volume ({bv.display_name})"
+            selected_volume_ids.add(bv.id)
+
+    # 3. Obter todos os Volume Groups e filtrar os relevantes
+    all_vgs = _get_volume_groups(block_storage_client, compartment_id, all_volumes_map)
+    
+    relevant_vgs = [
+        vg for vg in all_vgs
+        if any(vol_id in selected_volume_ids for vol_id in vg.member_ids)
+    ]
+
+    # 4. Retornar um objeto InfrastructureData parcial
+    return InfrastructureData(
+        instances=instances,
+        vcns=[],
+        drgs=[],
+        cpes=[],
+        ipsec_connections=[],
+        load_balancers=[],
+        volume_groups=relevant_vgs
     )
