@@ -1,11 +1,14 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 09 de Setembro de 2025
+# Data: 11 de Setembro de 2025
 # Descrição: Módulo de conector que interage com o SDK da OCI para buscar dados da infraestrutura.
+# Versão: 1.7.0 - Adicionado suporte para autenticação via Instance Principal.
 
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import oci
+from oci.auth.signers import InstancePrincipalsSecurityTokenSigner
 
 # --- IMPORTAÇÃO DOS SCHEMAS ---
 from schemas import (BackendData, BackendSetData, BlockVolume, CpeData,
@@ -26,27 +29,73 @@ IANA_PROTOCOL_MAP = {
     "all": "Todos os Protocolos",
 }
 
-# --- Configuração Inicial do SDK da OCI ---
-try:
-    config = oci.config.from_file()
-    tenancy_id = config["tenancy"]
-    # Cliente de identidade global para buscar nomes de compartimento
-    identity_client_for_compartment = oci.identity.IdentityClient(config)
-except Exception as e:
-    print(f"FATAL: Erro ao carregar a configuração da OCI a partir do arquivo: {e}")
-    config = {}
-    tenancy_id = None
-    identity_client_for_compartment = None
+# --- Configuração Dinâmica de Autenticação da OCI ---
 
+def get_auth_provider() -> Dict[str, Any]:
+    """
+    Determina o provedor de autenticação (API Key ou Instance Principal)
+    com base na variável de ambiente OCI_AUTH_METHOD.
+    """
+    auth_method = os.environ.get("OCI_AUTH_METHOD", "API_KEY").upper()
+
+    if auth_method == "INSTANCE_PRINCIPAL":
+        try:
+            signer = InstancePrincipalsSecurityTokenSigner()
+            tenancy_id = signer.tenancy_id
+            print("INFO: Autenticação configurada para usar Instance Principal.")
+            return {"signer": signer, "tenancy_id": tenancy_id, "config": {}}
+        except Exception as e:
+            print(f"FATAL: Falha ao inicializar o Instance Principal Signer: {e}")
+            print("FATAL: Verifique se o script está rodando em uma instância OCI com um Dynamic Group e policies corretas.")
+            return {"signer": None, "tenancy_id": None, "config": None}
+    else:  # Padrão para API_KEY
+        try:
+            config = oci.config.from_file()
+            tenancy_id = config.get("tenancy")
+            if not tenancy_id:
+                raise ValueError("'tenancy' não encontrado no arquivo de configuração da OCI.")
+            print("INFO: Autenticação configurada para usar API Key do arquivo ~/.oci/config.")
+            return {"config": config, "tenancy_id": tenancy_id, "signer": None}
+        except Exception as e:
+            print(f"FATAL: Erro ao carregar a configuração da OCI a partir do arquivo: {e}")
+            return {"config": None, "tenancy_id": None, "signer": None}
+
+# Inicializa o provedor de autenticação
+auth_details = get_auth_provider()
+config = auth_details["config"]
+signer = auth_details["signer"]
+tenancy_id = auth_details["tenancy_id"]
+
+# --- Cliente de Identidade Global ---
+identity_client_for_compartment = None
+if tenancy_id:
+    try:
+        # Inicializa o cliente global usado para buscar nomes de compartimento
+        if signer:
+            identity_client_for_compartment = oci.identity.IdentityClient(config={}, signer=signer)
+        else:
+            identity_client_for_compartment = oci.identity.IdentityClient(config)
+    except Exception as e:
+        print(f"FATAL: Não foi possível inicializar o cliente de identidade global: {e}")
 
 # --- Funções Auxiliares (Helpers) ---
 
 def get_client(client_class, region: str):
     """Cria uma instância de um cliente de serviço da OCI para uma região específica."""
-    regional_config = config.copy()
-    regional_config["region"] = region
-    return client_class(regional_config)
+    try:
+        if signer:
+            # Para Instance Principal, passamos o signer e um config apenas com a região.
+            return client_class(config={"region": region}, signer=signer)
+        else:
+            # Para API Key, copiamos o config e definimos a região.
+            regional_config = config.copy()
+            regional_config["region"] = region
+            return client_class(regional_config)
+    except Exception as e:
+        print(f"ERRO: Falha ao criar o cliente {client_class.__name__} para a região {region}: {e}")
+        return None
 
+# ... (O restante do arquivo permanece exatamente o mesmo, sem nenhuma alteração) ...
 
 def _safe_api_call(func, *args, **kwargs):
     """Encapsula uma chamada de API da OCI para tratar exceções comuns de forma robusta."""
@@ -609,7 +658,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         volume_groups=volume_groups
     )
 
-# --- NOVA FUNÇÃO PARA O FLUXO DE "NOVO HOST" ---
+# --- FUNÇÃO PARA O FLUXO DE "NOVO HOST" ---
 def get_new_host_details(region: str, compartment_id: str, compartment_name: str, instance_ids: List[str]) -> InfrastructureData:
     """Orquestra a coleta de dados para um conjunto específico de instâncias (Novo Host)."""
     block_storage_client = get_client(oci.core.BlockstorageClient, region)
