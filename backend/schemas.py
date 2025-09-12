@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 09 de Setembro de 2025
+# Data: 12 de Setembro de 2025
 # Descrição: Define os modelos de dados (schemas) Pydantic para validação e serialização de dados na API.
 
 from typing import List, Optional
@@ -159,6 +159,14 @@ class PhaseTwoDetails(BaseModel):
     lifetime_in_seconds: int
 
 
+class BgpSessionInfo(BaseModel):
+    """Representa os detalhes de uma sessão BGP em um túnel VPN."""
+    oracle_bgp_asn: Optional[str] = "N/A"
+    customer_bgp_asn: Optional[str] = "N/A"
+    oracle_interface_ip: Optional[str] = "N/A"
+    customer_interface_ip: Optional[str] = "N/A"
+
+
 class TunnelData(BaseModel):
     """Representa um túnel de uma conexão IPSec com detalhes de criptografia."""
     id: str
@@ -172,6 +180,7 @@ class TunnelData(BaseModel):
     validation_details: Optional[str] = None
     phase_one_details: PhaseOneDetails
     phase_two_details: PhaseTwoDetails
+    bgp_session_info: Optional[BgpSessionInfo] = None
 
 
 class IpsecData(BaseModel):
