@@ -1,8 +1,7 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 11 de Setembro de 2025
+# Data: 12 de Setembro de 2025
 # Descrição: Módulo de conector que interage com o SDK da OCI para buscar dados da infraestrutura.
-# Versão: 1.7.0 - Adicionado suporte para autenticação via Instance Principal.
 
 import os
 from typing import Any, Dict, List, Optional, Tuple
@@ -18,7 +17,7 @@ from schemas import (BackendData, BackendSetData, BlockVolume, CpeData,
                      NetworkSecurityGroup, PhaseOneDetails, PhaseTwoDetails,
                      RouteRule, RouteTable, RpcData, SecurityList,
                      SecurityRule, SubnetData, TunnelData, VcnData,
-                     VolumeGroupData, VolumeGroupValidation)
+                     VolumeGroupData, VolumeGroupValidation, BgpSessionInfo)
 
 # --- Mapeamento de Protocolos IANA ---
 IANA_PROTOCOL_MAP = {
@@ -94,8 +93,6 @@ def get_client(client_class, region: str):
     except Exception as e:
         print(f"ERRO: Falha ao criar o cliente {client_class.__name__} para a região {region}: {e}")
         return None
-
-# ... (O restante do arquivo permanece exatamente o mesmo, sem nenhuma alteração) ...
 
 def _safe_api_call(func, *args, **kwargs):
     """Encapsula uma chamada de API da OCI para tratar exceções comuns de forma robusta."""
@@ -507,6 +504,16 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
             for tunnel in tunnels_sdk:
                 validation_status, validation_details = _validate_ipsec_parameters(tunnel)
                 
+                bgp_info = None
+                if tunnel.routing == "BGP" and tunnel.bgp_session_info:
+                    bgp_sdk = tunnel.bgp_session_info
+                    bgp_info = BgpSessionInfo(
+                        oracle_bgp_asn=str(bgp_sdk.oracle_bgp_asn) if bgp_sdk.oracle_bgp_asn else "N/A",
+                        customer_bgp_asn=str(bgp_sdk.customer_bgp_asn) if bgp_sdk.customer_bgp_asn else "N/A",
+                        oracle_interface_ip=bgp_sdk.oracle_interface_ip or "N/A",
+                        customer_interface_ip=bgp_sdk.customer_interface_ip or "N/A"
+                    )
+
                 p1_details = tunnel.phase_one_details
                 is_p1_custom = p1_details.is_custom_phase_one_config if p1_details else False
                 phase_one = PhaseOneDetails(
@@ -530,13 +537,18 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                     id=tunnel.id, display_name=tunnel.display_name, status=tunnel.status or "N/A",
                     cpe_ip=tunnel.cpe_ip, vpn_oracle_ip=tunnel.vpn_ip, routing_type=tunnel.routing, 
                     ike_version=tunnel.ike_version, validation_status=validation_status, validation_details=validation_details,
-                    phase_one_details=phase_one, phase_two_details=phase_two
+                    phase_one_details=phase_one, phase_two_details=phase_two,
+                    bgp_session_info=bgp_info
                 ))
+        
+        connection_routing_type = "STATIC" # Padrão seguro
+        if tunnels_sdk:
+            connection_routing_type = tunnels_sdk[0].routing
         
         ipsec_connections.append(IpsecData(
             id=ipsec.id, display_name=ipsec.display_name, status=ipsec.lifecycle_state,
             cpe_id=ipsec.cpe_id, drg_id=ipsec.drg_id, tunnels=tunnels, 
-            static_routes=ipsec.static_routes
+            static_routes=ipsec.static_routes if connection_routing_type == "STATIC" else []
         ))
 
     # 5. Coletar VCNs, seus recursos filhos e LPGs
@@ -695,3 +707,4 @@ def get_new_host_details(region: str, compartment_id: str, compartment_name: str
         load_balancers=[],
         volume_groups=relevant_vgs
     )
+
