@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Autor: Pedro Teixeira
- * Data: 09 de Setembro de 2025 
+ * Data: 12 de Setembro de 2025 
  * Descrição: Script principal do frontend para interatividade da página, comunicação com a API e manipulação do DOM.
  */
 document.addEventListener('DOMContentLoaded', () => {
@@ -689,12 +689,92 @@ document.addEventListener('DOMContentLoaded', () => {
       const ipsecHtml = ipsec_connections?.length > 0 ? ipsec_connections.map(ipsec => {
           const cpeName = cpes.find(c => c.id === ipsec.cpe_id)?.display_name || 'Não encontrado';
           const drgName = drgs.find(d => d.id === ipsec.drg_id)?.display_name || 'Não encontrado';
+          
           const tunnelsHtml = ipsec.tunnels.map(tunnel => {
               const p1 = tunnel.phase_one_details;
               const p2 = tunnel.phase_two_details;
-              return `<div class="tunnel-details"><div class="tunnel-header"><strong>Túnel: <span class="text-highlight">${tunnel.display_name}</span></strong><span class="status-badge status-${tunnel.status.toLowerCase()}">${tunnel.status}</span></div><ul class="tunnel-basic-info"><li><strong>IP Oracle:</strong> ${tunnel.vpn_oracle_ip}</li><li><strong>IP do CPE:</strong> ${tunnel.cpe_ip}</li><li><strong>Roteamento:</strong> ${tunnel.routing_type}</li><li><strong>IKE:</strong> ${tunnel.ike_version}</li></ul><div class="crypto-details-grid"><div><h6 class="tunnel-subheader">Fase 1 (IKE)</h6><ul><li><strong>Autenticação:</strong> ${p1.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p1.encryption_algorithm}</li><li><strong>Grupo DH:</strong> ${p1.dh_group}</li><li><strong>Lifetime:</strong> ${p1.lifetime_in_seconds}s</li></ul></div><div><h6 class="tunnel-subheader">Fase 2 (IPSec)</h6><ul><li><strong>Autenticação:</strong> ${p2.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p2.encryption_algorithm}</li><li><strong>Lifetime:</strong> ${p2.lifetime_in_seconds}s</li></ul></div></div></div>`
+              
+              let bgpDetailsHtml = '';
+              if (tunnel.routing_type === 'BGP' && tunnel.bgp_session_info) {
+                  const bgp = tunnel.bgp_session_info;
+                  bgpDetailsHtml = `
+                      <div class="crypto-details-grid">
+                          <div>
+                              <h6 class="tunnel-subheader">Sessão BGP</h6>
+                              <ul>
+                                  <li><strong>ASN Oracle:</strong> ${bgp.oracle_bgp_asn || 'N/A'}</li>
+                                  <li><strong>ASN Cliente:</strong> ${bgp.customer_bgp_asn || 'N/A'}</li>
+                              </ul>
+                          </div>
+                          <div>
+                              <h6 class="tunnel-subheader">IPs do Peering</h6>
+                              <ul>
+                                  <li><strong>Interface Oracle:</strong> ${bgp.oracle_interface_ip || 'N/A'}</li>
+                                  <li><strong>Interface Cliente:</strong> ${bgp.customer_interface_ip || 'N/A'}</li>
+                              </ul>
+                          </div>
+                      </div>
+                      <hr class="tunnel-divider">
+                  `;
+              }
+
+              return `<div class="tunnel-details">
+                        <div class="tunnel-header">
+                            <strong>Túnel: <span class="text-highlight">${tunnel.display_name}</span></strong>
+                            <span class="status-badge status-${tunnel.status.toLowerCase()}">${tunnel.status}</span>
+                        </div>
+                        <ul class="tunnel-basic-info">
+                            <li><strong>IP Oracle:</strong> ${tunnel.vpn_oracle_ip || 'N/A'}</li>
+                            <li><strong>IP do CPE:</strong> ${tunnel.cpe_ip || 'N/A'}</li>
+                            <li><strong>Roteamento:</strong> ${tunnel.routing_type}</li>
+                            <li><strong>IKE:</strong> ${tunnel.ike_version}</li>
+                        </ul>
+                        ${bgpDetailsHtml}
+                        <div class="crypto-details-grid">
+                            <div>
+                                <h6 class="tunnel-subheader">Fase 1 (IKE)</h6>
+                                <ul>
+                                    <li><strong>Autenticação:</strong> ${p1.authentication_algorithm}</li>
+                                    <li><strong>Criptografia:</strong> ${p1.encryption_algorithm}</li>
+                                    <li><strong>Grupo DH:</strong> ${p1.dh_group}</li>
+                                    <li><strong>Lifetime:</strong> ${p1.lifetime_in_seconds}s</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h6 class="tunnel-subheader">Fase 2 (IPSec)</h6>
+                                <ul>
+                                    <li><strong>Autenticação:</strong> ${p2.authentication_algorithm || 'N/A'}</li>
+                                    <li><strong>Criptografia:</strong> ${p2.encryption_algorithm}</li>
+                                    <li><strong>Lifetime:</strong> ${p2.lifetime_in_seconds}s</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>`
           }).join('<hr class="tunnel-divider">');
-          return `<div class="ipsec-summary-card collapsible"><div class="ipsec-card-header"><h4 class="card-header-title">${ipsec.display_name}</h4><div class="card-status-indicator"><span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span></div><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="ipsec-card-body"><div class="ipsec-details"><span><strong>CPE Associado:</strong> ${cpeName}</span><span><strong>DRG Associado:</strong> ${drgName}</span></div><div class="ipsec-details"><span class="full-width"><strong>Rotas Estáticas:</strong> ${ipsec.static_routes.join(', ') || 'Nenhuma'}</span></div><h5 class="subheader">Túneis</h5>${tunnelsHtml || '<p class="no-data-message">Nenhum túnel encontrado.</p>'}</div></div>`;
+          
+          const hasBgpTunnel = ipsec.tunnels.some(t => t.routing_type === 'BGP');
+          const routingDisplay = hasBgpTunnel
+              ? `<span class="full-width"><strong>Roteamento:</strong> BGP</span>`
+              : `<span class="full-width"><strong>Rotas Estáticas:</strong> ${(ipsec.static_routes && ipsec.static_routes.length > 0) ? ipsec.static_routes.join(', ') : 'Nenhuma'}</span>`;
+
+          return `<div class="ipsec-summary-card collapsible">
+                    <div class="ipsec-card-header">
+                        <h4 class="card-header-title">${ipsec.display_name}</h4>
+                        <div class="card-status-indicator">
+                            <span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span>
+                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="ipsec-card-body">
+                        <div class="ipsec-details">
+                            <span><strong>CPE Associado:</strong> ${cpeName}</span>
+                            <span><strong>DRG Associado:</strong> ${drgName}</span>
+                        </div>
+                        <div class="ipsec-details">${routingDisplay}</div>
+                        <h5 class="subheader">Túneis</h5>
+                        ${tunnelsHtml || '<p class="no-data-message">Nenhum túnel encontrado.</p>'}
+                    </div>
+                </div>`;
       }).join('') : '';
 
     const fullInfraHtml = !isNewHostFlow ? `
@@ -914,3 +994,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initializeApp();
 });
+

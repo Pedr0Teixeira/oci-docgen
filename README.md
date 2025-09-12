@@ -18,7 +18,7 @@ varredura completa em um compartimento, coleta dados detalhados sobre os
 recursos provisionados e gera um documento **.docx** profissional e
 padronizado.
 
-## ✨ Principais Funcionalidades
+## Principais Funcionalidades
 
 -   **Descoberta Automática:** Mapeia e lista hierarquicamente as
     regiões e compartimentos da sua tenancy.
@@ -37,30 +37,50 @@ padronizado.
 ## ☁️ Recursos OCI Cobertos
 
 ### Compute
+- Instâncias  
+  - Shape  
+  - OCPUs  
+  - Memória  
+  - S.O.  
+  - IPs  
 
--   Instâncias (Shape, OCPUs, Memória, S.O., IPs)
--   Boot Volumes (Tamanho, Política de Backup)
--   Block Volumes (Tamanho, Política de Backup)
+### Storage
+- Boot Volumes  
+  - Tamanho  
+  - Política de Backup  
+- Block Volumes  
+  - Tamanho  
+  - Política de Backup  
+- Volume Groups  
+  - Membros  
+  - Validação de Backup  
+  - Replicação Cross-Region  
 
-### Networking (VCN)
-
--   Virtual Cloud Networks (VCNs)
--   Subnets
--   Security Lists (todas as regras)
--   Route Tables (todas as regras)
--   Network Security Groups (NSGs) (todas as regras)
--   Load Balancers (LBaaS)
-    -   IPs, Shape, Listeners
-    -   Backend Sets, Backends e Health Checkers
--   Local Peering Gateways (LPGs)
+### Networking
+- Virtual Cloud Networks (VCNs)  
+- Subnets  
+- Security Lists (todas as regras)  
+- Route Tables (todas as regras)  
+- Network Security Groups (NSGs) (todas as regras)  
+- Load Balancers (LBaaS)  
+  - IPs  
+  - Shape  
+  - Listeners  
+  - Backend Sets  
+  - Backends  
+  - Health Checkers  
+- Local Peering Gateways (LPGs)  
 
 ### Conectividade
-
--   Dynamic Routing Gateways (DRGs)
--   Anexos de DRG (VCN, RPC, etc.)
--   Remote Peering Connections (RPCs)
--   Customer-Premises Equipment (CPEs)
--   IPSec Connections (detalhes de túneis e criptografia)
+- Dynamic Routing Gateways (DRGs)  
+- Anexos de DRG (VCN, RPC, etc.)  
+- Remote Peering Connections (RPCs)  
+- Customer-Premises Equipment (CPEs)  
+- IPSec Connections  
+  - Detalhes de túneis  
+  - Criptografia  
+  - Roteamento estático  
+  - Sessões BGP  
 
 ## 🔄 Diagrama de Funcionamento
 
@@ -168,12 +188,23 @@ graph TD
         └── index.html           # Interface principal
 ```
 
-## 🚀 Instalação e Execução
+## Instalação e Execução
 
 ### Pré-requisitos
+- Python 3.10+
+- Acesso à uma tenancy OCI com as devidas permissões de leitura.
 
--   Python 3.8+
--   Configuração do **OCI CLI** com `~/.oci/config` válido.
+### Configuração de Autenticação OCI
+A ferramenta suporta dois métodos de autenticação:
+
+1. **API Key (Padrão):**  
+   Um arquivo `~/.oci/config` válido com as chaves de API.
+
+2. **Instance Principal:**  
+   Se executado de uma instância OCI, defina a variável de ambiente:  
+   ```bash
+   export OCI_AUTH_METHOD=INSTANCE_PRINCIPAL
+   ```
 
 ### 1. Backend
 
