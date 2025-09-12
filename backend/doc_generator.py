@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 09 de Setembro de 2025
+# Data: 12 de Setembro de 2025
 # Descrição: Módulo responsável por gerar documentos .docx detalhados com sumário clicável.
 
 import os
@@ -126,7 +126,7 @@ def _create_titled_key_value_table(document, title, data_dict, col_widths=(Inche
         key_cell = table.cell(i, 0)
         key_cell.text = key
         key_cell.paragraphs[0].runs[0].font.bold = True
-        table.cell(i, 1).text = str(value)
+        table.cell(i, 1).text = str(value) if value else "N/A"
     document.add_paragraph()
 
 
@@ -364,27 +364,48 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
     else:
         cpe_map = {cpe.id: cpe.display_name for cpe in infra_data.cpes}; drg_map = {drg.id: drg.display_name for drg in infra_data.drgs}
         _add_and_bookmark_heading(document, "Sumário de Conexões VPN", 4, toc_list, counters)
-        headers = ['Nome da Conexão', 'Status', 'CPE Associado', 'DRG Associado', 'Rotas Estáticas', 'Túneis']
+        headers = ['Nome da Conexão', 'Status', 'CPE Associado', 'DRG Associado', 'Roteamento', 'Túneis']
         table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
         _style_table_headers(table, headers)
         for ipsec in infra_data.ipsec_connections:
-            cells = table.add_row().cells; cells[0].text = ipsec.display_name; cells[1].text = ipsec.status; cells[2].text = cpe_map.get(ipsec.cpe_id, ipsec.cpe_id); cells[3].text = drg_map.get(ipsec.drg_id, ipsec.drg_id); cells[4].text = ', '.join(ipsec.static_routes) or 'Nenhuma'; cells[5].text = str(len(ipsec.tunnels))
+            routing_type = "BGP" if any(t.routing_type == "BGP" for t in ipsec.tunnels) else "STATIC"
+            routing_display = f"STATIC ({len(ipsec.static_routes)} rotas)" if routing_type == "STATIC" else "BGP"
+            cells = table.add_row().cells
+            cells[0].text = ipsec.display_name
+            cells[1].text = ipsec.status
+            cells[2].text = cpe_map.get(ipsec.cpe_id, ipsec.cpe_id)
+            cells[3].text = drg_map.get(ipsec.drg_id, ipsec.drg_id)
+            cells[4].text = routing_display
+            cells[5].text = str(len(ipsec.tunnels))
         document.add_paragraph()
         _add_and_bookmark_heading(document, "Detalhes das Conexões VPN", 4, toc_list, counters)
         for ipsec in infra_data.ipsec_connections:
             document.add_paragraph(f"Configuração da Conexão: {ipsec.display_name}", style='Heading 5')
             if not ipsec.tunnels:
-                document.add_paragraph("Este recurso não está provisionado neste ambiente."); continue
+                document.add_paragraph("Nenhum túnel encontrado para esta conexão."); continue
             for tunnel in ipsec.tunnels:
                 p = document.add_paragraph(); p.add_run(f"Túnel: {tunnel.display_name} ").bold = True; p.add_run(f"(Status: {tunnel.status})")
                 tunnel_info = { "IP Oracle": tunnel.vpn_oracle_ip or "N/A", "IP do CPE": tunnel.cpe_ip or "N/A", "Roteamento": tunnel.routing_type, "Versão IKE": tunnel.ike_version }
                 _create_titled_key_value_table(document, "Informações do Túnel", tunnel_info)
+
+                if tunnel.routing_type == "BGP" and tunnel.bgp_session_info:
+                    bgp = tunnel.bgp_session_info
+                    bgp_info_data = {
+                        "ASN Oracle": bgp.oracle_bgp_asn,
+                        "ASN do Cliente": bgp.customer_bgp_asn,
+                        "IP do Túnel (Oracle)": bgp.oracle_interface_ip,
+                        "IP do Túnel (Cliente)": bgp.customer_interface_ip
+                    }
+                    _create_titled_key_value_table(document, "Detalhes da Sessão BGP", bgp_info_data)
+                
                 p1 = tunnel.phase_one_details
                 p1_info = { "Autenticação": p1.authentication_algorithm, "Criptografia": p1.encryption_algorithm, "Grupo DH": p1.dh_group, "Lifetime (s)": str(p1.lifetime_in_seconds) }
                 _create_titled_key_value_table(document, "Fase 1 (IKE)", p1_info)
+                
                 p2 = tunnel.phase_two_details
                 p2_info = { "Autenticação": p2.authentication_algorithm or "N/A", "Criptografia": p2.encryption_algorithm, "Lifetime (s)": str(p2.lifetime_in_seconds) }
                 _create_titled_key_value_table(document, "Fase 2 (IPSec)", p2_info)
+                
                 if tunnel.validation_status == 'Fora da recomendação Oracle' and tunnel.validation_details:
                     p = document.add_paragraph(); p.add_run("Nota de Configuração: ").bold = True
                     p.add_run("Os parâmetros de criptografia customizados para este túnel divergem das recomendações padrão da Oracle.")
@@ -521,7 +542,6 @@ def generate_documentation(
     _add_responsible_section(document, headings_for_toc, numbering_counters, responsible_name)
 
     # 4. Preencher o sumário no placeholder
-    # Iteramos de forma reversa para inserir os itens na ordem correta após o título "Sumário"
     for text, bookmark, level in reversed(headings_for_toc):
         style_name = f'TOC {level}' if f'TOC {level}' in document.styles else 'TOC 1'
         p = document.add_paragraph(style=style_name)
