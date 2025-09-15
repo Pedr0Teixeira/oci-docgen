@@ -1,6 +1,6 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 12 de Setembro de 2025
+# Data: 15 de Setembro de 2025
 # Descrição: Módulo de conector que interage com o SDK da OCI para buscar dados da infraestrutura.
 
 import os
@@ -83,10 +83,8 @@ def get_client(client_class, region: str):
     """Cria uma instância de um cliente de serviço da OCI para uma região específica."""
     try:
         if signer:
-            # Para Instance Principal, passamos o signer e um config apenas com a região.
             return client_class(config={"region": region}, signer=signer)
         else:
-            # Para API Key, copiamos o config e definimos a região.
             regional_config = config.copy()
             regional_config["region"] = region
             return client_class(regional_config)
@@ -299,7 +297,7 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
 
     instance = _safe_api_call(compute_client.get_instance, instance_id)
     if not instance:
-        raise oci.exceptions.ServiceError(status=404, message=f"Instância {instance_id} não encontrada.")
+        raise Exception(f"Falha ao obter detalhes: A instância com OCID {instance_id} não foi encontrada ou pode ter sido terminada recentemente.")
 
     image = _safe_api_call(compute_client.get_image, instance.image_id)
     os_name = f"{image.operating_system} {image.operating_system_version}" if image else "N/A"
@@ -328,10 +326,18 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
             for nsg_id in vnic.nsg_ids:
                 nsg = _safe_api_call(virtual_network_client.get_network_security_group, nsg_id)
                 if nsg:
-                    rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_id)
+                    ingress_rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_id, direction="INGRESS")
+                    egress_rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_id, direction="EGRESS")
+                    
+                    all_rules_sdk = []
+                    if ingress_rules_sdk:
+                        all_rules_sdk.extend(ingress_rules_sdk)
+                    if egress_rules_sdk:
+                        all_rules_sdk.extend(egress_rules_sdk)
+
                     nsg_rules = []
-                    if rules_sdk and rules_sdk.items:
-                        for r in rules_sdk.items:
+                    if all_rules_sdk:
+                        for r in all_rules_sdk:
                             source_dest = r.source if r.direction == 'INGRESS' else r.destination
                             nsg_rules.append(SecurityRule(direction=r.direction, protocol=_translate_protocol(r.protocol), source_or_destination=_get_source_dest_name(virtual_network_client, source_dest), ports=_format_rule_ports(r), description=r.description))
                     network_security_groups.append(NetworkSecurityGroup(id=nsg.id, name=nsg.display_name, rules=nsg_rules))
@@ -553,8 +559,8 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
             cpe_id=ipsec.cpe_id, drg_id=ipsec.drg_id, tunnels=tunnels, 
             static_routes=ipsec.static_routes if connection_routing_type == "STATIC" else []
         ))
-
-    # 5. Coletar VCNs, seus recursos filhos e LPGs
+    
+    # 5. Coletar VCNs e seus recursos filhos (incluindo NSGs agora)
     all_vcns_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_vcns, compartment_id=compartment_id, lifecycle_state="AVAILABLE").data
     vcns = []
     for vcn_sdk in all_vcns_sdk:
@@ -571,17 +577,30 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         rts_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_route_tables, compartment_id=compartment_id, vcn_id=vcn_sdk.id, lifecycle_state="AVAILABLE").data
         route_tables = [RouteTable(id=rt.id, name=rt.display_name, rules=[RouteRule(destination=r.destination, target=get_network_entity_name(virtual_network_client, r.network_entity_id), description=r.description) for r in rt.route_rules]) for rt in rts_sdk]
         route_table_map = {rt.id: rt.name for rt in route_tables}
+        
+        # --- Buscar NSGs específicos para esta VCN ---
+        vcn_specific_nsgs = []
+        nsgs_sdk_for_vcn = oci.pagination.list_call_get_all_results(
+            virtual_network_client.list_network_security_groups,
+            compartment_id=compartment_id,
+            vcn_id=vcn_sdk.id
+        ).data
+
+        for nsg_sdk in nsgs_sdk_for_vcn:
+            ingress_rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_sdk.id, direction="INGRESS")
+            egress_rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_sdk.id, direction="EGRESS")
+
+            all_rules_sdk = []
+            if ingress_rules_sdk: all_rules_sdk.extend(ingress_rules_sdk)
+            if egress_rules_sdk: all_rules_sdk.extend(egress_rules_sdk)
             
-        nsgs_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_network_security_groups, compartment_id=compartment_id, vcn_id=vcn_sdk.id).data
-        nsgs = []
-        for nsg_sdk in nsgs_sdk:
-            rules_sdk = _safe_api_call(virtual_network_client.list_network_security_group_security_rules, nsg_sdk.id)
             rules = []
-            if rules_sdk and rules_sdk.items:
-                for r in rules_sdk.items:
+            if all_rules_sdk:
+                for r in all_rules_sdk:
                     source_dest = r.source if r.direction == 'INGRESS' else r.destination
                     rules.append(SecurityRule(direction=r.direction, protocol=_translate_protocol(r.protocol), source_or_destination=_get_source_dest_name(virtual_network_client, source_dest), ports=_format_rule_ports(r), description=r.description))
-            nsgs.append(NetworkSecurityGroup(id=nsg_sdk.id, name=nsg_sdk.display_name, rules=rules))
+            vcn_specific_nsgs.append(NetworkSecurityGroup(id=nsg_sdk.id, name=nsg_sdk.display_name, rules=rules))
+        # --- FIM DA NOVA LÓGICA ---
         
         lpgs_sdk = oci.pagination.list_call_get_all_results(
             virtual_network_client.list_local_peering_gateways,
@@ -604,7 +623,8 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         vcns.append(VcnData(
             id=vcn_sdk.id, display_name=vcn_sdk.display_name, cidr_block=vcn_sdk.cidr_block, 
             subnets=subnets, security_lists=security_lists, route_tables=route_tables,
-            network_security_groups=nsgs, lpgs=lpgs
+            network_security_groups=vcn_specific_nsgs, # Usando a lista específica da VCN
+            lpgs=lpgs
         ))
 
     # 6. Coletar Load Balancers e seus componentes
@@ -710,4 +730,3 @@ def get_new_host_details(region: str, compartment_id: str, compartment_name: str
         load_balancers=[],
         volume_groups=relevant_vgs
     )
-
