@@ -235,7 +235,10 @@ def _validate_ipsec_parameters(tunnel: oci.core.models.IPSecConnectionTunnel) ->
 def list_regions() -> List[Dict[str, str]]:
     if not tenancy_id:
         raise ConnectionError("Tenancy ID não encontrado na configuração da OCI.")
-    identity_client = oci.identity.IdentityClient(config)
+    if signer:
+        identity_client = oci.identity.IdentityClient(config={}, signer=signer)
+    else:
+        identity_client = oci.identity.IdentityClient(config)
     regions = _safe_api_call(identity_client.list_region_subscriptions, tenancy_id)
     return [{"key": r.region_key, "name": r.region_name} for r in regions if r.status == "READY"] if regions else []
 
