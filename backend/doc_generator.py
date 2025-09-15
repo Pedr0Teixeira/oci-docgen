@@ -1,13 +1,13 @@
 # OCI DocGen
 # Autor: Pedro Teixeira
-# Data: 12 de Setembro de 2025
+# Data: 15 de Setembro de 2025
 # Descrição: Módulo responsável por gerar documentos .docx detalhados com sumário clicável.
 
 import os
 import re
 from datetime import datetime
 from io import BytesIO
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Any
 
 import docx
 from docx import Document
@@ -81,7 +81,7 @@ def _add_internal_hyperlink(paragraph: Paragraph, text: str, anchor_name: str):
 def _add_and_bookmark_heading(document: Document, text: str, level: int, toc_list: list, counters: Dict[int, int]):
     if level not in counters: counters[level] = 0
     counters[level] += 1
-    for deeper_level in range(level + 1, 5): 
+    for deeper_level in range(level + 1, 6):
         if deeper_level in counters: counters[deeper_level] = 0
     number_parts = [str(counters.get(i, 0)) for i in range(1, level + 1)]
     number_str = ".".join(number_parts)
@@ -127,6 +127,51 @@ def _create_titled_key_value_table(document, title, data_dict, col_widths=(Inche
         key_cell.text = key
         key_cell.paragraphs[0].runs[0].font.bold = True
         table.cell(i, 1).text = str(value) if value else "N/A"
+    document.add_paragraph()
+
+# --- FUNÇÃO PARA PADRONIZAR A FORMATAÇÃO DE RECURSOS DE REDE ---
+def _add_network_resource_details(
+    document: Document, 
+    resource_title: str,
+    resource_name: str, 
+    rules: List[Any], 
+    associated_hosts: Optional[List[str]],
+    rule_type: str
+):
+    """
+    Função genérica para adicionar os detalhes de um recurso de rede (SL, NSG, RT).
+    """
+    p = document.add_paragraph()
+    p.add_run(f"{resource_title}: {resource_name}").bold = True
+
+    if associated_hosts:
+        p_hosts = document.add_paragraph()
+        p_hosts.add_run("Hosts Associados: ").bold = True
+        p_hosts.add_run(", ".join(sorted(associated_hosts)))
+    
+    if rule_type == "security":
+        headers = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
+    else: # route
+        headers = ["Destino", "Alvo (Target)", "Descrição"]
+
+    if rules:
+        table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
+        _style_table_headers(table, headers)
+        for rule in rules:
+            cells = table.add_row().cells
+            if rule_type == "security":
+                cells[0].text = rule.direction
+                cells[1].text = rule.protocol
+                cells[2].text = rule.ports or "Todas"
+                cells[3].text = rule.source_or_destination or "N/A"
+                cells[4].text = rule.description or ''
+            else: # route
+                cells[0].text = rule.destination
+                cells[1].text = rule.target
+                cells[2].text = rule.description or ''
+    else:
+        document.add_paragraph(f"Nenhuma regra configurada para este {resource_title}.")
+    
     document.add_paragraph()
 
 
@@ -191,6 +236,7 @@ def _add_volume_and_backup_section(document: Document, infra_data: Infrastructur
     document.add_paragraph()
 
 def _add_volume_groups_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
+    if not infra_data.volume_groups: return
     _add_and_bookmark_heading(document, "Volume Groups", 2, toc_list, counters)
     document.add_paragraph("Volume Groups são conjuntos de volumes (Boot e Block) que podem ser gerenciados como uma única unidade, especialmente para backups consistentes e replicação entre regiões.")
     for vg in sorted(infra_data.volume_groups, key=lambda v: v.display_name):
@@ -204,20 +250,21 @@ def _add_volume_groups_section(document: Document, infra_data: InfrastructureDat
             for member_name in vg.members: members_table.add_row().cells[0].text = member_name
             document.add_paragraph()
         else:
-            document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+            document.add_paragraph("Este Volume Group não possui membros.")
         val = vg.validation
         validation_data = {"Política de Backup": val.policy_name, "Replicação Cross-Region": "Habilitada" if val.is_cross_region_replication_enabled else "Desabilitada", "Destino da Replicação": val.cross_region_target}
         _create_titled_key_value_table(document, "Validação de Proteção de Dados", validation_data)
         
 def _add_vcn_details_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
-    sl_to_hosts, nsg_to_hosts, rt_to_hosts = {}, {}, {}
+    sl_to_hosts, rt_to_hosts, nsg_to_hosts = {}, {}, {}
     for instance in infra_data.instances:
         for sl in instance.security_lists: sl_to_hosts.setdefault(sl.name, []).append(instance.host_name)
-        for nsg in instance.network_security_groups: nsg_to_hosts.setdefault(nsg.name, []).append(instance.host_name)
         if instance.route_table: rt_to_hosts.setdefault(instance.route_table.name, []).append(instance.host_name)
+        for nsg in instance.network_security_groups: nsg_to_hosts.setdefault(nsg.name, []).append(instance.host_name)
+    
     _add_and_bookmark_heading(document, "Topologia de Rede Virtual (VCN)", 2, toc_list, counters)
     if not infra_data.vcns:
-        document.add_paragraph("Este recurso não está provisionado neste ambiente."); return
+        document.add_paragraph("Nenhuma VCN encontrada neste compartimento."); return
     for vcn in infra_data.vcns:
         _add_and_bookmark_heading(document, f"VCN: {vcn.display_name}", 3, toc_list, counters)
         _create_titled_key_value_table(document, "Detalhes da VCN", {"CIDR Block": vcn.cidr_block}, col_widths=(Inches(1.5), Inches(5.0)))
@@ -229,50 +276,30 @@ def _add_vcn_details_section(document: Document, infra_data: InfrastructureData,
             for subnet in sorted(vcn.subnets, key=lambda s: s.display_name):
                 cells = table.add_row().cells; cells[0].text = subnet.display_name; cells[1].text = subnet.cidr_block
         else:
-            document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+            document.add_paragraph("Nenhuma subnet encontrada nesta VCN.")
         document.add_paragraph()
+        
         _add_and_bookmark_heading(document, "Security Lists", 4, toc_list, counters)
         if vcn.security_lists:
             for sl in sorted(vcn.security_lists, key=lambda s: s.name):
-                p = document.add_paragraph(); p.add_run(f"Regras da Security List: {sl.name}").bold = True
-                if sl.name in sl_to_hosts:
-                    p_hosts = document.add_paragraph(); p_hosts.add_run("Hosts Associados: ").bold = True; p_hosts.add_run(", ".join(sorted(sl_to_hosts[sl.name])))
-                headers = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
-                table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
-                _style_table_headers(table, headers)
-                for rule in sl.rules:
-                    cells = table.add_row().cells; cells[0].text = rule.direction; cells[1].text = rule.protocol; cells[2].text = rule.ports or "Todas"; cells[3].text = rule.source_or_destination or "N/A"; cells[4].text = rule.description or ''
-                document.add_paragraph()
+                _add_network_resource_details(document, "Regras da Security List", sl.name, sl.rules, sl_to_hosts.get(sl.name), "security")
         else:
-            document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+            document.add_paragraph("Nenhuma Security List encontrada nesta VCN.")
+        
         _add_and_bookmark_heading(document, "Route Tables", 4, toc_list, counters)
         if vcn.route_tables:
             for rt in sorted(vcn.route_tables, key=lambda r: r.name):
-                p = document.add_paragraph(); p.add_run(f"Regras da Route Table: {rt.name}").bold = True
-                if rt.name in rt_to_hosts:
-                    p_hosts = document.add_paragraph(); p_hosts.add_run("Hosts Associados: ").bold = True; p_hosts.add_run(", ".join(sorted(rt_to_hosts[rt.name])))
-                headers = ["Destino", "Alvo (Target)", "Descrição"]
-                table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
-                _style_table_headers(table, headers)
-                for rule in rt.rules:
-                    cells = table.add_row().cells; cells[0].text = rule.destination; cells[1].text = rule.target; cells[2].text = rule.description or ''
-                document.add_paragraph()
+                _add_network_resource_details(document, "Regras da Route Table", rt.name, rt.rules, rt_to_hosts.get(rt.name), "route")
         else:
-            document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+            document.add_paragraph("Nenhuma Route Table encontrada nesta VCN.")
+        
         _add_and_bookmark_heading(document, "Network Security Groups (NSGs)", 4, toc_list, counters)
         if vcn.network_security_groups:
             for nsg in sorted(vcn.network_security_groups, key=lambda n: n.name):
-                p = document.add_paragraph(); p.add_run(f"Regras do NSG: {nsg.name}").bold = True
-                if nsg.name in nsg_to_hosts:
-                    p_hosts = document.add_paragraph(); p_hosts.add_run("Hosts Associados: ").bold = True; p_hosts.add_run(", ".join(sorted(nsg_to_hosts[nsg.name])))
-                headers = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
-                table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
-                _style_table_headers(table, headers)
-                for rule in nsg.rules:
-                    cells = table.add_row().cells; cells[0].text = rule.direction; cells[1].text = rule.protocol; cells[2].text = rule.ports or "Todas"; cells[3].text = rule.source_or_destination or "N/A"; cells[4].text = rule.description or ''
-                document.add_paragraph()
+                 _add_network_resource_details(document, "Network Security Group", nsg.name, nsg.rules, nsg_to_hosts.get(nsg.name), "security")
         else:
-            document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+            document.add_paragraph("Nenhum Network Security Group encontrado para esta VCN.")
+        
         _add_and_bookmark_heading(document, "Local Peering Gateways (LPGs)", 4, toc_list, counters)
         if vcn.lpgs:
             headers = ['Nome', 'Status do Peering', 'Route Table', 'CIDR Anunciado', 'Cross-Tenancy']
@@ -281,7 +308,7 @@ def _add_vcn_details_section(document: Document, infra_data: InfrastructureData,
             for lpg in vcn.lpgs:
                 cells = table.add_row().cells; cells[0].text = lpg.display_name; cells[1].text = lpg.peering_status_details or lpg.peering_status; cells[2].text = lpg.route_table_name; cells[3].text = lpg.peer_advertised_cidr or "N/A"; cells[4].text = "Sim" if lpg.is_cross_tenancy_peering else "Não"
         else:
-            document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+            document.add_paragraph("Nenhum Local Peering Gateway encontrado nesta VCN.")
         document.add_paragraph()
 
 def _add_load_balancers_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
@@ -300,7 +327,7 @@ def _add_load_balancers_section(document: Document, infra_data: InfrastructureDa
             for listener in lb.listeners: 
                 cells = table.add_row().cells; cells[0].text = listener.name; cells[1].text = listener.protocol; cells[2].text = str(listener.port); cells[3].text = listener.default_backend_set_name
         else:
-            document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+            document.add_paragraph("Nenhum Listener configurado.")
         document.add_paragraph()
         _add_and_bookmark_heading(document, "Backend Sets", 4, toc_list, counters)
         if lb.backend_sets:
@@ -315,19 +342,21 @@ def _add_load_balancers_section(document: Document, infra_data: InfrastructureDa
                         cells = table.add_row().cells; cells[0].text = backend.name; cells[1].text = backend.ip_address; cells[2].text = str(backend.port); cells[3].text = str(backend.weight)
                     document.add_paragraph()
                 else:
-                    document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+                    document.add_paragraph("Nenhum backend configurado neste Backend Set.")
         else:
-            document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+            document.add_paragraph("Nenhum Backend Set configurado.")
         document.add_paragraph()
 
 def _add_connectivity_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
     _add_and_bookmark_heading(document, "Conectividade Externa e Roteamento", 2, toc_list, counters)
     _add_and_bookmark_heading(document, "Dynamic Routing Gateways (DRGs)", 3, toc_list, counters)
     if not infra_data.drgs:
-        document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+        document.add_paragraph("Nenhum Dynamic Routing Gateway encontrado neste compartimento.")
     else:
         for drg in infra_data.drgs:
             _add_and_bookmark_heading(document, f"DRG: {drg.display_name}", 4, toc_list, counters)
+            
+            _add_and_bookmark_heading(document, "Anexos do DRG", 5, toc_list, counters)
             if drg.attachments:
                 headers = ['Nome do Anexo', 'Tipo', 'DRG Route Table']
                 table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
@@ -336,7 +365,9 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
                     cells = table.add_row().cells; cells[0].text = attachment.display_name; cells[1].text = attachment.network_type; cells[2].text = attachment.route_table_name or "N/A"
                 document.add_paragraph()
             else:
-                document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+                document.add_paragraph("Nenhum anexo encontrado para este DRG.")
+
+            _add_and_bookmark_heading(document, "Conexões de Peering Remoto (RPCs)", 5, toc_list, counters)
             if drg.rpcs:
                 headers = ['Nome da Conexão Remota', 'Status', 'Status do Peering']
                 table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
@@ -347,10 +378,11 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
                     cells = table.add_row().cells; cells[0].text = rpc.display_name; cells[1].text = rpc.lifecycle_state; cells[2].text = status_text
                 document.add_paragraph()
             else:
-                document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+                document.add_paragraph("Nenhuma Conexão de Peering Remoto (RPC) associada a este DRG.")
+            
     _add_and_bookmark_heading(document, "Customer-Premises Equipment (CPEs)", 3, toc_list, counters)
     if not infra_data.cpes:
-        document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+        document.add_paragraph("Nenhum CPE encontrado neste compartimento.")
     else:
         headers = ['Nome do CPE', 'Endereço IP', 'Fabricante']
         table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
@@ -360,7 +392,7 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
     document.add_paragraph()
     _add_and_bookmark_heading(document, "Conexões VPN IPSec", 3, toc_list, counters)
     if not infra_data.ipsec_connections:
-        document.add_paragraph("Este recurso não está provisionado neste ambiente.")
+        document.add_paragraph("Nenhuma Conexão VPN IPSec encontrada neste compartimento.")
     else:
         cpe_map = {cpe.id: cpe.display_name for cpe in infra_data.cpes}; drg_map = {drg.id: drg.display_name for drg in infra_data.drgs}
         _add_and_bookmark_heading(document, "Sumário de Conexões VPN", 4, toc_list, counters)
@@ -445,21 +477,18 @@ def generate_documentation(
     doc_title_text = "Documentação de Infraestrutura" if doc_type == 'full_infra' else "Documentação de Novo Host"
 
     headings_for_toc: List[Tuple[str, str, int]] = []
-    numbering_counters: Dict[int, int] = {i: 0 for i in range(1, 5)}
+    numbering_counters: Dict[int, int] = {i: 0 for i in range(1, 6)}
     
-    # 1. Adicionar página de título
+    # ... (O restante da função permanece igual até a seção doc_type == 'new_host') ...
+    
     title_p = document.add_paragraph(doc_title_text, style='Title')
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph(f"Cliente: {client_name}\nData de Geração: {datetime.now().strftime('%d/%m/%Y')}")
     document.add_page_break()
 
-    # 2. Adicionar placeholder do sumário e uma quebra de página
     toc_placeholder = document.add_paragraph("Sumário", style='Heading 1')
     document.add_page_break()
 
-    # 3. Construir o corpo do documento e popular a lista de cabeçalhos
-    
-    # Seção de Arquitetura (CONDICIONAL)
     if architecture_image_bytes_list:
         _add_and_bookmark_heading(document, "Arquitetura e Escopo", 1, headings_for_toc, numbering_counters)
         _add_and_bookmark_heading(document, "Desenho da Arquitetura", 2, headings_for_toc, numbering_counters)
@@ -501,34 +530,16 @@ def generate_documentation(
         
         _add_and_bookmark_heading(document, "Security Lists", 3, headings_for_toc, numbering_counters)
         for name, info in sorted(sl_map.items()):
-            p = document.add_paragraph(); p.add_run(f"Regras da Security List: {name}").bold = True
-            p_hosts = document.add_paragraph(); p_hosts.add_run("Hosts Associados: ").bold = True; p_hosts.add_run(", ".join(sorted(info['hosts'])))
-            headers = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
-            table = document.add_table(rows=1, cols=len(headers), style='Table Grid'); _style_table_headers(table, headers)
-            for rule in info['rules']:
-                cells = table.add_row().cells; cells[0].text=rule.direction; cells[1].text=rule.protocol; cells[2].text=rule.ports or "Todas"; cells[3].text=rule.source_or_destination or "N/A"; cells[4].text=rule.description or ''
-            document.add_paragraph()
+            _add_network_resource_details(document, "Regras da Security List", name, info['rules'], info.get('hosts'), "security")
 
         _add_and_bookmark_heading(document, "Network Security Groups", 3, headings_for_toc, numbering_counters)
         for name, info in sorted(nsg_map.items()):
-            p = document.add_paragraph(); p.add_run(f"Regras do NSG: {name}").bold = True
-            p_hosts = document.add_paragraph(); p_hosts.add_run("Hosts Associados: ").bold = True; p_hosts.add_run(", ".join(sorted(info['hosts'])))
-            table = document.add_table(rows=1, cols=len(headers), style='Table Grid'); _style_table_headers(table, headers)
-            for rule in info['rules']:
-                cells = table.add_row().cells; cells[0].text=rule.direction; cells[1].text=rule.protocol; cells[2].text=rule.ports or "Todas"; cells[3].text=rule.source_or_destination or "N/A"; cells[4].text=rule.description or ''
-            document.add_paragraph()
+            _add_network_resource_details(document, "Network Security Group", name, info['rules'], info.get('hosts'), "security")
 
         _add_and_bookmark_heading(document, "Route Tables", 3, headings_for_toc, numbering_counters)
         for name, info in sorted(rt_map.items()):
-            p = document.add_paragraph(); p.add_run(f"Regras da Route Table: {name}").bold = True
-            p_hosts = document.add_paragraph(); p_hosts.add_run("Hosts Associados: ").bold = True; p_hosts.add_run(", ".join(sorted(info['hosts'])))
-            headers = ["Destino", "Alvo", "Descrição"]
-            table = document.add_table(rows=1, cols=len(headers), style='Table Grid'); _style_table_headers(table, headers)
-            for rule in info['rules']:
-                cells=table.add_row().cells; cells[0].text=rule.destination; cells[1].text=rule.target; cells[2].text=rule.description or ''
-            document.add_paragraph()
+            _add_network_resource_details(document, "Regras da Route Table", name, info['rules'], info.get('hosts'), "route")
     
-    # Seção de Configurações Adicionais (CONDICIONAL)
     if antivirus_image_bytes_list:
         _add_and_bookmark_heading(document, "Configurações Adicionais", 1, headings_for_toc, numbering_counters)
         _add_and_bookmark_heading(document, "Configuração do Antivírus", 2, headings_for_toc, numbering_counters)
@@ -537,18 +548,16 @@ def generate_documentation(
                 document.add_picture(BytesIO(image_bytes), width=Inches(6.0))
                 document.add_paragraph()
             except Exception as e:
-                document.add_paragraph(f"Erro ao inserir imagem de antivírus: {e}")
+                document.add_paragraph(f"Erro ao inserir imagem de arquitetura: {e}")
 
     _add_responsible_section(document, headings_for_toc, numbering_counters, responsible_name)
 
-    # 4. Preencher o sumário no placeholder
     for text, bookmark, level in reversed(headings_for_toc):
         style_name = f'TOC {level}' if f'TOC {level}' in document.styles else 'TOC 1'
         p = document.add_paragraph(style=style_name)
         _add_internal_hyperlink(p, text, bookmark)
         toc_placeholder._p.addnext(p._p)
 
-    # 5. Salvar o documento
     output_dir = "generated_docs"
     os.makedirs(output_dir, exist_ok=True)
     doc_identifier = "Infraestrutura" if doc_type == 'full_infra' else "NovoHost"
