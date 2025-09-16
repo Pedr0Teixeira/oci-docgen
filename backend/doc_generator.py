@@ -1,7 +1,7 @@
 # OCI DocGen
-# Autor: Pedro Teixeira
-# Data: 15 de Setembro de 2025
-# Descrição: Módulo responsável por gerar documentos .docx detalhados com sumário clicável.
+# Author: Pedro Teixeira
+# Date: September 15, 2025
+# Description: Module responsible for generating detailed .docx documents with a clickable table of contents.
 
 import os
 import re
@@ -22,11 +22,11 @@ from docx.text.paragraph import Paragraph
 
 from schemas import InfrastructureData, InstanceData
 
-# --- Funções Auxiliares para Geração de Sumário e Links Internos ---
+# --- Helper Functions for Table of Contents and Internal Links ---
 
 def _define_toc_styles(document: Document):
     """
-    Cria e configura os estilos 'TOC 1', 'TOC 2' e 'TOC 3' com a indentação correta.
+    Creates and configures 'TOC 1', 'TOC 2', and 'TOC 3' styles with correct indentation.
     """
     styles = document.styles
     if 'TOC 1' not in styles:
@@ -93,7 +93,7 @@ def _add_and_bookmark_heading(document: Document, text: str, level: int, toc_lis
     toc_list.append((final_text, bookmark_name, level))
     return heading
 
-# --- Funções Auxiliares de Estilo de Tabela ---
+# --- Helper Functions for Table Styling ---
 
 def _shade_cell(cell, color="4472C4"):
     shading_elm = parse_xml(r'<w:shd {} w:fill="{}"/>'.format(nsdecls('w'), color))
@@ -129,7 +129,7 @@ def _create_titled_key_value_table(document, title, data_dict, col_widths=(Inche
         table.cell(i, 1).text = str(value) if value else "N/A"
     document.add_paragraph()
 
-# --- FUNÇÃO PARA PADRONIZAR A FORMATAÇÃO DE RECURSOS DE REDE ---
+# --- FUNCTION TO STANDARDIZE NETWORK RESOURCE FORMATTING ---
 def _add_network_resource_details(
     document: Document, 
     resource_title: str,
@@ -139,7 +139,7 @@ def _add_network_resource_details(
     rule_type: str
 ):
     """
-    Função genérica para adicionar os detalhes de um recurso de rede (SL, NSG, RT).
+    Generic function to add details of a network resource (SL, NSG, RT).
     """
     p = document.add_paragraph()
     p.add_run(f"{resource_title}: {resource_name}").bold = True
@@ -175,7 +175,7 @@ def _add_network_resource_details(
     document.add_paragraph()
 
 
-# --- Funções de Geração de Seções ---
+# --- Section Generation Functions ---
 
 def _add_instances_table(document: Document, instances: List[InstanceData]):
     if not instances: return
@@ -455,7 +455,7 @@ def _add_responsible_section(document: Document, toc_list: list, counters: Dict[
     cells[1].text = datetime.now().strftime('%d/%m/%Y')
     document.add_paragraph()
 
-# --- Função Principal de Geração ---
+# --- Main Generation Function ---
 
 def generate_documentation(
     doc_type: str, 
@@ -479,7 +479,7 @@ def generate_documentation(
     headings_for_toc: List[Tuple[str, str, int]] = []
     numbering_counters: Dict[int, int] = {i: 0 for i in range(1, 6)}
     
-    # ... (O restante da função permanece igual até a seção doc_type == 'new_host') ...
+    # ... (The rest of the function remains the same until the doc_type == 'new_host' section) ...
     
     title_p = document.add_paragraph(doc_title_text, style='Title')
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER

@@ -1,7 +1,7 @@
 # OCI DocGen
-# Autor: Pedro Teixeira
-# Data: 15 de Setembro de 2025
-# Descrição: Módulo de conector que interage com o SDK da OCI para buscar dados da infraestrutura.
+# Author: Pedro Teixeira
+# Date: September 15, 2025
+# Description: Connector module that interacts with the OCI SDK to retrieve infrastructure data.
 
 import os
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import oci
 from oci.auth.signers import InstancePrincipalsSecurityTokenSigner
 
-# --- IMPORTAÇÃO DOS SCHEMAS ---
+# --- SCHEMA IMPORTS ---
 from schemas import (BackendData, BackendSetData, BlockVolume, CpeData,
                      DrgAttachmentData, DrgData, HealthCheckerData, HostnameData,
                      InfrastructureData, InstanceData, IpsecData, ListenerData,
@@ -19,7 +19,7 @@ from schemas import (BackendData, BackendSetData, BlockVolume, CpeData,
                      SecurityRule, SubnetData, TunnelData, VcnData,
                      VolumeGroupData, VolumeGroupValidation, BgpSessionInfo)
 
-# --- Mapeamento de Protocolos IANA ---
+# --- IANA Protocol Mapping ---
 IANA_PROTOCOL_MAP = {
     "1": "ICMP",
     "6": "TCP",
@@ -28,12 +28,12 @@ IANA_PROTOCOL_MAP = {
     "all": "Todos os Protocolos",
 }
 
-# --- Configuração Dinâmica de Autenticação da OCI ---
+# --- Dynamic OCI Authentication Setup ---
 
 def get_auth_provider() -> Dict[str, Any]:
     """
-    Determina o provedor de autenticação (API Key ou Instance Principal)
-    com base na variável de ambiente OCI_AUTH_METHOD.
+    Determines the authentication provider (API Key or Instance Principal) 
+    based on the OCI_AUTH_METHOD environment variable.
     """
     auth_method = os.environ.get("OCI_AUTH_METHOD", "API_KEY").upper()
 
@@ -47,7 +47,7 @@ def get_auth_provider() -> Dict[str, Any]:
             print(f"FATAL: Falha ao inicializar o Instance Principal Signer: {e}")
             print("FATAL: Verifique se o script está rodando em uma instância OCI com um Dynamic Group e policies corretas.")
             return {"signer": None, "tenancy_id": None, "config": None}
-    else:  # Padrão para API_KEY
+    else:  # Default to API_KEY
         try:
             config = oci.config.from_file()
             tenancy_id = config.get("tenancy")
@@ -59,17 +59,17 @@ def get_auth_provider() -> Dict[str, Any]:
             print(f"FATAL: Erro ao carregar a configuração da OCI a partir do arquivo: {e}")
             return {"config": None, "tenancy_id": None, "signer": None}
 
-# Inicializa o provedor de autenticação
+# Initialize authentication provider
 auth_details = get_auth_provider()
 config = auth_details["config"]
 signer = auth_details["signer"]
 tenancy_id = auth_details["tenancy_id"]
 
-# --- Cliente de Identidade Global ---
+# --- Global Identity Client ---
 identity_client_for_compartment = None
 if tenancy_id:
     try:
-        # Inicializa o cliente global usado para buscar nomes de compartimento
+        # Initializes the global client used to fetch compartment names
         if signer:
             identity_client_for_compartment = oci.identity.IdentityClient(config={}, signer=signer)
         else:
@@ -77,10 +77,10 @@ if tenancy_id:
     except Exception as e:
         print(f"FATAL: Não foi possível inicializar o cliente de identidade global: {e}")
 
-# --- Funções Auxiliares (Helpers) ---
+# --- Helper Functions ---
 
 def get_client(client_class, region: str):
-    """Cria uma instância de um cliente de serviço da OCI para uma região específica."""
+    """Creates an OCI service client instance for a specific region."""
     try:
         if signer:
             return client_class(config={"region": region}, signer=signer)
@@ -93,7 +93,7 @@ def get_client(client_class, region: str):
         return None
 
 def _safe_api_call(func, *args, **kwargs):
-    """Encapsula uma chamada de API da OCI para tratar exceções comuns de forma robusta."""
+    """Encapsulates an OCI API call to robustly handle common exceptions."""
     try:
         response = func(*args, **kwargs)
         return response.data
@@ -107,12 +107,12 @@ def _safe_api_call(func, *args, **kwargs):
 
 
 def _translate_protocol(protocol_code: str) -> str:
-    """Traduz um código de protocolo para seu nome comum usando IANA_PROTOCOL_MAP."""
+    """Translates a protocol code to its common name using IANA_PROTOCOL_MAP."""
     return IANA_PROTOCOL_MAP.get(str(protocol_code), str(protocol_code))
 
 
 def _format_rule_ports(rule: Any) -> str:
-    """Extrai e formata as portas de uma regra de segurança (TCP/UDP)."""
+    """Extracts and formats the ports from a security rule (TCP/UDP)."""
     options = None
     if hasattr(rule, 'tcp_options') and rule.tcp_options:
         options = rule.tcp_options
@@ -132,7 +132,7 @@ def _format_rule_ports(rule: Any) -> str:
 
 
 def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
-    """Busca o nome de exibição de uma entidade de rede (como Gateways) a partir de seu OCID."""
+    """Fetches the display name of a network entity (like Gateways) from its OCID."""
     if not entity_id:
         return "N/A"
     try:
@@ -163,7 +163,7 @@ def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
 
 
 def _get_drg_route_table_name(virtual_network_client, drg_route_table_id: str) -> str:
-    """Busca o nome de uma DRG Route Table a partir de seu OCID."""
+    """Fetches the name of a DRG Route Table from its OCID."""
     if not drg_route_table_id:
         return "N/A"
     route_table = _safe_api_call(virtual_network_client.get_drg_route_table, drg_route_table_id)
@@ -178,7 +178,7 @@ def _get_source_dest_name(virtual_network_client, source_dest: str) -> str:
     return nsg.display_name if nsg else source_dest
 
 def get_compartment_name(compartment_id: str) -> str:
-    """Busca o nome de um compartimento a partir do seu OCID."""
+    """Fetches a compartment name from its OCID."""
     if not identity_client_for_compartment:
         return "N/A"
     if compartment_id == tenancy_id:
@@ -187,8 +187,8 @@ def get_compartment_name(compartment_id: str) -> str:
     return compartment.name if compartment else "N/A"
 
 def _validate_ipsec_parameters(tunnel: oci.core.models.IPSecConnectionTunnel) -> Tuple[str, Optional[str]]:
-    """Valida os parâmetros de um túnel IPSec contra as recomendações da Oracle, tratando casos especiais como GCM."""
-    
+    """Validates the parameters of an IPSec tunnel against Oracle's recommendations, handling special cases like GCM."""
+
     p1 = tunnel.phase_one_details
     p2 = tunnel.phase_two_details
     
@@ -228,7 +228,7 @@ def _validate_ipsec_parameters(tunnel: oci.core.models.IPSecConnectionTunnel) ->
         return "Fora da recomendação Oracle", docs_link
 
 
-# --- Funções Públicas de Coleta de Dados ---
+# --- Public Data Collection Functions ---
 
 def list_regions() -> List[Dict[str, str]]:
     if not tenancy_id:
@@ -267,7 +267,7 @@ def list_compartments(region: str) -> List[Dict[str, Any]]:
 
 
 def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict[str, str]]:
-    """Busca instâncias com estado 'RUNNING' ou 'STOPPED'."""
+    """Fetches instances with 'RUNNING' or 'STOPPED' state."""
     compute_client = get_client(oci.core.ComputeClient, region)
     if not compute_client:
         raise ConnectionError("Cliente de Computação OCI não pôde ser inicializado.")
@@ -290,7 +290,7 @@ def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict
     return filtered_instances
 
 def get_instance_details(region: str, instance_id: str, compartment_name: str = "N/A") -> InstanceData:
-    """Coleta um conjunto abrangente de detalhes para uma única instância."""
+    """Fetches a comprehensive set of details for a single instance."""
     compute_client = get_client(oci.core.ComputeClient, region)
     virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
     block_storage_client = get_client(oci.core.BlockstorageClient, region)
@@ -378,7 +378,7 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
     )
 
 def _get_volume_groups(block_storage_client: oci.core.BlockstorageClient, compartment_id: str, all_volumes_map: Dict[str, str]) -> List[VolumeGroupData]:
-    """Coleta e valida todos os Volume Groups em um compartimento."""
+    """Collects and validates all Volume Groups in a compartment."""
     volume_groups_data = []
     
     all_vgs_sdk = oci.pagination.list_call_get_all_results(
@@ -430,10 +430,10 @@ def _get_volume_groups(block_storage_client: oci.core.BlockstorageClient, compar
     return volume_groups_data
 
 
-# --- FUNÇÃO PRINCIPAL DE COLETA DE DADOS DE INFRAESTRUTURA ---
+# --- MAIN INFRASTRUCTURE DATA COLLECTION FUNCTION ---
 
 def get_infrastructure_details(region: str, compartment_id: str) -> InfrastructureData:
-    """Orquestra a coleta de dados de infraestrutura de um compartimento."""
+    """Orchestrates the collection of infrastructure data from a compartment."""
     compute_client = get_client(oci.core.ComputeClient, region)
     virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
     load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region)
@@ -442,11 +442,11 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
     compartment_name = get_compartment_name(compartment_id)
     oracle_managed_str = "Gerenciado pela Oracle (Padrão)"
 
-    # 1. Coletar detalhes completos de todas as instâncias
+    # 1. Collect full details for all instances
     all_instances_sdk = oci.pagination.list_call_get_all_results(compute_client.list_instances, compartment_id=compartment_id).data
     instances = [get_instance_details(region, i.id, compartment_name) for i in all_instances_sdk]
 
-    # 1.5 Mapeamento de Volumes e Coleta de Volume Groups
+    # 1.5 Map volumes and collect volume groups
     all_volumes_map = {}
     for instance in instances:
         if instance.boot_volume_id:
@@ -456,7 +456,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
     
     volume_groups = _get_volume_groups(block_storage_client, compartment_id, all_volumes_map)
 
-    # 2. Coletar DRGs, seus Anexos e RPCs
+    # 2. Collect DRGs, their Attachments, and RPCs
     all_drgs_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_drgs, compartment_id=compartment_id).data
     drgs = []
     for drg_sdk in all_drgs_sdk:
@@ -491,8 +491,8 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         ) for r in rpcs_sdk]
 
         drgs.append(DrgData(id=drg_sdk.id, display_name=drg_sdk.display_name, attachments=attachments, rpcs=rpcs))
-        
-    # 3. Coletar CPEs
+
+    # 3. Collect CPEs
     all_cpes_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_cpes, compartment_id=compartment_id).data
     cpes = []
     for cpe in all_cpes_sdk:
@@ -503,7 +503,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                 vendor = shape.cpe_device_info.vendor or "N/A"
         cpes.append(CpeData(id=cpe.id, display_name=cpe.display_name, ip_address=cpe.ip_address, vendor=vendor))
 
-    # 4. Coletar Conexões IPSec
+    # 4. Collect IPSec Connections
     all_ipsec_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_ip_sec_connections, compartment_id=compartment_id).data
     ipsec_connections = []
     for ipsec in all_ipsec_sdk:
@@ -559,8 +559,8 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
             cpe_id=ipsec.cpe_id, drg_id=ipsec.drg_id, tunnels=tunnels, 
             static_routes=ipsec.static_routes if connection_routing_type == "STATIC" else []
         ))
-    
-    # 5. Coletar VCNs e seus recursos filhos (incluindo NSGs agora)
+
+    # 5. Collect VCNs and their child resources
     all_vcns_sdk = oci.pagination.list_call_get_all_results(virtual_network_client.list_vcns, compartment_id=compartment_id, lifecycle_state="AVAILABLE").data
     vcns = []
     for vcn_sdk in all_vcns_sdk:
@@ -578,7 +578,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         route_tables = [RouteTable(id=rt.id, name=rt.display_name, rules=[RouteRule(destination=r.destination, target=get_network_entity_name(virtual_network_client, r.network_entity_id), description=r.description) for r in rt.route_rules]) for rt in rts_sdk]
         route_table_map = {rt.id: rt.name for rt in route_tables}
         
-        # --- Buscar NSGs específicos para esta VCN ---
+        # --- Fetch NSGs specific to this VCN ---
         vcn_specific_nsgs = []
         nsgs_sdk_for_vcn = oci.pagination.list_call_get_all_results(
             virtual_network_client.list_network_security_groups,
@@ -600,7 +600,6 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                     source_dest = r.source if r.direction == 'INGRESS' else r.destination
                     rules.append(SecurityRule(direction=r.direction, protocol=_translate_protocol(r.protocol), source_or_destination=_get_source_dest_name(virtual_network_client, source_dest), ports=_format_rule_ports(r), description=r.description))
             vcn_specific_nsgs.append(NetworkSecurityGroup(id=nsg_sdk.id, name=nsg_sdk.display_name, rules=rules))
-        # --- FIM DA NOVA LÓGICA ---
         
         lpgs_sdk = oci.pagination.list_call_get_all_results(
             virtual_network_client.list_local_peering_gateways,
@@ -623,11 +622,11 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         vcns.append(VcnData(
             id=vcn_sdk.id, display_name=vcn_sdk.display_name, cidr_block=vcn_sdk.cidr_block, 
             subnets=subnets, security_lists=security_lists, route_tables=route_tables,
-            network_security_groups=vcn_specific_nsgs, # Usando a lista específica da VCN
+            network_security_groups=vcn_specific_nsgs, # Using the specific VCN list
             lpgs=lpgs
         ))
 
-    # 6. Coletar Load Balancers e seus componentes
+    # 6. Collect Load Balancers and their components
     all_lbs_summary_sdk = oci.pagination.list_call_get_all_results(load_balancer_client.list_load_balancers, compartment_id=compartment_id).data
     load_balancers = []
     for lb_summary in all_lbs_summary_sdk:
@@ -693,15 +692,15 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         volume_groups=volume_groups
     )
 
-# --- FUNÇÃO PARA O FLUXO DE "NOVO HOST" ---
+# --- FUNCTION FOR "NEW HOST" FLOW ---
 def get_new_host_details(region: str, compartment_id: str, compartment_name: str, instance_ids: List[str]) -> InfrastructureData:
-    """Orquestra a coleta de dados para um conjunto específico de instâncias (Novo Host)."""
+    """Orchestrates the collection of data for a specific set of instances (New Host)."""
     block_storage_client = get_client(oci.core.BlockstorageClient, region)
-    
-    # 1. Coletar detalhes para as instâncias selecionadas
+
+    # 1. Collect details for the selected instances
     instances = [get_instance_details(region, i_id, compartment_name) for i_id in instance_ids]
 
-    # 2. Construir o mapa de volumes apenas para as instâncias selecionadas
+    # 2. Build the volume map only for the selected instances
     all_volumes_map = {}
     selected_volume_ids = set()
     for instance in instances:
@@ -712,7 +711,7 @@ def get_new_host_details(region: str, compartment_id: str, compartment_name: str
             all_volumes_map[bv.id] = f"Block Volume ({bv.display_name})"
             selected_volume_ids.add(bv.id)
 
-    # 3. Obter todos os Volume Groups e filtrar os relevantes
+    # 3. Get all Volume Groups and filter the relevant ones
     all_vgs = _get_volume_groups(block_storage_client, compartment_id, all_volumes_map)
     
     relevant_vgs = [
@@ -720,7 +719,7 @@ def get_new_host_details(region: str, compartment_id: str, compartment_name: str
         if any(vol_id in selected_volume_ids for vol_id in vg.member_ids)
     ]
 
-    # 4. Retornar um objeto InfrastructureData parcial
+    # 4. Return a partial InfrastructureData object
     return InfrastructureData(
         instances=instances,
         vcns=[],
