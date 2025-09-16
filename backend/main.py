@@ -1,7 +1,7 @@
 # OCI DocGen
-# Autor: Pedro Teixeira
-# Data: 09 de Setembro de 2025
-# Descrição: API principal (backend) construída com FastAPI para servir os dados da OCI e gerar os documentos.
+# Author: Pedro Teixeira
+# Date: September 09, 2025
+# Description: Main API (backend) built with FastAPI to serve OCI data and generate documents.
 
 import json
 import os
@@ -17,17 +17,17 @@ import doc_generator
 import oci_connector
 from schemas import GenerateDocRequest, InfrastructureData, NewHostRequest
 
-# Configuração do logging
+# Logging configuration
 logging.basicConfig(level=logging.INFO)
 
-# --- Configuração da Aplicação FastAPI ---
+# --- FastAPI Application Configuration ---
 app = FastAPI(
     title="OCI DocGen API",
-    version="1.6.0", # Versão atualizada
+    version="1.6.0", # Updated version
     description="API para automatizar a coleta de dados da OCI e gerar documentação de infraestrutura."
 )
 
-# --- Configuração do CORS (Cross-Origin Resource Sharing) ---
+# --- CORS (Cross-Origin Resource Sharing) Configuration ---
 origins = [
     "http://localhost",
     "http://localhost:5500",
@@ -42,7 +42,7 @@ app.add_middleware(
 )
 
 
-# --- Endpoints da API ---
+# --- API Endpoints ---
 
 @app.get("/api/regions", summary="Listar Regiões Disponíveis")
 async def get_regions():
@@ -59,7 +59,7 @@ async def get_instances(region: str, compartment_id: str):
     return oci_connector.list_instances_in_compartment(region, compartment_id)
 
 
-# --- NOVO ENDPOINT PARA "NOVO HOST" ---
+# --- ENDPOINT FOR "NEW HOST" ---
 @app.post("/api/{region}/new-host-details", summary="Obter Detalhes de Instâncias Específicas e VGs Associados", response_model=InfrastructureData)
 async def get_new_host_data(region: str, request: NewHostRequest):
     try:

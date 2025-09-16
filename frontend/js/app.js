@@ -1,15 +1,16 @@
 /**
  * OCI DocGen
- * Autor: Pedro Teixeira
- * Data: 12 de Setembro de 2025 
- * Descrição: Script principal do frontend para interatividade da página, comunicação com a API e manipulação do DOM.
+ * Author: Pedro Teixeira
+ * Date: September 12, 2025 
+ * Description: Main frontend script for page interactivity, API communication, and DOM manipulation.
  */
+
 document.addEventListener('DOMContentLoaded', () => {
 
-  // --- Configurações e Constantes ---
+  // --- Settings and Constants ---
   const API_BASE_URL = 'http://127.0.0.1:8000';
 
-  // --- Seletores de Elementos do DOM ---
+  // --- DOM Element Selectors ---
   const mainAppContainer = document.getElementById('main-app-container');
   const regionContainer = document.getElementById('region-select-container');
   const docTypeContainer = document.getElementById('doctype-select-container');
@@ -36,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const responsibleNameInput = document.getElementById('responsible-name-input');
 
 
-  // --- Variáveis de Estado da Aplicação ---
+  // --- Application State Variables ---
   let selectedRegion = null;
   let selectedDocType = null;
   let selectedCompartmentId = null;
@@ -45,8 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let allInfrastructureData = { instances: [], vcns: [], drgs: [], cpes: [], ipsec_connections: [], load_balancers: [], volume_groups: [] };
   let architectureImageFiles = [];
   let antivirusImageFiles = [];
-  
-  // --- Funções de UI ---
+
+  // --- UI Functions ---
 
   function showToast(message, type = 'success') {
     if (!toastContainer) return;
@@ -328,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // --- Funções de Coleta de Dados (API) ---
+  // --- Data Fetching (API) Functions ---
 
   const fetchRegions = async () => {
     try {
@@ -537,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchInstances();
   };
 
-  // --- Funções de Geração de Conteúdo e Documentos ---
+  // --- Content and Document Generation Functions ---
 
   function generateInfrastructureSummary(data, isNewHostFlow = false) {
     const { instances, vcns, drgs, cpes, ipsec_connections, load_balancers, volume_groups } = data;
