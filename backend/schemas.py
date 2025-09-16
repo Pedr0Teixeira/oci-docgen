@@ -1,17 +1,17 @@
 # OCI DocGen
-# Autor: Pedro Teixeira
-# Data: 12 de Setembro de 2025
-# Descrição: Define os modelos de dados (schemas) Pydantic para validação e serialização de dados na API.
+# Author: Pedro Teixeira
+# Date: September 12, 2025
+# Description: Defines Pydantic data models (schemas) for data validation and serialization in the API.
 
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-# Estes modelos garantem que os dados trocados entre o frontend e o backend
-# tenham uma estrutura consistente e tipos de dados corretos.
+# These models ensure that data exchanged between the frontend and backend
+# has a consistent structure and correct data types.
 
 class BlockVolume(BaseModel):
-    """Representa um Block Volume anexado a uma instância."""
+    """Represents a Block Volume attached to an instance."""
     id: str
     display_name: str
     size_in_gbs: float
@@ -19,7 +19,7 @@ class BlockVolume(BaseModel):
 
 
 class SecurityRule(BaseModel):
-    """Representa uma regra de segurança (Ingress/Egress) de uma Security List ou NSG."""
+    """Represents a security rule (Ingress/Egress) of a Security List or NSG."""
     direction: str
     protocol: str
     source_or_destination: Optional[str] = "N/A"
@@ -28,28 +28,28 @@ class SecurityRule(BaseModel):
 
 
 class RouteRule(BaseModel):
-    """Representa uma regra de uma Route Table."""
+    """Represents a rule of a Route Table."""
     destination: str
     target: str
     description: Optional[str] = None
 
 
 class SecurityList(BaseModel):
-    """Representa uma Security List e suas regras associadas."""
+    """Represents a Security List and its associated rules."""
     id: str
     name: str
     rules: List[SecurityRule]
 
 
 class NetworkSecurityGroup(BaseModel):
-    """Representa um Network Security Group (NSG) e suas regras."""
+    """Represents a Network Security Group (NSG) and its rules."""
     id: str
     name: str
     rules: List[SecurityRule]
 
 
 class RouteTable(BaseModel):
-    """Representa uma Route Table e suas regras de roteamento."""
+    """Represents a Route Table and its routing rules."""
     id: str
     name: str
     rules: List[RouteRule]
@@ -57,7 +57,7 @@ class RouteTable(BaseModel):
 
 class InstanceData(BaseModel):
     """
-    Modelo principal que agrega todos os detalhes coletados de uma única instância da OCI.
+    Main model that aggregates all collected details from a single OCI instance.
     """
     host_name: str
     lifecycle_state: str
@@ -77,16 +77,16 @@ class InstanceData(BaseModel):
     compartment_name: str
 
 
-# --- SCHEMAS PARA DOCUMENTAÇÃO DE INFRAESTRUTURA (DADOS COLETADOS) ---
+# --- SCHEMAS FOR INFRASTRUCTURE DOCUMENTATION (COLLECTED DATA) ---
 
 class SubnetData(BaseModel):
-    """Representa uma Subnet dentro de uma VCN."""
+    """Represents a Subnet within a VCN."""
     id: str
     display_name: str
     cidr_block: str
 
 class LpgData(BaseModel):
-    """Representa um Local Peering Gateway (LPG) dentro de uma VCN."""
+    """Represents a Local Peering Gateway (LPG) within a VCN."""
     id: str
     display_name: str
     lifecycle_state: str
@@ -99,7 +99,7 @@ class LpgData(BaseModel):
     route_table_name: Optional[str] = "N/A"
 
 class RpcData(BaseModel):
-    """Representa uma Remote Peering Connection (RPC) em um DRG."""
+    """Represents a Remote Peering Connection (RPC) in a DRG."""
     id: str
     display_name: str
     lifecycle_state: str
@@ -107,7 +107,7 @@ class RpcData(BaseModel):
     peering_status_details: Optional[str] = None
 
 class DrgAttachmentData(BaseModel):
-    """Representa um anexo de um DRG a outro recurso (ex: VCN, RPC)."""
+    """Represents a DRG attachment to another resource (e.g., VCN, RPC)."""
     id: str
     display_name: str
     network_id: Optional[str] = None
@@ -116,7 +116,7 @@ class DrgAttachmentData(BaseModel):
     route_table_name: Optional[str] = "N/A"
 
 class VcnData(BaseModel):
-    """Representa uma Virtual Cloud Network (VCN) e seus recursos aninhados."""
+    """Represents a Virtual Cloud Network (VCN) and its nested resources."""
     id: str
     display_name: str
     cidr_block: str
@@ -127,7 +127,7 @@ class VcnData(BaseModel):
     lpgs: List[LpgData]
 
 class DrgData(BaseModel):
-    """Representa um Dynamic Routing Gateway e seus anexos."""
+    """Represents a Dynamic Routing Gateway and its attachments."""
     id: str
     display_name: str
     attachments: List[DrgAttachmentData]
@@ -135,7 +135,7 @@ class DrgData(BaseModel):
 
 
 class CpeData(BaseModel):
-    """Representa um Customer-Premises Equipment."""
+    """Represents a Customer-Premises Equipment."""
     id: str
     display_name: str
     ip_address: str
@@ -143,7 +143,7 @@ class CpeData(BaseModel):
 
 
 class PhaseOneDetails(BaseModel):
-    """Detalhes de criptografia da Fase 1 (IKE)."""
+    """Represents the encryption details of Phase 1 (IKE)."""
     is_custom: bool
     authentication_algorithm: str
     encryption_algorithm: str
@@ -152,7 +152,7 @@ class PhaseOneDetails(BaseModel):
 
 
 class PhaseTwoDetails(BaseModel):
-    """Detalhes de criptografia da Fase 2 (IPSec)."""
+    """Represents the encryption details of Phase 2 (IPSec)."""
     is_custom: bool
     authentication_algorithm: Optional[str] = None
     encryption_algorithm: str
@@ -160,7 +160,7 @@ class PhaseTwoDetails(BaseModel):
 
 
 class BgpSessionInfo(BaseModel):
-    """Representa os detalhes de uma sessão BGP em um túnel VPN."""
+    """Represents the details of a BGP session in a VPN tunnel."""
     oracle_bgp_asn: Optional[str] = "N/A"
     customer_bgp_asn: Optional[str] = "N/A"
     oracle_interface_ip: Optional[str] = "N/A"
@@ -168,7 +168,7 @@ class BgpSessionInfo(BaseModel):
 
 
 class TunnelData(BaseModel):
-    """Representa um túnel de uma conexão IPSec com detalhes de criptografia."""
+    """Represents a tunnel of an IPSec connection with encryption details."""
     id: str
     display_name: str
     status: str
@@ -184,7 +184,7 @@ class TunnelData(BaseModel):
 
 
 class IpsecData(BaseModel):
-    """Representa uma conexão IPSec, suas rotas estáticas e túneis."""
+    """Represents an IPSec connection, its static routes, and tunnels."""
     id: str
     display_name: str
     status: str
@@ -194,27 +194,27 @@ class IpsecData(BaseModel):
     tunnels: List[TunnelData]
 
 class BackendData(BaseModel):
-    """Representa um servidor de backend dentro de um Backend Set."""
+    """Represents a backend server within a Backend Set."""
     name: str
     ip_address: str
     port: int
     weight: int
 
 class HealthCheckerData(BaseModel):
-    """Representa a configuração do Health Checker de um Backend Set."""
+    """Represents the configuration of the Health Checker for a Backend Set."""
     protocol: str
     port: int
     url_path: Optional[str] = "/"
 
 class BackendSetData(BaseModel):
-    """Representa um Backend Set de um Load Balancer."""
+    """Represents a Backend Set of a Load Balancer."""
     name: str
     policy: str
     health_checker: HealthCheckerData
     backends: List[BackendData]
 
 class ListenerData(BaseModel):
-    """Representa um Listener de um Load Balancer."""
+    """Represents a Listener of a Load Balancer."""
     name: str
     protocol: str
     port: int
@@ -222,16 +222,16 @@ class ListenerData(BaseModel):
     hostname_names: List[str] = []
 
 class HostnameData(BaseModel):
-    """Representa um Virtual Hostname configurado em um Load Balancer."""
+    """Represents a Virtual Hostname configured on a Load Balancer."""
     name: str
 
 class LoadBalancerIpAddressData(BaseModel):
-    """Representa um endereço IP associado a um Load Balancer."""
+    """Represents an IP address associated with a Load Balancer."""
     ip_address: str
     is_public: bool
 
 class LoadBalancerData(BaseModel):
-    """Modelo principal para agregar todos os dados de um Load Balancer."""
+    """Main model to aggregate all data from a Load Balancer."""
     display_name: str
     lifecycle_state: str
     shape_name: str
@@ -241,16 +241,16 @@ class LoadBalancerData(BaseModel):
     hostnames: List[HostnameData]
 
 
-# --- SCHEMAS PARA VOLUME GROUPS ---
+# --- SCHEMAS FOR VOLUME GROUPS ---
 class VolumeGroupValidation(BaseModel):
-    """Resultados da validação de um Volume Group."""
+    """Represents the results of a Volume Group validation."""
     has_backup_policy: bool
     policy_name: Optional[str] = "Nenhuma"
     is_cross_region_replication_enabled: bool
     cross_region_target: Optional[str] = "Desabilitada"
 
 class VolumeGroupData(BaseModel):
-    """Representa um Volume Group e seus detalhes."""
+    """Represents a Volume Group and its details."""
     id: str
     display_name: str
     availability_domain: str
@@ -261,7 +261,7 @@ class VolumeGroupData(BaseModel):
 
 
 class InfrastructureData(BaseModel):
-    """Modelo principal para agregar todos os dados de infraestrutura de um compartimento."""
+    """Main model to aggregate all infrastructure data from a compartment."""
     instances: List[InstanceData]
     vcns: List[VcnData]
     drgs: List[DrgData]
@@ -271,10 +271,10 @@ class InfrastructureData(BaseModel):
     volume_groups: List[VolumeGroupData]
 
 
-# --- SCHEMAS PARA REQUISIÇÕES DA API ---
+# --- SCHEMAS FOR API REQUESTS ---
 
 class NewHostRequest(BaseModel):
-    """Modelo para a requisição de detalhes de novos hosts."""
+    """Model for the request of new host details."""
     instance_ids: List[str]
     compartment_id: str
     compartment_name: str
@@ -282,7 +282,7 @@ class NewHostRequest(BaseModel):
 
 class GenerateDocRequest(BaseModel):
     """
-    Modelo para o corpo da requisição de geração de qualquer tipo de documento.
+    Model for the request body of document generation.
     """
     doc_type: str
     infra_data: InfrastructureData
