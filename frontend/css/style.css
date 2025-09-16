@@ -1,12 +1,12 @@
 /**
  * OCI DocGen
- * Autor: Pedro Teixeira
- * Data: 09 de Setembro de 2025
- * Descrição: Folha de estilos principal para a interface do OCI DocGen.
+ * Author: Pedro Teixeira
+ * Date: September 09, 2025
+ * Description: Main stylesheet for the OCI DocGen interface.
  */
 
 /* ====================================================== */
-/* 1. CONFIGURAÇÕES GLOBAIS E VARIÁVEIS                   */
+/* 1. GLOBAL SETTINGS & VARIABLES                         */
 /* ====================================================== */
 :root {
   --font-family: 'Inter', sans-serif;
@@ -33,7 +33,7 @@
   --status-peered: #22c55e;
   --status-revoked: #f97316;
   --status-pending: #3b82f6;
-  --status-new: #f97316; /* Laranja para status que requerem atenção */
+  --status-new: #f97316; /* Orange for statuses that require attention */
   --text-highlight-color: #c7d2fe;
 }
 
@@ -55,7 +55,7 @@ body {
 }
 
 /* ====================================================== */
-/* 2. LAYOUT PRINCIPAL E ESTRUTURA                        */
+/* 2. MAIN LAYOUT & STRUCTURE                             */
 /* ====================================================== */
 .container {
   width: 100%;
@@ -72,7 +72,7 @@ body {
   opacity: 0;
   transform: scale(0.95);
   pointer-events: none;
-  display: none; /* Adicionado para evitar problemas de layout */
+  display: none; /* Added to avoid layout issues */
 }
 
 
@@ -146,7 +146,7 @@ body {
 }
 
 /* ====================================================== */
-/* 3. COMPONENTE DE SELEÇÃO CUSTOMIZADO (CUSTOM SELECT)   */
+/* 3. CUSTOM SELECT COMPONENT                             */
 /* ====================================================== */
 .custom-select-container {
   position: relative;
@@ -202,9 +202,9 @@ body {
   border-radius: var(--border-radius);
   z-index: 99;
   box-shadow: var(--shadow);
-  display: flex;             /* Garante que é um container flex */
-  flex-direction: column;    /* Organiza os itens verticalmente */
-  max-height: 300px;         /* Altura máxima para TODO o dropdown */
+  display: flex;             /* Ensures it's a flex container */
+  flex-direction: column;    /* Organizes items vertically */
+  max-height: 300px;         /* Maximum height for the dropdown */
 }
 
 .select-hide {
@@ -304,7 +304,7 @@ body {
 }
 
 /* ====================================================== */
-/* 4. COMPONENTE DE SELEÇÃO MÚLTIPLA (MULTI-SELECT)       */
+/* 4. MULTI-SELECT COMPONENT                              */
 /* ====================================================== */
 .select-item input[type="checkbox"] {
   display: none;
@@ -402,7 +402,7 @@ body {
 }
 
 /* ====================================================== */
-/* 5. BOTÕES E ELEMENTOS DE INTERAÇÃO                     */
+/* 5. BUTTONS & INTERACTION ELEMENTS                      */
 /* ====================================================== */
 .button-primary {
   display: flex;
@@ -443,7 +443,7 @@ body {
 }
 
 /* ====================================================== */
-/* 6. SEÇÃO DE DETALHES E RESUMO                          */
+/* 6. DETAILS & SUMMARY SECTION                           */
 /* ====================================================== */
 #details-container {
   margin-top: 32px;
@@ -654,7 +654,7 @@ fieldset legend {
 }
 
 
-/* --- ESTILOS PARA O RESUMO DE INFRAESTRUTURA --- */
+/* --- STYLES FOR INFRASTRUCTURE SUMMARY --- */
 .infra-summary-main-title {
   font-size: 22px;
   color: var(--text-headers);
@@ -664,7 +664,7 @@ fieldset legend {
 }
 
 .subheader,
-.instance-card-body h5, /* Seletor mais genérico */
+.instance-card-body h5, /* More generic selector */
 .vcn-card-body h5 {
   font-size: 16px;
   font-weight: 600;
@@ -722,7 +722,7 @@ fieldset legend {
   color: var(--status-terminating);
 }
 
-/* --- ESTILOS PARA OS CARDS COMPACTÁVEIS (ACORDEÃO) --- */
+/* --- STYLES FOR COLLAPSIBLE CARDS (ACCORDION) --- */
 .instance-card-header,
 .vcn-card-header,
 .ipsec-card-header {
@@ -825,7 +825,7 @@ fieldset legend {
   font-size: 15px;
 }
 
-/* --- ESTILOS PARA CONECTIVIDADE VPN E LBaaS --- */
+/* --- STYLES FOR VPN & LBaaS CONNECTIVITY --- */
 .ipsec-details {
   display: flex;
   flex-wrap: wrap;
@@ -929,7 +929,7 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 7. COMPONENTES DE UPLOAD DE ARQUIVO                    */
+/* 7. FILE UPLOAD COMPONENTS                              */
 /* ====================================================== */
 .attachments-grid {
   display: grid;
@@ -1056,7 +1056,7 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 8. UTILITÁRIOS, ANIMAÇÕES E RESPONSIVIDADE             */
+/* 8. UTILITIES, ANIMATIONS & RESPONSIVENESS              */
 /* ====================================================== */
 #loading-overlay {
   position: fixed;
@@ -1125,12 +1125,12 @@ fieldset legend {
 .select-search-container {
   padding: 10px 10px 8px 10px;
   border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0; /* Garante que este elemento não encolha */
+  flex-shrink: 0; /* Ensures this element doesn't shrink */
 }
 
 .select-items-list {
-  flex-grow: 1;      /* Ocupa o espaço restante verticalmente */
-  overflow-y: auto;  /* Aplica a barra de rolagem AQUI */
+  flex-grow: 1;      /* Occupies the remaining vertical space */
+  overflow-y: auto;  /* Applies the scrollbar HERE */
   overflow-x: hidden;
   min-height: 0;
 }
@@ -1174,7 +1174,7 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 9. SISTEMA DE NOTIFICAÇÕES (TOAST)                     */
+/* 9. NOTIFICATION SYSTEM (TOAST)                         */
 /* ====================================================== */
 #toast-container {
   position: fixed;
@@ -1236,7 +1236,7 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 10. TELA DE SUCESSO (MODAL)                            */
+/* 10. SUCCESS SCREEN (MODAL)                             */
 /* ====================================================== */
 #success-screen {
   position: fixed;
@@ -1338,7 +1338,7 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 11. ESTILOS PARA VOLUME GROUPS (NOVOS)                 */
+/* 11. STYLES FOR VOLUME GROUPS (NEW)                     */
 /* ====================================================== */
 .member-list {
   list-style: none;

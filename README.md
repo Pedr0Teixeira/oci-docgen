@@ -1,7 +1,7 @@
-# OCI DocGen: Automação de Documentação para Oracle Cloud
+# OCI DocGen: Oracle Cloud Documentation Automation
 
 <p align="center">
-  <strong>Gere documentação técnica completa da sua infraestrutura OCI em minutos, não em dias.</strong>
+  <strong>Generate complete technical documentation of your OCI infrastructure in minutes, not days.</strong>
 </p>
 
 <p align="center">
@@ -11,57 +11,57 @@
   <img src="https://img.shields.io/badge/JavaScript-ES6-yellow?style=for-the-badge&logo=javascript" alt="JavaScript">
 </p>
 
-OCI DocGen é uma ferramenta full-stack projetada para automatizar a criação de documentação de infraestrutura na Oracle Cloud Infrastructure (OCI).  
-Com uma interface web intuitiva, a ferramenta realiza uma varredura completa em um compartimento, coleta dados detalhados sobre os recursos provisionados e gera um documento `.docx` padronizado e profissional.
+OCI DocGen is a full-stack tool designed to automate the creation of infrastructure documentation on Oracle Cloud Infrastructure (OCI).  
+With an intuitive web interface, the tool performs a complete scan in a compartment, collects detailed data about provisioned resources, and generates a standardized, professional `.docx` document.
 
-## Principais Funcionalidades
+## Key Features
 
-- **Descoberta Automática**: Mapeia e lista hierarquicamente as regiões e compartimentos da tenancy.  
-- **Dois Modos de Documentação**: Possibilidade de gerar um documento focado apenas em novas instâncias ou um relatório completo da infraestrutura de um compartimento.  
-- **Coleta de Dados Abrangente**: Extrai informações detalhadas de múltiplos serviços da OCI.  
-- **Interface Web Interativa**: Frontend limpo e reativo que guia o usuário passo a passo no processo de seleção.  
-- **Anexos Manuais**: Suporte a upload de diagramas de arquitetura e evidências visuais.  
-- **Saída Profissional**: Geração de arquivo `.docx` formatado, pronto para entrega a clientes ou auditorias internas.  
+- **Automatic Discovery**: Maps and hierarchically lists the tenancy’s regions and compartments.  
+- **Two Documentation Modes**: Option to generate a document focused only on new instances or a full report of a compartment’s infrastructure.  
+- **Comprehensive Data Collection**: Extracts detailed information from multiple OCI services.  
+- **Interactive Web Interface**: Clean and responsive frontend that guides the user step by step in the selection process.  
+- **Manual Attachments**: Supports uploading architecture diagrams and visual evidence.  
+- **Professional Output**: Generates a formatted `.docx` file, ready to deliver to clients or internal audits.  
 
-## Recursos OCI Cobertos
+## OCI Resources Covered
 
 ### Compute
-- Instâncias (Shape, OCPUs, Memória, Sistema Operacional, IPs)
+- Instances (Shape, OCPUs, Memory, Operating System, IPs)
 
 ### Storage
-- Boot Volumes e Block Volumes (Tamanho, Políticas de Backup)  
-- Volume Groups (Membros, Validação de Backup, Replicação Cross-Region)  
+- Boot Volumes and Block Volumes (Size, Backup Policies)  
+- Volume Groups (Members, Backup Validation, Cross-Region Replication)  
 
 ### Networking
 - Virtual Cloud Networks (VCNs)  
 - Subnets  
-- Security Lists e Route Tables (com todas as regras)  
-- Network Security Groups (NSGs) (com regras e associações)  
+- Security Lists and Route Tables (with all rules)  
+- Network Security Groups (NSGs) (with rules and associations)  
 - Load Balancers (Listeners, Backend Sets, Health Checkers)  
 - Local Peering Gateways (LPGs)  
 
-### Conectividade
-- Dynamic Routing Gateways (DRGs) (Anexos e RPCs)  
+### Connectivity
+- Dynamic Routing Gateways (DRGs) (Attachments and RPCs)  
 - Customer-Premises Equipment (CPEs)  
-- IPSec Connections (Túneis, Criptografia, BGP)  
+- IPSec Connections (Tunnels, Encryption, BGP)  
 
-## Diagrama de Funcionamento
+## Workflow Diagram
 
 ```mermaid
 graph TD
-    subgraph Usuario & Frontend
-        A[Acessa a Interface Web] --> B[Seleciona Região]
-        B --> C[Seleciona Compartimento]
-        C --> D[Seleciona Instâncias - Para Novo Host]
-        D --> E[Clica em Buscar Dados - para Novo Host]
-        C --> F[Clica em Buscar Dados - para Infraestrutura Completa]
-        E --> G[Visualiza Resumo de Instância]
-        F --> H[Visualiza Resumo da Infraestrutura - Instâncias, VCNs, LBs, DRGs, etc.]
-        G --> I{Anexa Imagens?}
+    subgraph User & Frontend
+        A[Access Web Interface] --> B[Select Region]
+        B --> C[Select Compartment]
+        C --> D[Select Instances - For New Host]
+        D --> E[Click Fetch Data - for New Host]
+        C --> F[Click Fetch Data - for Full Infrastructure]
+        E --> G[View Instance Summary]
+        F --> H[View Infrastructure Summary - Instances, VCNs, LBs, DRGs, etc.]
+        G --> I{Attach Images?}
         H --> I
-        I -- Sim --> J[Faz Upload de Arquivos]
-        I -- Não --> K
-        J --> K[Gerar Documento]
+        I -- Yes --> J[Upload Files]
+        I -- No --> K
+        J --> K[Generate Document]
     end
 
     subgraph Backend API
@@ -77,92 +77,92 @@ graph TD
         R[oci_connector.py]
         S[OCI SDK]
     end
-    
+
     subgraph Doc Generator
-        T[doc_generator.py - Cria .docx]
+        T[doc_generator.py - Creates .docx]
     end
 
-    subgraph Documento Final
+    subgraph Final Document
         U[Download .docx]
     end
 
-    A -->|"1. Requisição Inicial"| L
-    L -->|"2. Lista de Regiões"| B
+    A -->|"1. Initial Request"| L
+    L -->|"2. List of Regions"| B
 
-    B -->|"3. Requisição de Compartimentos"| M
-    M -->|"4. Lista de Compartimentos"| C
+    B -->|"3. Request Compartments"| M
+    M -->|"4. List of Compartments"| C
 
-    C -->|"5. Requisição de Instâncias - Novo Host"| N
-    N -->|"6. Lista de Instâncias"| D
+    C -->|"5. Request Instances - New Host"| N
+    N -->|"6. List of Instances"| D
 
-    D -->|"7. Requisição de Detalhes - Instância Única"| O
-    O -->|"8. Retorna Detalhes Consolidados"| G
+    D -->|"7. Request Details - Single Instance"| O
+    O -->|"8. Return Consolidated Details"| G
 
-    C -->|"7'. Requisição de Detalhes - Infra Completa"| P
-    P -->|"8'. Retorna Detalhes Consolidados"| H
+    C -->|"7'. Request Details - Full Infra"| P
+    P -->|"8'. Return Consolidated Details"| H
 
     G & H --> I
-    I -->|"9. Envia JSON + Arquivos"| Q
+    I -->|"9. Send JSON + Files"| Q
     Q --> T
-    T -->|"10. Retorna Arquivo"| U
-    U -->|"11. Usuário baixa documento"| V(Fim)
+    T -->|"10. Return File"| U
+    U -->|"11. User Downloads Document"| V(End)
 
     L & M & N & O & P --> R
-    R -->|"Chama API da OCI"| S
-    S -->|"Retorna dados brutos"| R
-    R -->|"Processa e mapeia dados"| L & M & N & O & P
+    R -->|"Calls OCI API"| S
+    S -->|"Returns raw data"| R
+    R -->|"Processes and maps data"| L & M & N & O & P
 
     Q --> T
     T --> Q
 ```
 
-## Tecnologias Utilizadas
+## Technologies Used
 
 ### Backend
 - Python 3.10+  
-- FastAPI (API RESTful)  
-- OCI Python SDK (integração com API da Oracle Cloud)  
-- Pydantic (validação e serialização de dados)  
-- python-docx (geração de arquivos `.docx`)  
-- Uvicorn / Gunicorn (servidores ASGI/WSGI)  
+- FastAPI (RESTful API)  
+- OCI Python SDK (integration with Oracle Cloud API)  
+- Pydantic (data validation and serialization)  
+- python-docx (generation of `.docx` files)  
+- Uvicorn / Gunicorn (ASGI/WSGI servers)  
 
 ### Frontend
 - HTML5, CSS3, Vanilla JavaScript (ES6)  
 
-## Estrutura do Projeto
+## Project Structure
 ```
     .
     ├── backend/
-    │   ├── doc_generator.py     # Lógica para criar o documento .docx
-    │   ├── generated_docs/      # Diretório onde os documentos são salvos
-    │   ├── main.py              # API FastAPI (endpoints)
-    │   ├── oci_connector.py     # Conexão e busca de dados da OCI
-    │   ├── requirements.txt     # Dependências Python
-    │   └── schemas.py           # Modelos Pydantic
+    │   ├── doc_generator.py     # Logic to create the .docx document
+    │   ├── generated_docs/      # Directory where documents are saved
+    │   ├── main.py              # FastAPI API (endpoints)
+    │   ├── oci_connector.py     # Connection and data retrieval from OCI
+    │   ├── requirements.txt     # Python dependencies
+    │   └── schemas.py           # Pydantic models
     └── frontend/
         ├── css/
-        │   └── style.css        # Estilos
+        │   └── style.css        # Styles
         ├── js/
-        │   └── app.js           # Lógica do frontend
-        └── index.html           # Interface principal
+        │   └── app.js           # Frontend logic
+        └── index.html           # Main interface
 ```
 
 ---
 
-# 🚀 Como Usar
+# 🚀 How to Use
 
-## 🔹 Desenvolvimento Local
+## 🔹 Local Development
 
-### Pré-requisitos
+### Prerequisites
 - Python 3.10+
-- Acesso a uma tenancy OCI com permissões de leitura.
+- Access to an OCI tenancy with read permissions.
 
-### Configuração de Autenticação OCI
-1. **API Key (Padrão):**  
-   Arquivo `~/.oci/config` válido com chaves de API.
+### OCI Authentication Setup
+1. **API Key (Default):**  
+   Valid `~/.oci/config` file with API keys.
 
 2. **Instance Principal:**  
-   Executando em uma instância OCI, defina:  
+   When running on an OCI instance, set:  
    ```bash
    export OCI_AUTH_METHOD=INSTANCE_PRINCIPAL
    ```
@@ -172,33 +172,33 @@ graph TD
 cd backend
 python3 -m venv venv
 source venv/bin/activate   # macOS/Linux
-.env\Scriptsctivate    # Windows (PowerShell)
 venv\Scriptsctivate      # Windows (CMD)
+.env\Scripts\Activate    # Windows (PowerShell)
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
-API disponível em: `http://127.0.0.1:8000`
+API available at: `http://127.0.0.1:8000`
 
 ### 2. Frontend
 ```bash
 cd frontend
 python3 -m http.server 5500
 ```
-Interface disponível em: `http://127.0.0.1:5500`
+Interface available at: `http://127.0.0.1:5500`
 
 ---
 
-## 🔹 Provisionamento em Produção (VM)
+## 🔹 Production Deployment (VM)
 
-Este guia descreve o processo para hospedar o **OCI DocGen** em uma VM Ubuntu 24.04 na OCI, usando **Nginx** como reverse proxy e **Gunicorn** para rodar a aplicação.
+This guide describes the process of hosting **OCI DocGen** on an Ubuntu 24.04 VM in OCI, using **Nginx** as a reverse proxy and **Gunicorn** to run the application.
 
-### 1. Preparação do Sistema
+### 1. System Preparation
 ```bash
 sudo apt update && sudo apt upgrade -y
 sudo apt install python3-pip python3-venv nginx git -y
 ```
 
-### 2. Configuração da Aplicação
+### 2. Application Setup
 ```bash
 sudo useradd --system --no-create-home --shell /bin/false docgen_user
 
@@ -208,7 +208,7 @@ sudo git clone https://github.com/Pedr0Teixeira/oci-docgen.git .
 sudo chown -R docgen_user:docgen_user /var/www/oci-docgen
 ```
 
-### 3. Ambiente Python
+### 3. Python Environment
 ```bash
 cd /var/www/oci-docgen/backend
 
@@ -219,15 +219,15 @@ pip install -r requirements.txt
 deactivate
 ```
 
-### 4. Autenticação e IAM
-Recomenda-se a autenticação via **Instance Principal**.  
-Crie um **Dynamic Group** com o OCID da VM e uma **Policy de IAM** concedendo permissões de leitura.  
-Observação: Para **NSGs**, utilize `use`; para a maioria das operações, `read` é suficiente.
+### 4. Authentication and IAM
+It is recommended to use **Instance Principal** authentication.  
+Create a **Dynamic Group** with the VM’s OCID and an **IAM Policy** granting read permissions.  
+Note: For **NSGs**, use `use`; for most operations, `read` is sufficient.
 
-Referência: [OCI Policy Reference](https://docs.oracle.com/en-us/iaas/Content/Identity/Reference/policyreference.htm#Core_Services)
+Reference: [OCI Policy Reference](https://docs.oracle.com/en-us/iaas/Content/Identity/Reference/policyreference.htm#Core_Services)
 
-### 5. Serviço com systemd
-Crie `/etc/systemd/system/ocidocgen.service`:
+### 5. systemd Service
+Create `/etc/systemd/system/ocidocgen.service`:
 
 ```ini
 [Unit]
@@ -245,20 +245,20 @@ ExecStart=/var/www/oci-docgen/backend/venv/bin/gunicorn --workers 4 --worker-cla
 WantedBy=multi-user.target
 ```
 
-Ative e inicie o serviço:
+Enable and start the service:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable ocidocgen
 sudo systemctl start ocidocgen
 ```
 
-### 6. Configuração do Nginx (Reverse Proxy)
-Crie `/etc/nginx/sites-available/ocidocgen`:
+### 6. Nginx Configuration (Reverse Proxy)
+Create `/etc/nginx/sites-available/ocidocgen`:
 
 ```nginx
 server {
     listen 80;
-    server_name SEU_IP_OU_DOMINIO;
+    server_name YOUR_IP_OR_DOMAIN;
 
     location / {
         root /var/www/oci-docgen/frontend;
@@ -275,7 +275,7 @@ server {
 }
 ```
 
-Ative a configuração e reinicie o Nginx:
+Enable the configuration and restart Nginx:
 ```bash
 sudo ln -s /etc/nginx/sites-available/ocidocgen /etc/nginx/sites-enabled/
 sudo rm /etc/nginx/sites-enabled/default
@@ -283,22 +283,22 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-### 7. Liberação da Porta 80
-Adicione uma **Ingress Rule** na Security List ou no NSG da VCN para liberar tráfego TCP na porta 80.
+### 7. Open Port 80
+Add an **Ingress Rule** in the VCN’s Security List or NSG to allow TCP traffic on port 80.
 
 ---
 
-### 📝 Instruções de Uso
+### 📝 Usage Instructions
 
-1. Selecione a **Região**.  
-2. Escolha o **Tipo de Documentação** (Novo Host ou Infraestrutura).  
-3. Selecione o **Compartimento**.  
-4. Escolha as **Instâncias** (se aplicável).  
-5. Clique em **Buscar Dados**.  
-6. (Opcional) Anexe imagens/arquivos.  
-7. Clique em **Gerar Documento (.docx)**.  
+1. Select the **Region**.  
+2. Choose the **Documentation Type** (New Host or Infrastructure).  
+3. Select the **Compartment**.  
+4. Choose the **Instances** (if applicable).  
+5. Click **Fetch Data**.  
+6. (Optional) Attach images/files.  
+7. Click **Generate Document (.docx)**.  
 
 ---
 
-### Autor
-Desenvolvido por **Pedro Teixeira**
+### Author
+Developed by **Pedro Teixeira**
