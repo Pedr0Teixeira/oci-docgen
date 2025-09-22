@@ -524,7 +524,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                     )
 
                 p1_details = tunnel.phase_one_details
-                is_p1_custom = p1_details.is_custom_phase_one_config if p1_details else False
+                is_p1_custom = bool(p1_details.is_custom_phase_one_config) if p1_details else False
                 phase_one = PhaseOneDetails(
                     is_custom=is_p1_custom,
                     authentication_algorithm=p1_details.custom_authentication_algorithm if is_p1_custom and p1_details else oracle_managed_str,
@@ -534,7 +534,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                 )
                 
                 p2_details = tunnel.phase_two_details
-                is_p2_custom = p2_details.is_custom_phase_two_config if p2_details else False
+                is_p2_custom = bool(p2_details.is_custom_phase_two_config) if p2_details else False
                 phase_two = PhaseTwoDetails(
                     is_custom=is_p2_custom,
                     authentication_algorithm=(p2_details.custom_authentication_algorithm if is_p2_custom and p2_details else oracle_managed_str) or "N/A",
@@ -550,7 +550,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                     bgp_session_info=bgp_info
                 ))
         
-        connection_routing_type = "STATIC" # Padrão seguro
+        connection_routing_type = "STATIC"
         if tunnels_sdk:
             connection_routing_type = tunnels_sdk[0].routing
         
