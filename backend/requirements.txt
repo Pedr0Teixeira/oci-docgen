@@ -1,6 +1,8 @@
+# OCI DocGen Python Dependencies
+
+aiofiles
 fastapi
-uvicorn[standard]
 oci
 python-docx
 python-multipart
-aiofiles
+uvicorn[standard]
