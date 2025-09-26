@@ -1,29 +1,31 @@
 # OCI DocGen
 # Author: Pedro Teixeira
-# Date: September 09, 2025
+# Date: September 26, 2025
 # Description: Main API (backend) built with FastAPI to serve OCI data and generate documents.
 
+# --- Standard Library Imports ---
 import json
+import logging
 import os
 import traceback
-from typing import List, Optional
+from typing import List
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Response
+# --- Third-Party Imports ---
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-import logging
 
+# --- Local Application Imports ---
 import doc_generator
 import oci_connector
 from schemas import GenerateDocRequest, InfrastructureData, NewHostRequest
 
-# Logging configuration
+# --- Logging Configuration ---
 logging.basicConfig(level=logging.INFO)
 
 # --- FastAPI Application Configuration ---
 app = FastAPI(
     title="OCI DocGen API",
-    version="1.6.0", # Updated version
+    version="1.6.0",
     description="API para automatizar a coleta de dados da OCI e gerar documentação de infraestrutura."
 )
 
@@ -46,22 +48,28 @@ app.add_middleware(
 
 @app.get("/api/regions", summary="Listar Regiões Disponíveis")
 async def get_regions():
+    """Lists all available OCI regions."""
     return oci_connector.list_regions()
 
 
 @app.get("/api/{region}/compartments", summary="Listar Compartimentos em uma Região")
 async def get_compartments(region: str):
+    """Lists all compartments in a hierarchical structure for a given region."""
     return oci_connector.list_compartments(region)
 
 
 @app.get("/api/{region}/instances/{compartment_id}", summary="Listar Instâncias em um Compartimento")
 async def get_instances(region: str, compartment_id: str):
+    """Lists all running or stopped instances within a specific compartment."""
     return oci_connector.list_instances_in_compartment(region, compartment_id)
 
 
-# --- ENDPOINT FOR "NEW HOST" ---
 @app.post("/api/{region}/new-host-details", summary="Obter Detalhes de Instâncias Específicas e VGs Associados", response_model=InfrastructureData)
 async def get_new_host_data(region: str, request: NewHostRequest):
+    """
+    Fetches detailed information for a specific list of instances,
+    tailored for the 'New Host' documentation flow.
+    """
     try:
         infra_details = oci_connector.get_new_host_details(
             region=region,
@@ -77,6 +85,7 @@ async def get_new_host_data(region: str, request: NewHostRequest):
 
 @app.post("/api/{region}/infrastructure-details/{compartment_id}", summary="Obter Detalhes da Infraestrutura de um Compartimento", response_model=InfrastructureData)
 async def get_infrastructure_data(region: str, compartment_id: str):
+    """Fetches comprehensive infrastructure details from a given compartment."""
     try:
         infra_details = oci_connector.get_infrastructure_details(region, compartment_id)
         return infra_details
@@ -91,14 +100,18 @@ async def create_document(
     architecture_files: List[UploadFile] = File([]),
     antivirus_files: List[UploadFile] = File([])
 ):
+    """
+    Generates a .docx document from the provided infrastructure data and optional image files.
+    """
     logging.info("Endpoint /api/generate-document foi chamado.")
     try:
+        # --- Data Parsing and File Handling ---
         request_data = GenerateDocRequest(**json.loads(json_data))
         architecture_image_bytes_list = [await f.read() for f in architecture_files]
         antivirus_image_bytes_list = [await f.read() for f in antivirus_files]
-        
+
+        # --- Document Generation ---
         logging.info("Chamando doc_generator.generate_documentation...")
-        
         file_path = doc_generator.generate_documentation(
             doc_type=request_data.doc_type,
             infra_data=request_data.infra_data,
@@ -106,23 +119,20 @@ async def create_document(
             architecture_image_bytes_list=architecture_image_bytes_list,
             antivirus_image_bytes_list=antivirus_image_bytes_list
         )
-        
         logging.info(f"doc_generator retornou o caminho do arquivo: {file_path}")
 
+        # --- File Response Preparation ---
         if not os.path.exists(file_path):
             logging.error(f"ERRO CRÍTICO: O arquivo {file_path} não foi encontrado no disco após a geração.")
             raise HTTPException(status_code=500, detail=f"Arquivo gerado não encontrado no servidor: {file_path}")
-        
+
         logging.info(f"Arquivo {file_path} encontrado. Lendo o conteúdo para envio.")
-        
         with open(file_path, "rb") as f:
             file_content = f.read()
 
         file_name = os.path.basename(file_path)
-        headers = {
-            'Content-Disposition': f'attachment; filename="{file_name}"'
-        }
-        
+        headers = {'Content-Disposition': f'attachment; filename="{file_name}"'}
+
         return Response(
             content=file_content,
             media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',

@@ -1,51 +1,67 @@
 # OCI DocGen
 # Author: Pedro Teixeira
-# Date: September 15, 2025
+# Date: September 26, 2025
 # Description: Module responsible for generating detailed .docx documents with a clickable table of contents.
 
+# --- Standard Library Imports ---
 import os
 import re
 from datetime import datetime
 from io import BytesIO
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
+# --- Third-Party Imports ---
 import docx
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.style import WD_STYLE_TYPE
-from docx.oxml.ns import nsdecls
-from docx.oxml import parse_xml
-from docx.oxml.shared import OxmlElement, qn
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
+from docx.oxml.shared import OxmlElement, qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
+# --- Local Application Imports ---
 from schemas import InfrastructureData, InstanceData
 
-# --- Helper Functions for Table of Contents and Internal Links ---
+
+# --- Table of Contents & Hyperlink Helpers ---
 
 def _define_toc_styles(document: Document):
-    """
-    Creates and configures 'TOC 1', 'TOC 2', and 'TOC 3' styles with correct indentation.
-    """
+    """Creates and configures 'TOC 1-3' styles with correct indentation if they don't exist."""
     styles = document.styles
     if 'TOC 1' not in styles:
         style = styles.add_style('TOC 1', WD_STYLE_TYPE.PARAGRAPH)
         style.base_style = styles['Normal']
-        font = style.font; font.name = 'Calibri'; font.size = Pt(11)
-        p_format = style.paragraph_format; p_format.left_indent = Inches(0); p_format.space_after = Pt(4)
+        font = style.font
+        font.name = 'Calibri'
+        font.size = Pt(11)
+        p_format = style.paragraph_format
+        p_format.left_indent = Inches(0)
+        p_format.space_after = Pt(4)
     if 'TOC 2' not in styles:
         style = styles.add_style('TOC 2', WD_STYLE_TYPE.PARAGRAPH)
         style.base_style = styles['Normal']
-        font = style.font; font.name = 'Calibri'; font.size = Pt(11)
-        p_format = style.paragraph_format; p_format.left_indent = Inches(0.25); p_format.space_after = Pt(4)
+        font = style.font
+        font.name = 'Calibri'
+        font.size = Pt(11)
+        p_format = style.paragraph_format
+        p_format.left_indent = Inches(0.25)
+        p_format.space_after = Pt(4)
     if 'TOC 3' not in styles:
         style = styles.add_style('TOC 3', WD_STYLE_TYPE.PARAGRAPH)
         style.base_style = styles['Normal']
-        font = style.font; font.name = 'Calibri'; font.size = Pt(11)
-        p_format = style.paragraph_format; p_format.left_indent = Inches(0.5); p_format.space_after = Pt(4)
+        font = style.font
+        font.name = 'Calibri'
+        font.size = Pt(11)
+        p_format = style.paragraph_format
+        p_format.left_indent = Inches(0.5)
+        p_format.space_after = Pt(4)
+
 
 def add_hyperlink(paragraph: Paragraph, text: str, url: str):
+    """Adds an external hyperlink to a paragraph."""
     part = paragraph.part
     r_id = part.relate_to(url, RT.HYPERLINK, is_external=True)
     hyperlink = OxmlElement('w:hyperlink')
@@ -60,46 +76,68 @@ def add_hyperlink(paragraph: Paragraph, text: str, url: str):
     hyperlink.append(new_run)
     paragraph._p.append(hyperlink)
 
+
 def _add_bookmark(paragraph: Paragraph, bookmark_name: str):
+    """Adds a bookmark anchor to a paragraph, which can be linked to internally."""
     run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
     bookmark_id = str(abs(hash(bookmark_name)) % (10**8))
     start_tag = OxmlElement('w:bookmarkStart')
-    start_tag.set(qn('w:id'), bookmark_id); start_tag.set(qn('w:name'), bookmark_name)
+    start_tag.set(qn('w:id'), bookmark_id)
+    start_tag.set(qn('w:name'), bookmark_name)
     run._r.addprevious(start_tag)
-    end_tag = OxmlElement('w:bookmarkEnd'); end_tag.set(qn('w:id'), bookmark_id)
+    end_tag = OxmlElement('w:bookmarkEnd')
+    end_tag.set(qn('w:id'), bookmark_id)
     run._r.addnext(end_tag)
 
+
 def _add_internal_hyperlink(paragraph: Paragraph, text: str, anchor_name: str):
+    """Adds an internal hyperlink that jumps to a bookmark within the document."""
     hyperlink = OxmlElement('w:hyperlink')
     hyperlink.set(qn('w:anchor'), anchor_name)
-    sub_run = OxmlElement('w:r'); rPr = OxmlElement('w:rPr'); rStyle = OxmlElement('w:rStyle')
-    rStyle.set(qn('w:val'), 'Hyperlink'); rPr.append(rStyle); sub_run.append(rPr)
-    text_element = OxmlElement('w:t'); text_element.text = text; sub_run.append(text_element)
+    sub_run = OxmlElement('w:r')
+    rPr = OxmlElement('w:rPr')
+    rStyle = OxmlElement('w:rStyle')
+    rStyle.set(qn('w:val'), 'Hyperlink')
+    rPr.append(rStyle)
+    sub_run.append(rPr)
+    text_element = OxmlElement('w:t')
+    text_element.text = text
+    sub_run.append(text_element)
     hyperlink.append(sub_run)
     paragraph._p.append(hyperlink)
 
+
 def _add_and_bookmark_heading(document: Document, text: str, level: int, toc_list: list, counters: Dict[int, int]):
-    if level not in counters: counters[level] = 0
+    """Adds a numbered heading, creates a bookmark for it, and adds it to the TOC list."""
+    if level not in counters:
+        counters[level] = 0
     counters[level] += 1
     for deeper_level in range(level + 1, 6):
-        if deeper_level in counters: counters[deeper_level] = 0
+        if deeper_level in counters:
+            counters[deeper_level] = 0
+
     number_parts = [str(counters.get(i, 0)) for i in range(1, level + 1)]
     number_str = ".".join(number_parts)
     final_text = f"{number_str} {text}"
     heading = document.add_paragraph(final_text, style=f'Heading {level}')
+
     clean_text = re.sub(r'[^A-Za-z0-9_]', '', final_text.replace(' ', '_'))
     bookmark_name = f"_Toc_{clean_text}_{len(toc_list)}"
     _add_bookmark(heading, bookmark_name)
     toc_list.append((final_text, bookmark_name, level))
     return heading
 
-# --- Helper Functions for Table Styling ---
+
+# --- Table Styling Helpers ---
 
 def _shade_cell(cell, color="4472C4"):
+    """Applies a background color shading to a table cell."""
     shading_elm = parse_xml(r'<w:shd {} w:fill="{}"/>'.format(nsdecls('w'), color))
     cell._tc.get_or_add_tcPr().append(shading_elm)
 
+
 def _style_table_headers(table, headers, shade_color="4472C4"):
+    """Applies standard formatting to a table's header row."""
     for i, header_text in enumerate(headers):
         cell = table.cell(0, i)
         cell.text = ''
@@ -109,12 +147,15 @@ def _style_table_headers(table, headers, shade_color="4472C4"):
         run.font.color.rgb = RGBColor.from_string('FFFFFF')
         _shade_cell(cell, shade_color)
 
+
 def _create_titled_key_value_table(document, title, data_dict, col_widths=(Inches(2.0), Inches(4.5))):
+    """Creates a two-column table with a merged, styled title header."""
     table = document.add_table(rows=len(data_dict) + 1, cols=2, style='Table Grid')
     table.autofit = False
     table.allow_autofit = False
     table.columns[0].width = col_widths[0]
     table.columns[1].width = col_widths[1]
+
     title_cell = table.cell(0, 0).merge(table.cell(0, 1))
     title_cell.text = ''
     p = title_cell.paragraphs[0]
@@ -122,6 +163,7 @@ def _create_titled_key_value_table(document, title, data_dict, col_widths=(Inche
     run.font.bold = True
     run.font.color.rgb = RGBColor.from_string('FFFFFF')
     _shade_cell(title_cell)
+
     for i, (key, value) in enumerate(data_dict.items(), 1):
         key_cell = table.cell(i, 0)
         key_cell.text = key
@@ -129,18 +171,11 @@ def _create_titled_key_value_table(document, title, data_dict, col_widths=(Inche
         table.cell(i, 1).text = str(value) if value else "N/A"
     document.add_paragraph()
 
-# --- FUNCTION TO STANDARDIZE NETWORK RESOURCE FORMATTING ---
-def _add_network_resource_details(
-    document: Document, 
-    resource_title: str,
-    resource_name: str, 
-    rules: List[Any], 
-    associated_hosts: Optional[List[str]],
-    rule_type: str
-):
-    """
-    Generic function to add details of a network resource (SL, NSG, RT).
-    """
+
+# --- Content Formatting Helpers ---
+
+def _add_network_resource_details(document: Document, resource_title: str, resource_name: str, rules: List[Any], associated_hosts: Optional[List[str]], rule_type: str):
+    """Adds a standardized section for a network resource (SL, NSG, RT) and its rules."""
     p = document.add_paragraph()
     p.add_run(f"{resource_title}: {resource_name}").bold = True
 
@@ -148,11 +183,8 @@ def _add_network_resource_details(
         p_hosts = document.add_paragraph()
         p_hosts.add_run("Hosts Associados: ").bold = True
         p_hosts.add_run(", ".join(sorted(associated_hosts)))
-    
-    if rule_type == "security":
-        headers = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"]
-    else: # route
-        headers = ["Destino", "Alvo (Target)", "Descrição"]
+
+    headers = ["Direção", "Protocolo", "Portas", "Origem/Destino", "Descrição"] if rule_type == "security" else ["Destino", "Alvo (Target)", "Descrição"]
 
     if rules:
         table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
@@ -165,20 +197,22 @@ def _add_network_resource_details(
                 cells[2].text = rule.ports or "Todas"
                 cells[3].text = rule.source_or_destination or "N/A"
                 cells[4].text = rule.description or ''
-            else: # route
+            else:  # route
                 cells[0].text = rule.destination
                 cells[1].text = rule.target
                 cells[2].text = rule.description or ''
     else:
         document.add_paragraph(f"Nenhuma regra configurada para este {resource_title}.")
-    
+
     document.add_paragraph()
 
 
-# --- Section Generation Functions ---
+# --- Document Section Generators ---
 
 def _add_instances_table(document: Document, instances: List[InstanceData]):
-    if not instances: return
+    """Adds the main summary table of compute instances to the document."""
+    if not instances:
+        return
     document.add_paragraph("A tabela a seguir detalha as configurações das instâncias computacionais no escopo.")
     headers = ['HOST', 'SHAPE', 'OCPU', 'MEMÓRIA (GB)', 'BOOT VOL (GB)', 'S.O.', 'IP PRIVADO', 'IP PÚBLICO']
     table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
@@ -190,9 +224,12 @@ def _add_instances_table(document: Document, instances: List[InstanceData]):
         cells[6].text, cells[7].text = data.private_ip, data.public_ip or "N/A"
     document.add_paragraph()
 
+
 def _add_volume_and_backup_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
+    """Adds the section covering attached block volumes and backup policies."""
     instances = infra_data.instances
-    if not instances: return
+    if not instances:
+        return
     volume_to_vg_map = {vol_id: vg.display_name for vg in getattr(infra_data, 'volume_groups', []) if hasattr(vg, 'member_ids') for vol_id in vg.member_ids}
     _add_and_bookmark_heading(document, "Gerenciamento de Volumes e Backup", 2, toc_list, counters)
     _add_and_bookmark_heading(document, "Volumes Anexados (Block Volumes)", 3, toc_list, counters)
@@ -235,8 +272,11 @@ def _add_volume_and_backup_section(document: Document, infra_data: Infrastructur
         document.add_paragraph("Essa política garante que, em caso de falhas, seja possível recuperar o volume rapidamente.")
     document.add_paragraph()
 
+
 def _add_volume_groups_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
-    if not infra_data.volume_groups: return
+    """Adds the Volume Groups details section to the document."""
+    if not infra_data.volume_groups:
+        return
     _add_and_bookmark_heading(document, "Volume Groups", 2, toc_list, counters)
     document.add_paragraph("Volume Groups são conjuntos de volumes (Boot e Block) que podem ser gerenciados como uma única unidade, especialmente para backups consistentes e replicação entre regiões.")
     for vg in sorted(infra_data.volume_groups, key=lambda v: v.display_name):
@@ -247,24 +287,31 @@ def _add_volume_groups_section(document: Document, infra_data: InfrastructureDat
             headers = ["Membros do Grupo"]
             members_table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
             _style_table_headers(members_table, headers)
-            for member_name in vg.members: members_table.add_row().cells[0].text = member_name
+            for member_name in vg.members:
+                members_table.add_row().cells[0].text = member_name
             document.add_paragraph()
         else:
             document.add_paragraph("Este Volume Group não possui membros.")
         val = vg.validation
         validation_data = {"Política de Backup": val.policy_name, "Replicação Cross-Region": "Habilitada" if val.is_cross_region_replication_enabled else "Desabilitada", "Destino da Replicação": val.cross_region_target}
         _create_titled_key_value_table(document, "Validação de Proteção de Dados", validation_data)
-        
+
+
 def _add_vcn_details_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
+    """Adds the detailed VCN topology section, including subnets, SLs, RTs, NSGs, and LPGs."""
     sl_to_hosts, rt_to_hosts, nsg_to_hosts = {}, {}, {}
     for instance in infra_data.instances:
-        for sl in instance.security_lists: sl_to_hosts.setdefault(sl.name, []).append(instance.host_name)
-        if instance.route_table: rt_to_hosts.setdefault(instance.route_table.name, []).append(instance.host_name)
-        for nsg in instance.network_security_groups: nsg_to_hosts.setdefault(nsg.name, []).append(instance.host_name)
-    
+        for sl in instance.security_lists:
+            sl_to_hosts.setdefault(sl.name, []).append(instance.host_name)
+        if instance.route_table:
+            rt_to_hosts.setdefault(instance.route_table.name, []).append(instance.host_name)
+        for nsg in instance.network_security_groups:
+            nsg_to_hosts.setdefault(nsg.name, []).append(instance.host_name)
+
     _add_and_bookmark_heading(document, "Topologia de Rede Virtual (VCN)", 2, toc_list, counters)
     if not infra_data.vcns:
-        document.add_paragraph("Nenhuma VCN encontrada neste compartimento."); return
+        document.add_paragraph("Nenhuma VCN encontrada neste escopo.")
+        return
     for vcn in infra_data.vcns:
         _add_and_bookmark_heading(document, f"VCN: {vcn.display_name}", 3, toc_list, counters)
         _create_titled_key_value_table(document, "Detalhes da VCN", {"CIDR Block": vcn.cidr_block}, col_widths=(Inches(1.5), Inches(5.0)))
@@ -274,45 +321,88 @@ def _add_vcn_details_section(document: Document, infra_data: InfrastructureData,
             table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
             _style_table_headers(table, headers)
             for subnet in sorted(vcn.subnets, key=lambda s: s.display_name):
-                cells = table.add_row().cells; cells[0].text = subnet.display_name; cells[1].text = subnet.cidr_block
+                cells = table.add_row().cells
+                cells[0].text = subnet.display_name
+                cells[1].text = subnet.cidr_block
         else:
             document.add_paragraph("Nenhuma subnet encontrada nesta VCN.")
         document.add_paragraph()
-        
+
         _add_and_bookmark_heading(document, "Security Lists", 4, toc_list, counters)
         if vcn.security_lists:
             for sl in sorted(vcn.security_lists, key=lambda s: s.name):
                 _add_network_resource_details(document, "Regras da Security List", sl.name, sl.rules, sl_to_hosts.get(sl.name), "security")
         else:
             document.add_paragraph("Nenhuma Security List encontrada nesta VCN.")
-        
+
         _add_and_bookmark_heading(document, "Route Tables", 4, toc_list, counters)
         if vcn.route_tables:
             for rt in sorted(vcn.route_tables, key=lambda r: r.name):
                 _add_network_resource_details(document, "Regras da Route Table", rt.name, rt.rules, rt_to_hosts.get(rt.name), "route")
         else:
             document.add_paragraph("Nenhuma Route Table encontrada nesta VCN.")
-        
+
         _add_and_bookmark_heading(document, "Network Security Groups (NSGs)", 4, toc_list, counters)
         if vcn.network_security_groups:
             for nsg in sorted(vcn.network_security_groups, key=lambda n: n.name):
-                 _add_network_resource_details(document, "Network Security Group", nsg.name, nsg.rules, nsg_to_hosts.get(nsg.name), "security")
+                _add_network_resource_details(document, "Network Security Group", nsg.name, nsg.rules, nsg_to_hosts.get(nsg.name), "security")
         else:
             document.add_paragraph("Nenhum Network Security Group encontrado para esta VCN.")
-        
+
         _add_and_bookmark_heading(document, "Local Peering Gateways (LPGs)", 4, toc_list, counters)
         if vcn.lpgs:
             headers = ['Nome', 'Status do Peering', 'Route Table', 'CIDR Anunciado', 'Cross-Tenancy']
             table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
             _style_table_headers(table, headers)
             for lpg in vcn.lpgs:
-                cells = table.add_row().cells; cells[0].text = lpg.display_name; cells[1].text = lpg.peering_status_details or lpg.peering_status; cells[2].text = lpg.route_table_name; cells[3].text = lpg.peer_advertised_cidr or "N/A"; cells[4].text = "Sim" if lpg.is_cross_tenancy_peering else "Não"
+                cells = table.add_row().cells
+                cells[0].text = lpg.display_name
+                cells[1].text = lpg.peering_status_details or lpg.peering_status
+                cells[2].text = lpg.route_table_name
+                cells[3].text = lpg.peer_advertised_cidr or "N/A"
+                cells[4].text = "Sim" if lpg.is_cross_tenancy_peering else "Não"
         else:
             document.add_paragraph("Nenhum Local Peering Gateway encontrado nesta VCN.")
         document.add_paragraph()
 
+
+def _add_kubernetes_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
+    """Adds the OKE (Kubernetes) clusters section to the document."""
+    if not hasattr(infra_data, 'kubernetes_clusters') or not infra_data.kubernetes_clusters:
+        return
+
+    _add_and_bookmark_heading(document, "CONFIGURAÇÃO AMBIENTE OKE", 1, toc_list, counters)
+    for cluster in sorted(infra_data.kubernetes_clusters, key=lambda c: c.name):
+        _add_and_bookmark_heading(document, f"Cluster: {cluster.name}", 2, toc_list, counters)
+        headers = ['NOME DO CLUSTER', 'VERSÃO KUBERNETES', 'VCN ASSOCIADA', 'ENDPOINT API PÚBLICO', 'ENDPOINT API PRIVADO']
+        table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
+        _style_table_headers(table, headers)
+        cells = table.add_row().cells
+        cells[0].text, cells[1].text = cluster.name, cluster.kubernetes_version
+        cells[2].text, cells[3].text = cluster.vcn_name, cluster.public_api_endpoint
+        cells[4].text = cluster.private_api_endpoint
+        document.add_paragraph()
+
+        _add_and_bookmark_heading(document, "Node Pools (Worker Nodes)", 3, toc_list, counters)
+        if cluster.node_pools:
+            headers = ['NOME DO NODE POOL', 'SHAPE', 'OCPUs', 'MEMÓRIA (GB)', 'DISCO (GB)', 'S.O.', 'QT. NODES', 'SUBNET']
+            table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
+            _style_table_headers(table, headers)
+            for np in sorted(cluster.node_pools, key=lambda p: p.name):
+                cells = table.add_row().cells
+                cells[0].text, cells[1].text = np.name, np.shape
+                cells[2].text, cells[3].text = str(np.ocpus), str(np.memory_in_gbs)
+                cells[4].text, cells[5].text = str(np.boot_volume_size_in_gbs), np.os_image
+                cells[6].text, cells[7].text = str(np.node_count), np.subnet_name
+            document.add_paragraph()
+        else:
+            document.add_paragraph("Nenhum Node Pool encontrado para este cluster.")
+
+
 def _add_load_balancers_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
-    if not hasattr(infra_data, 'load_balancers') or not infra_data.load_balancers: return
+    """Adds the Load Balancers (LBaaS) section to the document."""
+    if not hasattr(infra_data, 'load_balancers') or not infra_data.load_balancers:
+        return
     _add_and_bookmark_heading(document, "Load Balancers (LBaaS)", 2, toc_list, counters)
     for lb in infra_data.load_balancers:
         _add_and_bookmark_heading(document, f"Load Balancer: {lb.display_name}", 3, toc_list, counters)
@@ -324,22 +414,26 @@ def _add_load_balancers_section(document: Document, infra_data: InfrastructureDa
             headers = ['Nome', 'Protocolo', 'Porta', 'Backend Set Padrão']
             table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
             _style_table_headers(table, headers)
-            for listener in lb.listeners: 
-                cells = table.add_row().cells; cells[0].text = listener.name; cells[1].text = listener.protocol; cells[2].text = str(listener.port); cells[3].text = listener.default_backend_set_name
+            for listener in lb.listeners:
+                cells = table.add_row().cells
+                cells[0].text, cells[1].text, cells[2].text = listener.name, listener.protocol, str(listener.port)
+                cells[3].text = listener.default_backend_set_name
         else:
             document.add_paragraph("Nenhum Listener configurado.")
         document.add_paragraph()
         _add_and_bookmark_heading(document, "Backend Sets", 4, toc_list, counters)
         if lb.backend_sets:
             for bs in lb.backend_sets:
-                bs_info = { "Política de Balanceamento": bs.policy, "Health Checker": f"{bs.health_checker.protocol}:{bs.health_checker.port} (Path: {bs.health_checker.url_path})" }
+                bs_info = {"Política de Balanceamento": bs.policy, "Health Checker": f"{bs.health_checker.protocol}:{bs.health_checker.port} (Path: {bs.health_checker.url_path})"}
                 _create_titled_key_value_table(document, f"Configuração do Backend Set: {bs.name}", bs_info)
                 if bs.backends:
                     headers = ['Nome do Backend', 'IP', 'Porta', 'Peso']
                     table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
                     _style_table_headers(table, headers)
-                    for backend in bs.backends: 
-                        cells = table.add_row().cells; cells[0].text = backend.name; cells[1].text = backend.ip_address; cells[2].text = str(backend.port); cells[3].text = str(backend.weight)
+                    for backend in bs.backends:
+                        cells = table.add_row().cells
+                        cells[0].text, cells[1].text = backend.name, backend.ip_address
+                        cells[2].text, cells[3].text = str(backend.port), str(backend.weight)
                     document.add_paragraph()
                 else:
                     document.add_paragraph("Nenhum backend configurado neste Backend Set.")
@@ -347,7 +441,9 @@ def _add_load_balancers_section(document: Document, infra_data: InfrastructureDa
             document.add_paragraph("Nenhum Backend Set configurado.")
         document.add_paragraph()
 
+
 def _add_connectivity_section(document: Document, infra_data: InfrastructureData, toc_list: list, counters: Dict[int, int]):
+    """Adds the external connectivity section (DRG, CPE, VPN) to the document."""
     _add_and_bookmark_heading(document, "Conectividade Externa e Roteamento", 2, toc_list, counters)
     _add_and_bookmark_heading(document, "Dynamic Routing Gateways (DRGs)", 3, toc_list, counters)
     if not infra_data.drgs:
@@ -355,18 +451,17 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
     else:
         for drg in infra_data.drgs:
             _add_and_bookmark_heading(document, f"DRG: {drg.display_name}", 4, toc_list, counters)
-            
             _add_and_bookmark_heading(document, "Anexos do DRG", 5, toc_list, counters)
             if drg.attachments:
                 headers = ['Nome do Anexo', 'Tipo', 'DRG Route Table']
                 table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
                 _style_table_headers(table, headers)
-                for attachment in drg.attachments: 
-                    cells = table.add_row().cells; cells[0].text = attachment.display_name; cells[1].text = attachment.network_type; cells[2].text = attachment.route_table_name or "N/A"
+                for attachment in drg.attachments:
+                    cells = table.add_row().cells
+                    cells[0].text, cells[1].text, cells[2].text = attachment.display_name, attachment.network_type, attachment.route_table_name or "N/A"
                 document.add_paragraph()
             else:
                 document.add_paragraph("Nenhum anexo encontrado para este DRG.")
-
             _add_and_bookmark_heading(document, "Conexões de Peering Remoto (RPCs)", 5, toc_list, counters)
             if drg.rpcs:
                 headers = ['Nome da Conexão Remota', 'Status', 'Status do Peering']
@@ -374,12 +469,14 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
                 _style_table_headers(table, headers)
                 for rpc in drg.rpcs:
                     status_text = rpc.peering_status_details or rpc.peering_status
-                    if rpc.peering_status == 'NEW': status_text = 'New (not peered)'
-                    cells = table.add_row().cells; cells[0].text = rpc.display_name; cells[1].text = rpc.lifecycle_state; cells[2].text = status_text
+                    if rpc.peering_status == 'NEW':
+                        status_text = 'New (not peered)'
+                    cells = table.add_row().cells
+                    cells[0].text, cells[1].text, cells[2].text = rpc.display_name, rpc.lifecycle_state, status_text
                 document.add_paragraph()
             else:
                 document.add_paragraph("Nenhuma Conexão de Peering Remoto (RPC) associada a este DRG.")
-            
+
     _add_and_bookmark_heading(document, "Customer-Premises Equipment (CPEs)", 3, toc_list, counters)
     if not infra_data.cpes:
         document.add_paragraph("Nenhum CPE encontrado neste compartimento.")
@@ -387,14 +484,16 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
         headers = ['Nome do CPE', 'Endereço IP', 'Fabricante']
         table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
         _style_table_headers(table, headers)
-        for cpe in infra_data.cpes: 
-            cells = table.add_row().cells; cells[0].text = cpe.display_name; cells[1].text = cpe.ip_address; cells[2].text = cpe.vendor or "N/A"
+        for cpe in infra_data.cpes:
+            cells = table.add_row().cells
+            cells[0].text, cells[1].text, cells[2].text = cpe.display_name, cpe.ip_address, cpe.vendor or "N/A"
     document.add_paragraph()
     _add_and_bookmark_heading(document, "Conexões VPN IPSec", 3, toc_list, counters)
     if not infra_data.ipsec_connections:
         document.add_paragraph("Nenhuma Conexão VPN IPSec encontrada neste compartimento.")
     else:
-        cpe_map = {cpe.id: cpe.display_name for cpe in infra_data.cpes}; drg_map = {drg.id: drg.display_name for drg in infra_data.drgs}
+        cpe_map = {cpe.id: cpe.display_name for cpe in infra_data.cpes}
+        drg_map = {drg.id: drg.display_name for drg in infra_data.drgs}
         _add_and_bookmark_heading(document, "Sumário de Conexões VPN", 4, toc_list, counters)
         headers = ['Nome da Conexão', 'Status', 'CPE Associado', 'DRG Associado', 'Roteamento', 'Túneis']
         table = document.add_table(rows=1, cols=len(headers), style='Table Grid')
@@ -403,48 +502,43 @@ def _add_connectivity_section(document: Document, infra_data: InfrastructureData
             routing_type = "BGP" if any(t.routing_type == "BGP" for t in ipsec.tunnels) else "STATIC"
             routing_display = f"STATIC ({len(ipsec.static_routes)} rotas)" if routing_type == "STATIC" else "BGP"
             cells = table.add_row().cells
-            cells[0].text = ipsec.display_name
-            cells[1].text = ipsec.status
-            cells[2].text = cpe_map.get(ipsec.cpe_id, ipsec.cpe_id)
-            cells[3].text = drg_map.get(ipsec.drg_id, ipsec.drg_id)
-            cells[4].text = routing_display
-            cells[5].text = str(len(ipsec.tunnels))
+            cells[0].text, cells[1].text = ipsec.display_name, ipsec.status
+            cells[2].text, cells[3].text = cpe_map.get(ipsec.cpe_id, ipsec.cpe_id), drg_map.get(ipsec.drg_id, ipsec.drg_id)
+            cells[4].text, cells[5].text = routing_display, str(len(ipsec.tunnels))
         document.add_paragraph()
         _add_and_bookmark_heading(document, "Detalhes das Conexões VPN", 4, toc_list, counters)
         for ipsec in infra_data.ipsec_connections:
             document.add_paragraph(f"Configuração da Conexão: {ipsec.display_name}", style='Heading 5')
             if not ipsec.tunnels:
-                document.add_paragraph("Nenhum túnel encontrado para esta conexão."); continue
+                document.add_paragraph("Nenhum túnel encontrado para esta conexão.")
+                continue
             for tunnel in ipsec.tunnels:
-                p = document.add_paragraph(); p.add_run(f"Túnel: {tunnel.display_name} ").bold = True; p.add_run(f"(Status: {tunnel.status})")
-                tunnel_info = { "IP Oracle": tunnel.vpn_oracle_ip or "N/A", "IP do CPE": tunnel.cpe_ip or "N/A", "Roteamento": tunnel.routing_type, "Versão IKE": tunnel.ike_version }
+                p = document.add_paragraph()
+                p.add_run(f"Túnel: {tunnel.display_name} ").bold = True
+                p.add_run(f"(Status: {tunnel.status})")
+                tunnel_info = {"IP Oracle": tunnel.vpn_oracle_ip or "N/A", "IP do CPE": tunnel.cpe_ip or "N/A", "Roteamento": tunnel.routing_type, "Versão IKE": tunnel.ike_version}
                 _create_titled_key_value_table(document, "Informações do Túnel", tunnel_info)
-
                 if tunnel.routing_type == "BGP" and tunnel.bgp_session_info:
                     bgp = tunnel.bgp_session_info
-                    bgp_info_data = {
-                        "ASN Oracle": bgp.oracle_bgp_asn,
-                        "ASN do Cliente": bgp.customer_bgp_asn,
-                        "IP do Túnel (Oracle)": bgp.oracle_interface_ip,
-                        "IP do Túnel (Cliente)": bgp.customer_interface_ip
-                    }
+                    bgp_info_data = {"ASN Oracle": bgp.oracle_bgp_asn, "ASN do Cliente": bgp.customer_bgp_asn, "IP do Túnel (Oracle)": bgp.oracle_interface_ip, "IP do Túnel (Cliente)": bgp.customer_interface_ip}
                     _create_titled_key_value_table(document, "Detalhes da Sessão BGP", bgp_info_data)
-                
                 p1 = tunnel.phase_one_details
-                p1_info = { "Autenticação": p1.authentication_algorithm, "Criptografia": p1.encryption_algorithm, "Grupo DH": p1.dh_group, "Lifetime (s)": str(p1.lifetime_in_seconds) }
+                p1_info = {"Autenticação": p1.authentication_algorithm, "Criptografia": p1.encryption_algorithm, "Grupo DH": p1.dh_group, "Lifetime (s)": str(p1.lifetime_in_seconds)}
                 _create_titled_key_value_table(document, "Fase 1 (IKE)", p1_info)
-                
                 p2 = tunnel.phase_two_details
-                p2_info = { "Autenticação": p2.authentication_algorithm or "N/A", "Criptografia": p2.encryption_algorithm, "Lifetime (s)": str(p2.lifetime_in_seconds) }
+                p2_info = {"Autenticação": p2.authentication_algorithm or "N/A", "Criptografia": p2.encryption_algorithm, "Lifetime (s)": str(p2.lifetime_in_seconds)}
                 _create_titled_key_value_table(document, "Fase 2 (IPSec)", p2_info)
-                
                 if tunnel.validation_status == 'Fora da recomendação Oracle' and tunnel.validation_details:
-                    p = document.add_paragraph(); p.add_run("Nota de Configuração: ").bold = True
+                    p = document.add_paragraph()
+                    p.add_run("Nota de Configuração: ").bold = True
                     p.add_run("Os parâmetros de criptografia customizados para este túnel divergem das recomendações padrão da Oracle.")
-                    url_p = document.add_paragraph(tunnel.validation_details); url_p.style = 'Intense Quote'
+                    url_p = document.add_paragraph(tunnel.validation_details)
+                    url_p.style = 'Intense Quote'
                 document.add_paragraph()
 
+
 def _add_responsible_section(document: Document, toc_list: list, counters: Dict[int, int], responsible_name: str):
+    """Adds the final 'Responsible' signature section to the document."""
     _add_and_bookmark_heading(document, "RESPONSÁVEL", 1, toc_list, counters)
     document.add_paragraph("Responsável pelo preenchimento da documentação:")
     headers = ["RESPONSÁVEL", "DATA"]
@@ -455,37 +549,45 @@ def _add_responsible_section(document: Document, toc_list: list, counters: Dict[
     cells[1].text = datetime.now().strftime('%d/%m/%Y')
     document.add_paragraph()
 
-# --- Main Generation Function ---
 
-def generate_documentation(
-    doc_type: str, 
-    infra_data: InfrastructureData,
-    responsible_name: str,
-    architecture_image_bytes_list: Optional[List[bytes]] = None,
-    antivirus_image_bytes_list: Optional[List[bytes]] = None
-) -> str:
-    
+# --- Main Orchestrator Function ---
+
+def generate_documentation(doc_type: str, infra_data: InfrastructureData, responsible_name: str, architecture_image_bytes_list: Optional[List[bytes]] = None, antivirus_image_bytes_list: Optional[List[bytes]] = None) -> str:
+    """
+    Main function to generate a .docx file based on infrastructure data.
+    """
     document = Document()
-    style = document.styles['Normal']; font = style.font; font.name = 'Calibri'; font.size = Pt(11)
+    style = document.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(11)
     _define_toc_styles(document)
 
-    if not infra_data.instances:
-        raise ValueError("Não é possível gerar o documento sem dados de instância para identificar o cliente.")
+    # --- Determine Client Name and Document Type ---
+    client_name = "N/A"
+    if infra_data.instances:
+        client_name = infra_data.instances[0].compartment_name.replace("SERVERS-", "")
+    elif infra_data.kubernetes_clusters:
+        client_name = "Compartimento_OKE"  # Placeholder, can be improved
+    else:
+        raise ValueError("Não há dados de infraestrutura (instâncias ou clusters) para gerar o documento.")
 
-    client_name = infra_data.instances[0].compartment_name.replace("SERVERS-", "")
     safe_client_name = re.sub(r'[\\/*?:"<>|]', "", client_name)
-    doc_title_text = "Documentação de Infraestrutura" if doc_type == 'full_infra' else "Documentação de Novo Host"
+    doc_type_map = {
+        'full_infra': ("Documentação de Infraestrutura", "Infraestrutura"),
+        'new_host': ("Documentação de Novo Host", "NovoHost"),
+        'kubernetes': ("Documentação de Kubernetes (OKE)", "Kubernetes"),
+    }
+    doc_title_text, doc_identifier = doc_type_map.get(doc_type, ("Documentação Técnica", "Geral"))
 
     headings_for_toc: List[Tuple[str, str, int]] = []
     numbering_counters: Dict[int, int] = {i: 0 for i in range(1, 6)}
-    
-    # ... (The rest of the function remains the same until the doc_type == 'new_host' section) ...
-    
+
+    # --- Build Document Structure ---
     title_p = document.add_paragraph(doc_title_text, style='Title')
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph(f"Cliente: {client_name}\nData de Geração: {datetime.now().strftime('%d/%m/%Y')}")
     document.add_page_break()
-
     toc_placeholder = document.add_paragraph("Sumário", style='Heading 1')
     document.add_page_break()
 
@@ -499,22 +601,24 @@ def generate_documentation(
             except Exception as e:
                 document.add_paragraph(f"Erro ao inserir imagem de arquitetura: {e}")
 
-    _add_and_bookmark_heading(document, "Configuração de Infraestrutura", 1, headings_for_toc, numbering_counters)
-    _add_and_bookmark_heading(document, "Instâncias Computacionais", 2, headings_for_toc, numbering_counters)
-    _add_instances_table(document, infra_data.instances)
-
-    _add_volume_and_backup_section(document, infra_data, headings_for_toc, numbering_counters)
-    
-    if hasattr(infra_data, 'volume_groups') and infra_data.volume_groups:
-        _add_volume_groups_section(document, infra_data, headings_for_toc, numbering_counters)
-
-    if doc_type == 'full_infra':
-        _add_vcn_details_section(document, infra_data, headings_for_toc, numbering_counters)
-        if hasattr(infra_data, 'load_balancers') and infra_data.load_balancers:
-            _add_load_balancers_section(document, infra_data, headings_for_toc, numbering_counters)
-        _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters)
-    
-    if doc_type == 'new_host':
+    # --- Add Content Based on Document Type ---
+    if doc_type == 'kubernetes':
+        cluster_vcn_ids = {cluster.vcn_id for cluster in infra_data.kubernetes_clusters}
+        relevant_vcns = [vcn for vcn in infra_data.vcns if vcn.id in cluster_vcn_ids]
+        filtered_infra_data = infra_data.copy(deep=True)
+        filtered_infra_data.vcns = relevant_vcns
+        # Clear other data types not relevant to the K8s doc
+        filtered_infra_data.instances = filtered_infra_data.drgs = filtered_infra_data.cpes = []
+        filtered_infra_data.ipsec_connections = filtered_infra_data.load_balancers = filtered_infra_data.volume_groups = []
+        _add_kubernetes_section(document, filtered_infra_data, headings_for_toc, numbering_counters)
+        _add_vcn_details_section(document, filtered_infra_data, headings_for_toc, numbering_counters)
+    elif doc_type == 'new_host':
+        _add_and_bookmark_heading(document, "Configuração de Infraestrutura", 1, headings_for_toc, numbering_counters)
+        _add_and_bookmark_heading(document, "Instâncias Computacionais", 2, headings_for_toc, numbering_counters)
+        _add_instances_table(document, infra_data.instances)
+        _add_volume_and_backup_section(document, infra_data, headings_for_toc, numbering_counters)
+        if hasattr(infra_data, 'volume_groups') and infra_data.volume_groups:
+            _add_volume_groups_section(document, infra_data, headings_for_toc, numbering_counters)
         _add_and_bookmark_heading(document, "Conectividade de Rede da(s) Instância(s)", 2, headings_for_toc, numbering_counters)
         sl_map, nsg_map, rt_map = {}, {}, {}
         for data in infra_data.instances:
@@ -527,19 +631,25 @@ def generate_documentation(
             if data.route_table:
                 entry = rt_map.setdefault(data.route_table.name, {'rules': data.route_table.rules, 'hosts': []})
                 if data.host_name not in entry['hosts']: entry['hosts'].append(data.host_name)
-        
         _add_and_bookmark_heading(document, "Security Lists", 3, headings_for_toc, numbering_counters)
-        for name, info in sorted(sl_map.items()):
-            _add_network_resource_details(document, "Regras da Security List", name, info['rules'], info.get('hosts'), "security")
-
+        for name, info in sorted(sl_map.items()): _add_network_resource_details(document, "Regras da Security List", name, info['rules'], info.get('hosts'), "security")
         _add_and_bookmark_heading(document, "Network Security Groups", 3, headings_for_toc, numbering_counters)
-        for name, info in sorted(nsg_map.items()):
-            _add_network_resource_details(document, "Network Security Group", name, info['rules'], info.get('hosts'), "security")
-
+        for name, info in sorted(nsg_map.items()): _add_network_resource_details(document, "Network Security Group", name, info['rules'], info.get('hosts'), "security")
         _add_and_bookmark_heading(document, "Route Tables", 3, headings_for_toc, numbering_counters)
-        for name, info in sorted(rt_map.items()):
-            _add_network_resource_details(document, "Regras da Route Table", name, info['rules'], info.get('hosts'), "route")
-    
+        for name, info in sorted(rt_map.items()): _add_network_resource_details(document, "Regras da Route Table", name, info['rules'], info.get('hosts'), "route")
+    else:  # 'full_infra'
+        _add_and_bookmark_heading(document, "Configuração de Infraestrutura", 1, headings_for_toc, numbering_counters)
+        _add_and_bookmark_heading(document, "Instâncias Computacionais", 2, headings_for_toc, numbering_counters)
+        _add_instances_table(document, infra_data.instances)
+        _add_volume_and_backup_section(document, infra_data, headings_for_toc, numbering_counters)
+        if hasattr(infra_data, 'volume_groups') and infra_data.volume_groups:
+            _add_volume_groups_section(document, infra_data, headings_for_toc, numbering_counters)
+        _add_vcn_details_section(document, infra_data, headings_for_toc, numbering_counters)
+        _add_kubernetes_section(document, infra_data, headings_for_toc, numbering_counters)
+        if hasattr(infra_data, 'load_balancers') and infra_data.load_balancers:
+            _add_load_balancers_section(document, infra_data, headings_for_toc, numbering_counters)
+        _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters)
+
     if antivirus_image_bytes_list:
         _add_and_bookmark_heading(document, "Configurações Adicionais", 1, headings_for_toc, numbering_counters)
         _add_and_bookmark_heading(document, "Configuração do Antivírus", 2, headings_for_toc, numbering_counters)
@@ -548,10 +658,11 @@ def generate_documentation(
                 document.add_picture(BytesIO(image_bytes), width=Inches(6.0))
                 document.add_paragraph()
             except Exception as e:
-                document.add_paragraph(f"Erro ao inserir imagem de arquitetura: {e}")
+                document.add_paragraph(f"Erro ao inserir imagem de antivírus: {e}")
 
     _add_responsible_section(document, headings_for_toc, numbering_counters, responsible_name)
 
+    # --- Finalize Document (Generate TOC and Save) ---
     for text, bookmark, level in reversed(headings_for_toc):
         style_name = f'TOC {level}' if f'TOC {level}' in document.styles else 'TOC 1'
         p = document.add_paragraph(style=style_name)
@@ -560,10 +671,9 @@ def generate_documentation(
 
     output_dir = "generated_docs"
     os.makedirs(output_dir, exist_ok=True)
-    doc_identifier = "Infraestrutura" if doc_type == 'full_infra' else "NovoHost"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_name = f"Doc_{doc_identifier}_{safe_client_name}_{timestamp}.docx"
     output_path = os.path.join(output_dir, file_name)
-    
+
     document.save(output_path)
     return output_path
