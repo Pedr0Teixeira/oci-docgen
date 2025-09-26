@@ -53,28 +53,22 @@ With an intuitive web interface, the tool performs a complete scan in a compartm
 
 ```mermaid
 graph TD
-    %% ===============================
-    %% FRONTEND
-    %% ===============================
-    subgraph "Frontend (Interface Web)"
-        A[1. Acessar Interface] --> B{2. Selecionar Região}
-        B --> C{3. Selecionar Tipo de Documento}
-        C -- "Infraestrutura ou Kubernetes" --> D{4. Selecionar Compartimento}
-        C -- "Novo Host" --> E{4. Selecionar Compartimento}
-        E --> F{5. Selecionar Instâncias}
-        D --> G[6. Buscar Dados de Infra/OKE]
-        F --> H["6. Buscar Dados de Novo(s) Hosts"]
-        G --> I[7. Visualizar Resumo Completo]
+    subgraph "Frontend (Web Interface)"
+        A[1. Access Interface] --> B{2. Select Region}
+        B --> C{3. Select Document Type}
+        C -- "Infrastructure or Kubernetes" --> D{4. Select Compartment}
+        C -- "New Host" --> E{4. Select Compartment}
+        E --> F{5. Select Instances}
+        D --> G[6. Fetch Infra/OKE Data]
+        F --> H[6. Fetch New Host Data]
+        G --> I[7. View Complete Summary]
         H --> I
-        I --> J{8. Anexar Imagens?}
-        J -- "Sim" --> K[Upload de Arquivos]
-        J -- "Não" --> L
-        K --> L[9. Gerar Documento]
+        I --> J{8. Attach Images?}
+        J -- "Yes" --> K[Upload Files]
+        J -- "No" --> L
+        K --> L[9. Generate Document]
     end
 
-    %% ===============================
-    %% BACKEND API
-    %% ===============================
     subgraph "Backend API (FastAPI)"
         API_Regions["GET /api/regions"]
         API_Compartments["GET /api/{region}/compartments"]
@@ -84,25 +78,15 @@ graph TD
         API_Generate["POST /api/generate-document"]
     end
 
-    %% ===============================
-    %% LÓGICA INTERNA
-    %% ===============================
-    subgraph "Lógica Interna (Backend)"
-        Connector["oci_connector.py<br/>(Coleta dados via OCI SDK)"]
-        Generator["doc_generator.py<br/>(Cria .docx com python-docx)"]
+    subgraph "Backend Logic"
+        Connector["oci_connector.py<br/>(Collects data via OCI SDK)"]
+        Generator["doc_generator.py<br/>(Creates .docx with python-docx)"]
     end
 
-    %% ===============================
-    %% RESULTADO
-    %% ===============================
-    subgraph "Resultado Final"
-        Download[10. Download do arquivo .docx]
+    subgraph "Final Output"
+        Download[10. Download .docx file]
     end
 
-    %% ===============================
-    %% CONEXÕES
-    %% ===============================
-    %% Frontend -> Backend
     B --> API_Regions
     D --> API_Compartments
     E --> API_Compartments
@@ -111,11 +95,8 @@ graph TD
     H --> API_NewHost
     L --> API_Generate
 
-    %% Backend interno
     API_Regions & API_Compartments & API_Instances & API_InfraDetails & API_NewHost --> Connector
     API_Generate --> Generator
-
-    %% Saída final
     Generator --> Download
 ```
 
@@ -184,11 +165,139 @@ python3 -m http.server 5500
 ```
 Interface available at: `http://127.0.0.1:5500`
 
-### Production Deployment (VM)
+## Configuration for Production Environments
 
-Deployment instructions for Ubuntu VM on OCI, using **Nginx** as reverse proxy and **Gunicorn** for backend.
+Before deployment, two files must be updated to ensure proper communication between frontend and backend.
 
-(Setup, service, and configuration steps follow best practices as described in the original text.)
+### 1. Backend: CORS Policy
+Add your production frontend domain to the allowed origins list.
+
+File: `backend/main.py`
+
+```python
+origins = [
+    "http://localhost",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://your-production-domain.com",  # <-- ADD HERE
+]
+```
+
+### 2. Frontend: API URL
+Update the frontend so that it calls Nginx instead of `localhost`. The API base URL must be relative.
+
+File: `frontend/js/app.js`
+
+```javascript
+// From:
+const API_BASE_URL = 'http://127.0.0.1:8000';
+
+// To:
+const API_BASE_URL = '';
+```
+
+## Production Deployment Guide (Ubuntu VM)
+
+Instructions for deploying OCI DocGen in a VM on OCI using **Nginx** as reverse proxy and **Gunicorn** as backend server.
+
+### 1. System Preparation
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install python3-pip python3-venv nginx git -y
+```
+
+### 2. Application Setup
+```bash
+sudo useradd --system --shell /usr/sbin/nologin --no-create-home docgen_user
+
+sudo git clone https://github.com/Pedr0Teixeira/oci-docgen.git /var/www/oci-docgen
+sudo chown -R docgen_user:docgen_user /var/www/oci-docgen
+```
+
+### 3. Python Environment
+```bash
+sudo -u docgen_user python3 -m venv /var/www/oci-docgen/backend/venv
+sudo -u docgen_user /var/www/oci-docgen/backend/venv/bin/pip install -r /var/www/oci-docgen/backend/requirements.txt
+sudo -u docgen_user /var/www/oci-docgen/backend/venv/bin/pip install gunicorn
+```
+
+### 4. systemd Service
+File: `/etc/systemd/system/ocidocgen.service`
+
+```ini
+[Unit]
+Description=OCI DocGen Gunicorn Service
+After=network.target
+
+[Service]
+User=docgen_user
+Group=docgen_user
+WorkingDirectory=/var/www/oci-docgen/backend
+Environment="OCI_AUTH_METHOD=INSTANCE_PRINCIPAL"
+ExecStart=/var/www/oci-docgen/backend/venv/bin/gunicorn --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:8000 --timeout 120 main:app
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Activate and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now ocidocgen
+```
+
+### 5. Nginx Configuration
+File: `/etc/nginx/sites-available/ocidocgen`
+
+```nginx
+server {
+    listen 80;
+    server_name your_domain_or_ip;
+
+    location / {
+        root /var/www/oci-docgen/frontend;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+Enable configuration:
+```bash
+sudo ln -s /etc/nginx/sites-available/ocidocgen /etc/nginx/sites-enabled/
+sudo systemctl restart nginx
+```
+
+## Troubleshooting
+
+### Frontend Error: "Failed to fetch"
+Possible causes:
+- CORS: The frontend domain was not added to the `origins` list in `backend/main.py`.
+- API URL: `API_BASE_URL` was not adjusted in `frontend/js/app.js`.
+- Nginx vs Backend: Nginx cannot communicate with Gunicorn.
+
+Diagnosis:
+```bash
+curl http://127.0.0.1:8000/api/regions
+```
+If it works, the issue is with Nginx. If it fails, the backend service is the problem.
+
+### systemd Service Fails (status=203/EXEC)
+- Permissions: Ensure `docgen_user` owns the files.
+  ```bash
+  sudo chown -R docgen_user:docgen_user /var/www/oci-docgen
+  ```
+- Incorrect venv path: Ensure the virtual environment exists at `/var/www/oci-docgen/backend/venv`.
+- Gunicorn not installed:
+  ```bash
+  sudo -u docgen_user /var/www/oci-docgen/backend/venv/bin/pip install gunicorn
+  ```
 
 ## Author
 Developed by Pedro Teixeira
