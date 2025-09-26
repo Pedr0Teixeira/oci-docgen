@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Author: Pedro Teixeira
- * Date: September 09, 2025
+ * Date: September 26, 2025
  * Description: Main stylesheet for the OCI DocGen interface.
  */
 
@@ -33,25 +33,25 @@
   --status-peered: #22c55e;
   --status-revoked: #f97316;
   --status-pending: #3b82f6;
-  --status-new: #f97316; /* Orange for statuses that require attention */
+  --status-new: #f97316;
   --text-highlight-color: #c7d2fe;
 }
 
 * {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
 }
 
 body {
-  font-family: var(--font-family);
-  background-color: var(--bg-main);
-  color: var(--text-primary);
   display: flex;
   justify-content: center;
   align-items: flex-start;
   min-height: 100vh;
   padding: 40px 20px;
+  font-family: var(--font-family);
+  background-color: var(--bg-main);
+  color: var(--text-primary);
 }
 
 /* ====================================================== */
@@ -65,16 +65,16 @@ body {
 #main-app-container {
   width: 100%;
   max-width: 800px;
+  caret-color: transparent;
   transition: opacity 0.3s ease-out, transform 0.3s ease-out;
 }
 
 #main-app-container.hidden {
+  display: none;
   opacity: 0;
   transform: scale(0.95);
   pointer-events: none;
-  display: none; /* Added to avoid layout issues */
 }
-
 
 .app-header {
   display: flex;
@@ -96,21 +96,21 @@ body {
 }
 
 .header-subtitle {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background-color: var(--bg-card);
+  margin-left: 4px;
   padding: 4px 8px;
   border-radius: 4px;
-  margin-left: 4px;
+  background-color: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .content-card {
-  background-color: var(--bg-card);
-  border-radius: var(--border-radius);
   padding: 32px;
-  box-shadow: var(--shadow);
   border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-card);
+  box-shadow: var(--shadow);
 }
 
 .step {
@@ -121,15 +121,15 @@ body {
 }
 
 .step-number {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   flex-shrink: 0;
   width: 36px;
   height: 36px;
   border-radius: 50%;
   background: var(--accent-gradient);
   color: white;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   font-weight: 600;
 }
 
@@ -139,10 +139,10 @@ body {
 
 .step-content label {
   display: block;
-  font-size: 14px;
-  font-weight: 500;
   margin-bottom: 8px;
   color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 /* ====================================================== */
@@ -158,15 +158,15 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-height: 50px;
   padding: 12px 16px;
-  background-color: var(--bg-main);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
+  background-color: var(--bg-main);
   color: var(--text-primary);
   font-size: 16px;
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s;
-  min-height: 50px;
 }
 
 .select-selected.select-arrow-active {
@@ -185,7 +185,7 @@ body {
 }
 
 .select-arrow {
-  transition: transform 0.2s ease-in-out;
+  transition: transform 0.3s ease-in-out;
 }
 
 .select-selected.select-arrow-active .select-arrow {
@@ -197,26 +197,32 @@ body {
   top: calc(100% + 8px);
   left: 0;
   right: 0;
-  background-color: var(--bg-dropdown);
+  z-index: 99;
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
-  z-index: 99;
+  background-color: var(--bg-dropdown);
   box-shadow: var(--shadow);
-  display: flex;             /* Ensures it's a flex container */
-  flex-direction: column;    /* Organizes items vertically */
-  max-height: 300px;         /* Maximum height for the dropdown */
 }
 
 .select-hide {
   display: none;
 }
 
+.select-search-container {
+  flex-shrink: 0;
+  padding: 10px 10px 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
 .select-search {
   width: 100%;
   padding: 10px 14px;
-  background-color: var(--bg-main);
   border: 1px solid var(--border-color);
   border-radius: 6px;
+  background-color: var(--bg-main);
   color: var(--text-primary);
   font-family: var(--font-family);
   font-size: 14px;
@@ -227,16 +233,23 @@ body {
   border-color: var(--accent-color-start);
 }
 
+.select-items-list {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .select-item,
 .select-item-parent {
   display: flex;
   align-items: center;
+  gap: 10px;
   padding: 12px 16px;
+  font-size: 15px;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 0.2s;
-  font-size: 15px;
-  gap: 10px;
-  white-space: nowrap;
 }
 
 .select-item-parent {
@@ -250,37 +263,37 @@ body {
 
 .select-selected .selected-item-display {
   display: flex;
+  flex-grow: 1;
   align-items: center;
   gap: 10px;
   overflow: hidden;
-  flex-grow: 1;
 }
 
 .selected-item-display .item-text {
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-icon {
+  flex-shrink: 0;
   width: 18px;
   height: 18px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  color: var(--text-secondary);
 }
 
 .item-tree-prefix {
+  position: relative;
   display: inline-block;
+  flex-shrink: 0;
   width: 20px;
   height: 1em;
-  position: relative;
   margin-right: 5px;
-  flex-shrink: 0;
 }
 
 .item-tree-prefix::before {
@@ -310,15 +323,21 @@ body {
   display: none;
 }
 
+input[type="text"],
+textarea {
+  user-select: text;
+  caret-color: var(--text-primary);
+}
+
 .custom-checkbox {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
   width: 18px;
   height: 18px;
   border: 2px solid var(--border-color);
   border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
   transition: background-color 0.2s, border-color 0.2s;
 }
 
@@ -345,43 +364,43 @@ body {
 .select-selected .selected-items-container {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   padding-right: 20px;
-  align-items: center;
 }
 
 .selected-item-tag {
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: var(--accent-color-start);
-  color: white;
   padding: 2px 8px;
   border-radius: 4px;
+  background-color: var(--accent-color-start);
+  color: white;
   font-size: 13px;
   font-weight: 500;
 }
 
 .instance-info {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 8px;
-  flex: 1;
   overflow: hidden;
 }
 
 .item-text {
-  white-space: nowrap;
+  flex-grow: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-grow: 1;
+  white-space: nowrap;
 }
 
 .instance-status {
+  flex-shrink: 0;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  flex-shrink: 0;
 }
 
 .status-running,
@@ -394,11 +413,11 @@ body {
 }
 
 .status-text {
-  font-size: 12px;
-  color: var(--text-secondary);
+  flex-shrink: 0;
   margin-left: auto;
   padding-left: 8px;
-  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 /* ====================================================== */
@@ -459,11 +478,11 @@ fieldset legend {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-headers);
   margin-bottom: 16px;
   padding: 0;
+  color: var(--text-headers);
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .legend-icon {
@@ -473,10 +492,10 @@ fieldset legend {
 }
 
 .fieldset-divider {
-  border: 0;
   height: 1px;
-  background-image: linear-gradient(to right, rgba(74, 76, 90, 0), rgba(74, 76, 90, 0.75), rgba(74, 76, 90, 0));
   margin: 24px 0;
+  border: 0;
+  background-image: linear-gradient(to right, rgba(74, 76, 90, 0), rgba(74, 76, 90, 0.75), rgba(74, 76, 90, 0));
 }
 
 .instances-container,
@@ -484,7 +503,8 @@ fieldset legend {
 .ipsec-container,
 .lb-container,
 .drg-container,
-.vg-container {
+.vg-container,
+.oke-container {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -502,11 +522,11 @@ fieldset legend {
 }
 
 .instance-summary-title {
-  font-size: 20px;
-  color: var(--accent-color-start);
   margin-bottom: 24px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border-color);
+  color: var(--accent-color-start);
+  font-size: 20px;
 }
 
 .grid-container {
@@ -525,30 +545,30 @@ fieldset legend {
 }
 
 .info-group label {
-  font-size: 14px;
-  font-weight: 500;
   margin-bottom: 8px;
   color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .info-value {
+  display: flex;
+  align-items: center;
   width: 100%;
+  min-height: 50px;
   padding: 12px 16px;
-  background-color: var(--bg-main);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
+  background-color: var(--bg-main);
   color: var(--text-primary);
   font-family: var(--font-family);
   font-size: 16px;
-  min-height: 50px;
-  display: flex;
-  align-items: center;
 }
 
 .info-value .clean-list {
-  list-style: none;
-  padding: 0;
   margin: 0;
+  padding: 0;
+  list-style: none;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -561,8 +581,8 @@ fieldset legend {
 .bv-table,
 .resource-table {
   width: 100%;
-  border-collapse: collapse;
   margin-top: 8px;
+  border-collapse: collapse;
   font-size: 14px;
 }
 
@@ -571,20 +591,20 @@ fieldset legend {
 .bv-table td,
 .resource-table td {
   padding: 10px 14px;
-  text-align: left;
   border-bottom: 1px solid var(--border-color);
+  text-align: left;
 }
 
 .bv-table th,
 .resource-table th {
-  font-weight: 600;
   color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .bv-table td,
 .resource-table td {
-  color: var(--text-primary);
   vertical-align: middle;
+  color: var(--text-primary);
 }
 
 .bv-table tr:last-child td,
@@ -593,10 +613,10 @@ fieldset legend {
 }
 
 .no-data-message {
-  text-align: center;
   padding: 20px;
   color: var(--text-secondary);
   font-style: italic;
+  text-align: center;
 }
 
 .summary-grid {
@@ -615,36 +635,36 @@ fieldset legend {
 }
 
 .summary-group label {
-  font-size: 14px;
-  font-weight: 500;
   margin-bottom: 8px;
   color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .summary-box {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-height: 48px;
   padding: 12px;
-  background-color: var(--bg-main);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
-  min-height: 48px;
+  background-color: var(--bg-main);
 }
 
 .summary-item {
-  background: var(--accent-gradient);
-  color: white;
   padding: 4px 10px;
   border-radius: 12px;
+  background: var(--accent-gradient);
+  color: white;
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
 }
 
 .summary-item.empty {
-  color: var(--text-secondary);
   background: transparent;
+  color: var(--text-secondary);
   font-style: italic;
 }
 
@@ -653,26 +673,24 @@ fieldset legend {
   font-weight: 500;
 }
 
-
-/* --- STYLES FOR INFRASTRUCTURE SUMMARY --- */
 .infra-summary-main-title {
-  font-size: 22px;
-  color: var(--text-headers);
   margin-bottom: 24px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-color);
+  color: var(--text-headers);
+  font-size: 22px;
 }
 
 .subheader,
-.instance-card-body h5, /* More generic selector */
+.instance-card-body h5,
 .vcn-card-body h5 {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-secondary);
   margin-top: 20px;
   margin-bottom: 12px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .subheader:first-of-type,
@@ -687,8 +705,8 @@ fieldset legend {
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -722,10 +740,10 @@ fieldset legend {
   color: var(--status-terminating);
 }
 
-/* --- STYLES FOR COLLAPSIBLE CARDS (ACCORDION) --- */
 .instance-card-header,
 .vcn-card-header,
-.ipsec-card-header {
+.ipsec-card-header,
+.oke-card-header {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -736,31 +754,30 @@ fieldset legend {
 
 .instance-card-header:hover,
 .vcn-card-header:hover,
-.ipsec-card-header:hover {
+.ipsec-card-header:hover,
+.oke-card-header:hover {
   background-color: rgba(255, 255, 255, 0.05);
 }
 
-.card-header-title,
-.vcn-card-header-title,
-.ipsec-card-header-title {
-  font-size: 18px;
-  color: var(--text-primary);
+.card-header-title {
   flex-grow: 1;
+  color: var(--text-primary);
+  font-size: 18px;
 }
 
 .card-status-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
   font-size: 14px;
   font-weight: 600;
-  margin-left: auto;
 }
 
 .vcn-card-header-cidr {
-  font-size: 14px;
   color: var(--text-secondary);
   font-family: monospace;
+  font-size: 14px;
 }
 
 .status-dot {
@@ -786,30 +803,30 @@ fieldset legend {
 }
 
 .expand-arrow {
+  flex-shrink: 0;
   color: var(--text-secondary);
   transition: transform 0.3s ease-in-out;
-  flex-shrink: 0;
 }
 
 .instance-card-body,
 .vcn-card-body,
 .ipsec-card-body {
   max-height: 0;
+  padding: 0 24px;
   overflow: hidden;
   transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
-  padding: 0 24px;
 }
 
-.collapsible.expanded .instance-card-body,
-.collapsible.expanded .vcn-card-body,
-.collapsible.expanded .ipsec-card-body {
+.collapsible.expanded>.instance-card-body,
+.collapsible.expanded>.vcn-card-body,
+.collapsible.expanded>.ipsec-card-body {
   max-height: 2500px;
   padding-top: 24px;
   padding-bottom: 24px;
   border-top: 1px solid var(--border-color);
 }
 
-.collapsible.expanded .expand-arrow {
+.collapsible.expanded>*>.expand-arrow {
   transform: rotate(180deg);
 }
 
@@ -825,14 +842,13 @@ fieldset legend {
   font-size: 15px;
 }
 
-/* --- STYLES FOR VPN & LBaaS CONNECTIVITY --- */
 .ipsec-details {
   display: flex;
   flex-wrap: wrap;
   gap: 16px 24px;
-  font-size: 14px;
-  color: var(--text-secondary);
   margin-bottom: 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .ipsec-details .full-width {
@@ -848,23 +864,22 @@ fieldset legend {
 }
 
 .tunnel-basic-info {
-  list-style: none;
-  padding: 0;
-  margin: 12px 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 8px 24px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
 }
 
 .tunnel-basic-info li {
-  font-size: 13px;
   color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .tunnel-basic-info strong {
   color: var(--text-primary);
 }
-
 
 .tunnel-header {
   display: flex;
@@ -875,8 +890,8 @@ fieldset legend {
 }
 
 .tunnel-header strong {
-  font-size: 15px;
   color: var(--text-primary);
+  font-size: 15px;
 }
 
 .crypto-details-grid {
@@ -887,23 +902,23 @@ fieldset legend {
 }
 
 .tunnel-subheader {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-secondary);
   margin-bottom: 8px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .crypto-details-grid ul {
-  list-style: none;
   padding-left: 0;
+  list-style: none;
 }
 
 .crypto-details-grid li {
   margin-bottom: 6px;
-  font-size: 13px;
   color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .crypto-details-grid li strong {
@@ -911,19 +926,20 @@ fieldset legend {
 }
 
 .tunnel-divider {
-  border: 0;
   height: 1px;
-  background-color: var(--border-color);
   margin: 12px 0 0 0;
+  border: 0;
+  background-color: var(--border-color);
 }
 
 .content-block {
+  margin-top: 16px;
+  padding: 16px;
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
-  padding: 16px;
-  margin-top: 16px;
   background-color: var(--bg-main);
 }
+
 .content-block:first-of-type {
   margin-top: 8px;
 }
@@ -938,13 +954,14 @@ fieldset legend {
 }
 
 .file-upload-group {
-  background-color: var(--bg-main);
-  border-radius: var(--border-radius);
-  padding: 16px;
-  border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-main);
   outline: none;
+  caret-color: transparent;
   transition: box-shadow 0.2s;
 }
 
@@ -959,17 +976,17 @@ fieldset legend {
 
 .file-upload-label {
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   gap: 10px;
   padding: 12px;
   border: 2px dashed var(--border-color);
   border-radius: var(--border-radius);
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-align: center;
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-align: center;
 }
 
 .file-upload-label:hover {
@@ -978,66 +995,66 @@ fieldset legend {
 }
 
 .file-upload-label svg {
+  flex-shrink: 0;
   width: 20px;
   height: 20px;
-  flex-shrink: 0;
 }
 
 .upload-note {
-  font-size: 12px;
-  text-align: center;
-  color: var(--text-secondary);
   margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
   font-style: italic;
+  text-align: center;
 }
 
 .file-list-container {
-  margin-top: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 50px;
+  margin-top: 16px;
 }
 
 .file-list-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  background-color: var(--bg-card);
   padding: 8px;
-  border-radius: 6px;
   border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-card);
 }
 
 .file-list-preview {
+  flex-shrink: 0;
   width: 40px;
   height: 40px;
   border-radius: 4px;
   object-fit: cover;
-  flex-shrink: 0;
 }
 
 .file-list-name {
-  font-size: 13px;
+  flex-grow: 1;
   color: var(--text-primary);
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-grow: 1;
 }
 
 .file-list-delete-btn {
-  background: transparent;
-  border: none;
-  padding: 4px;
-  cursor: pointer;
   display: flex;
-  align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  transition: background-color 0.2s;
-  margin-left: auto;
+  align-items: center;
   flex-shrink: 0;
+  margin-left: auto;
+  padding: 4px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .file-list-delete-btn svg {
@@ -1047,12 +1064,12 @@ fieldset legend {
   transition: stroke 0.2s;
 }
 
-.file-list-delete-btn:hover svg {
-  stroke: #ff5555;
-}
-
 .file-list-delete-btn:hover {
   background-color: rgba(255, 85, 85, 0.1);
+}
+
+.file-list-delete-btn:hover svg {
+  stroke: #ff5555;
 }
 
 /* ====================================================== */
@@ -1062,13 +1079,13 @@ fieldset legend {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(5px);
 }
 
@@ -1077,35 +1094,35 @@ fieldset legend {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  background-color: var(--bg-card);
-  padding: 32px 48px;
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border-color);
   width: 100%;
   max-width: 400px;
+  padding: 32px 48px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-card);
+  box-shadow: var(--shadow);
 }
 
 #progress-text {
+  color: var(--text-secondary);
   font-size: 16px;
   font-weight: 500;
-  color: var(--text-secondary);
 }
 
 .progress-bar-container {
   width: 100%;
   height: 10px;
-  background-color: var(--bg-main);
-  border-radius: 5px;
-  overflow: hidden;
   border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background-color: var(--bg-main);
+  overflow: hidden;
 }
 
 #progress-bar {
   width: 0%;
   height: 100%;
-  background: var(--accent-gradient);
   border-radius: 5px;
+  background: var(--accent-gradient);
   transition: width 0.4s ease-in-out;
 }
 
@@ -1122,19 +1139,6 @@ fieldset legend {
   display: none !important;
 }
 
-.select-search-container {
-  padding: 10px 10px 8px 10px;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0; /* Ensures this element doesn't shrink */
-}
-
-.select-items-list {
-  flex-grow: 1;      /* Occupies the remaining vertical space */
-  overflow-y: auto;  /* Applies the scrollbar HERE */
-  overflow-x: hidden;
-  min-height: 0;
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1146,6 +1150,7 @@ fieldset legend {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1191,21 +1196,21 @@ fieldset legend {
   display: flex;
   align-items: center;
   padding: 16px;
+  border-left: 5px solid;
   border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
   color: white;
   font-weight: 500;
-  animation: slideIn 0.3s ease-out forwards, fadeOut 0.5s ease-in forwards 4.5s;
+  box-shadow: var(--shadow);
   opacity: 0;
   transform: translateX(100%);
-  border-left: 5px solid;
+  animation: slideIn 0.3s ease-out forwards, fadeOut 0.5s ease-in forwards 4.5s;
 }
 
 .toast-icon {
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
   margin-right: 12px;
-  flex-shrink: 0;
 }
 
 .toast.success {
@@ -1229,6 +1234,7 @@ fieldset legend {
   from {
     opacity: 1;
   }
+
   to {
     opacity: 0;
     transform: translateX(100%);
@@ -1242,38 +1248,38 @@ fieldset legend {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
-  backdrop-filter: blur(5px);
+  width: 100%;
+  height: 100%;
   padding: 20px;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
 }
 
 .success-modal {
-  background-color: var(--bg-card);
-  padding: 40px;
-  border-radius: var(--border-radius);
-  text-align: center;
   width: 100%;
   max-width: 400px;
+  padding: 40px;
   border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-card);
+  text-align: center;
   box-shadow: var(--shadow);
   animation: fadeIn 0.3s ease-out;
 }
 
 .success-modal h2 {
-  font-size: 24px;
-  color: var(--text-headers);
   margin-bottom: 8px;
+  color: var(--text-headers);
+  font-size: 24px;
 }
 
 .success-modal p {
-  color: var(--text-secondary);
   margin-bottom: 24px;
+  color: var(--text-secondary);
 }
 
 .success-modal .button-primary {
@@ -1282,37 +1288,37 @@ fieldset legend {
 }
 
 .success-icon {
-  margin: 0 auto 20px auto;
   width: 80px;
   height: 80px;
-}
-
-.checkmark-circle {
-  stroke-dasharray: 166;
-  stroke-dashoffset: 166;
-  stroke-width: 3;
-  stroke-miterlimit: 10;
-  stroke: var(--status-running);
-  fill: none;
-  animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+  margin: 0 auto 20px auto;
 }
 
 .checkmark {
+  display: block;
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  display: block;
-  stroke-width: 3;
   stroke: #fff;
+  stroke-width: 3;
   stroke-miterlimit: 10;
   box-shadow: inset 0px 0px 0px var(--status-running);
   animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
 }
 
+.checkmark-circle {
+  fill: none;
+  stroke: var(--status-running);
+  stroke-width: 3;
+  stroke-miterlimit: 10;
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
 .checkmark-check {
-  transform-origin: 50% 50%;
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
+  transform-origin: 50% 50%;
   animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
 }
 
@@ -1323,7 +1329,8 @@ fieldset legend {
 }
 
 @keyframes scale {
-  0%, 100% {
+  0%,
+  100% {
     transform: none;
   }
   50% {
@@ -1338,25 +1345,167 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 11. STYLES FOR VOLUME GROUPS (NEW)                     */
+/* 11. STYLES FOR VOLUME GROUPS                           */
 /* ====================================================== */
 .member-list {
-  list-style: none;
-  padding: 0;
   margin: 10px 0 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .member-list li {
-  font-size: 14px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
+  font-size: 14px;
 }
 
 .member-list li:last-child {
   border-bottom: none;
 }
 
+/* ====================================================== */
+/* 12. STYLES FOR KUBERNETES (OKE)                        */
+/* ====================================================== */
+.oke-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.oke-version-badge {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  border-radius: 14px;
+  background-color: rgba(59, 130, 246, 0.25);
+  color: #a5b4fc;
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.oke-container .resource-table {
+  width: 100%;
+  table-layout: auto;
+}
+
+.oke-container .resource-table thead {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.oke-container .resource-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+}
+
+.oke-container .resource-table td {
+  padding: 12px 14px;
+  vertical-align: middle;
+}
+
+.oke-container .resource-table th:nth-child(4), /* OCPUs */
+.oke-container .resource-table th:nth-child(5), /* Mem */
+.oke-container .resource-table th:nth-child(6), /* Disk */
+.oke-container .resource-table th:nth-child(7), /* Nodes */
+.oke-container .resource-table td:nth-child(4),
+.oke-container .resource-table td:nth-child(5),
+.oke-container .resource-table td:nth-child(6),
+.oke-container .resource-table td:nth-child(7) {
+  text-align: center;
+}
+
+.oke-container .resource-table td:last-child {
+  word-break: break-word;
+}
+
+/* ====================================================== */
+/* 13. UX/UI FOR KUBERNETES SUMMARY                       */
+/* ====================================================== */
+.connectivity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.connectivity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-main);
+}
+
+.connectivity-item.full-span {
+  grid-column: 1 / -1;
+}
+
+.connectivity-item svg {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: 4px;
+  color: var(--accent-color-start);
+}
+
+.connectivity-item .text-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.connectivity-item label {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.connectivity-item .value {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.connectivity-item .value.code {
+  color: var(--text-highlight-color);
+  font-family: monospace;
+}
+
+.node-pool-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.node-pool-card {
+  border-left: 3px solid var(--accent-color-start);
+  background-color: var(--bg-main);
+}
+
+.node-pool-card > .instance-card-header {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+.node-pool-card .info-value {
+  font-size: 15px;
+  word-break: break-all;
+}
+
+/* ====================================================== */
+/* 14. STYLES FOR VALIDATION SECTION                      */
+/* ====================================================== */
 .validation-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1370,19 +1519,19 @@ fieldset legend {
 }
 
 .validation-item label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
   display: block;
   margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .validation-value {
-  font-size: 15px;
-  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .validation-ok {
@@ -1394,7 +1543,7 @@ fieldset legend {
 }
 
 .validation-value svg {
+  flex-shrink: 0;
   width: 18px;
   height: 18px;
-  flex-shrink: 0;
 }
