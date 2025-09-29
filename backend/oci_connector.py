@@ -475,8 +475,23 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
                 if tunnel.routing == "BGP" and tunnel.bgp_session_info:
                     bgp_sdk = tunnel.bgp_session_info
                     bgp_info = BgpSessionInfo(oracle_bgp_asn=str(bgp_sdk.oracle_bgp_asn) if bgp_sdk.oracle_bgp_asn else "N/A", customer_bgp_asn=str(bgp_sdk.customer_bgp_asn) if bgp_sdk.customer_bgp_asn else "N/A", oracle_interface_ip=bgp_sdk.oracle_interface_ip or "N/A", customer_interface_ip=bgp_sdk.customer_interface_ip or "N/A")
-                phase_one = PhaseOneDetails(is_custom=p1.is_custom_phase_one_config, authentication_algorithm=p1.custom_authentication_algorithm if p1.is_custom_phase_one_config else oracle_managed_str, encryption_algorithm=p1.custom_encryption_algorithm if p1.is_custom_phase_one_config else oracle_managed_str, dh_group=p1.custom_dh_group if p1.is_custom_phase_one_config else oracle_managed_str, lifetime_in_seconds=p1.lifetime)
-                phase_two = PhaseTwoDetails(is_custom=p2.is_custom_phase_two_config, authentication_algorithm=(p2.custom_authentication_algorithm or "N/A") if p2.is_custom_phase_two_config else oracle_managed_str, encryption_algorithm=(p2.custom_encryption_algorithm or "N/A") if p2.is_custom_phase_two_config else oracle_managed_str, lifetime_in_seconds=p2.lifetime)
+                
+                is_p1_custom = bool(p1.is_custom_phase_one_config) if p1 else False
+                is_p2_custom = bool(p2.is_custom_phase_two_config) if p2 else False
+
+                phase_one = PhaseOneDetails(
+                    is_custom=is_p1_custom,
+                    authentication_algorithm=p1.custom_authentication_algorithm if is_p1_custom and p1 else oracle_managed_str,
+                    encryption_algorithm=p1.custom_encryption_algorithm if is_p1_custom and p1 else oracle_managed_str,
+                    dh_group=p1.custom_dh_group if is_p1_custom and p1 else oracle_managed_str,
+                    lifetime_in_seconds=p1.lifetime if p1 else 0
+                )
+                phase_two = PhaseTwoDetails(
+                    is_custom=is_p2_custom,
+                    authentication_algorithm=(p2.custom_authentication_algorithm or "N/A") if is_p2_custom and p2 else oracle_managed_str,
+                    encryption_algorithm=(p2.custom_encryption_algorithm or "N/A") if is_p2_custom and p2 else oracle_managed_str,
+                    lifetime_in_seconds=p2.lifetime if p2 else 0
+                )
                 tunnels.append(TunnelData(id=tunnel.id, display_name=tunnel.display_name, status=tunnel.status or "N/A", cpe_ip=tunnel.cpe_ip, vpn_oracle_ip=tunnel.vpn_ip, routing_type=tunnel.routing, ike_version=tunnel.ike_version, validation_status=validation_status, validation_details=validation_details, phase_one_details=phase_one, phase_two_details=phase_two, bgp_session_info=bgp_info))
         connection_routing_type = tunnels_sdk[0].routing if tunnels_sdk else "STATIC"
         ipsec_connections.append(IpsecData(id=ipsec.id, display_name=ipsec.display_name, status=ipsec.lifecycle_state, cpe_id=ipsec.cpe_id, drg_id=ipsec.drg_id, tunnels=tunnels, static_routes=ipsec.static_routes if connection_routing_type == "STATIC" else []))
@@ -520,7 +535,7 @@ def get_infrastructure_details(region: str, compartment_id: str) -> Infrastructu
         if not lb_details: continue
         ip_addresses = [LoadBalancerIpAddressData(ip_address=ip.ip_address, is_public=ip.is_public) for ip in lb_details.ip_addresses]
         hostnames = [HostnameData(name=h.name) for h in lb_details.hostnames.values()]
-        listeners = [ListenerData(name=l.name, protocol=l.protocol, port=l.port, default_backend_set_name=l.default_backend_set_name, hostname_names=list(l.hostname_names.keys()) if l.hostname_names else []) for l in lb_details.listeners.values()]
+        listeners = [ListenerData(name=l.name, protocol=l.protocol, port=l.port, default_backend_set_name=l.default_backend_set_name, hostname_names=l.hostname_names if l.hostname_names else []) for l in lb_details.listeners.values()]
         backend_sets = []
         for bs_sdk in lb_details.backend_sets.values():
             hc_sdk = bs_sdk.health_checker
