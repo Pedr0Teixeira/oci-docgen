@@ -1,16 +1,19 @@
 # OCI DocGen
 # Author: Pedro Teixeira
-# Date: September 26, 2025
+# Date: September 29, 2025
 # Description: Defines Pydantic data models (schemas) for data validation and serialization in the API.
 
-from typing import List, Optional
+# --- Standard Library Imports ---
+from typing import Any, List, Optional
 
+# --- Third-Party Imports ---
 from pydantic import BaseModel, Field
 
-# --- Foundational Schemas ---
 
+# --- Foundational Schemas ---
 class SecurityRule(BaseModel):
     """Represents a security rule (Ingress/Egress) of a Security List or NSG."""
+
     direction: str
     protocol: str
     source_or_destination: Optional[str] = "N/A"
@@ -20,15 +23,16 @@ class SecurityRule(BaseModel):
 
 class RouteRule(BaseModel):
     """Represents a rule of a Route Table."""
+
     destination: str
     target: str
     description: Optional[str] = None
 
 
 # --- Compute and Storage Schemas ---
-
 class BlockVolume(BaseModel):
     """Represents a Block Volume attached to an instance."""
+
     id: str
     display_name: str
     size_in_gbs: float
@@ -37,6 +41,7 @@ class BlockVolume(BaseModel):
 
 class VolumeGroupValidation(BaseModel):
     """Represents the results of a Volume Group validation."""
+
     has_backup_policy: bool
     policy_name: Optional[str] = "Nenhuma"
     is_cross_region_replication_enabled: bool
@@ -45,6 +50,7 @@ class VolumeGroupValidation(BaseModel):
 
 class VolumeGroupData(BaseModel):
     """Represents a Volume Group and its details."""
+
     id: str
     display_name: str
     availability_domain: str
@@ -55,9 +61,9 @@ class VolumeGroupData(BaseModel):
 
 
 # --- Networking Schemas ---
-
 class SecurityList(BaseModel):
     """Represents a Security List and its associated rules."""
+
     id: str
     name: str
     rules: List[SecurityRule]
@@ -65,6 +71,7 @@ class SecurityList(BaseModel):
 
 class NetworkSecurityGroup(BaseModel):
     """Represents a Network Security Group (NSG) and its rules."""
+
     id: str
     name: str
     rules: List[SecurityRule]
@@ -72,6 +79,7 @@ class NetworkSecurityGroup(BaseModel):
 
 class RouteTable(BaseModel):
     """Represents a Route Table and its routing rules."""
+
     id: str
     name: str
     rules: List[RouteRule]
@@ -79,6 +87,7 @@ class RouteTable(BaseModel):
 
 class SubnetData(BaseModel):
     """Represents a Subnet within a VCN."""
+
     id: str
     display_name: str
     cidr_block: str
@@ -86,6 +95,7 @@ class SubnetData(BaseModel):
 
 class LpgData(BaseModel):
     """Represents a Local Peering Gateway (LPG) within a VCN."""
+
     id: str
     display_name: str
     lifecycle_state: str
@@ -100,6 +110,7 @@ class LpgData(BaseModel):
 
 class VcnData(BaseModel):
     """Represents a Virtual Cloud Network (VCN) and its nested resources."""
+
     id: str
     display_name: str
     cidr_block: str
@@ -111,9 +122,9 @@ class VcnData(BaseModel):
 
 
 # --- Load Balancer Schemas ---
-
 class BackendData(BaseModel):
     """Represents a backend server within a Backend Set."""
+
     name: str
     ip_address: str
     port: int
@@ -122,6 +133,7 @@ class BackendData(BaseModel):
 
 class HealthCheckerData(BaseModel):
     """Represents the configuration of the Health Checker for a Backend Set."""
+
     protocol: str
     port: int
     url_path: Optional[str] = "/"
@@ -129,6 +141,7 @@ class HealthCheckerData(BaseModel):
 
 class BackendSetData(BaseModel):
     """Represents a Backend Set of a Load Balancer."""
+
     name: str
     policy: str
     health_checker: HealthCheckerData
@@ -137,6 +150,7 @@ class BackendSetData(BaseModel):
 
 class ListenerData(BaseModel):
     """Represents a Listener of a Load Balancer."""
+
     name: str
     protocol: str
     port: int
@@ -146,17 +160,20 @@ class ListenerData(BaseModel):
 
 class HostnameData(BaseModel):
     """Represents a Virtual Hostname configured on a Load Balancer."""
+
     name: str
 
 
 class LoadBalancerIpAddressData(BaseModel):
     """Represents an IP address associated with a Load Balancer."""
+
     ip_address: str
     is_public: bool
 
 
 class LoadBalancerData(BaseModel):
     """Aggregates all data from a Load Balancer."""
+
     display_name: str
     lifecycle_state: str
     shape_name: str
@@ -167,9 +184,9 @@ class LoadBalancerData(BaseModel):
 
 
 # --- External Connectivity Schemas (DRG, VPN) ---
-
 class RpcData(BaseModel):
     """Represents a Remote Peering Connection (RPC) in a DRG."""
+
     id: str
     display_name: str
     lifecycle_state: str
@@ -179,6 +196,7 @@ class RpcData(BaseModel):
 
 class DrgAttachmentData(BaseModel):
     """Represents a DRG attachment to another resource (e.g., VCN, RPC)."""
+
     id: str
     display_name: str
     network_id: Optional[str] = None
@@ -189,6 +207,7 @@ class DrgAttachmentData(BaseModel):
 
 class DrgData(BaseModel):
     """Represents a Dynamic Routing Gateway and its attachments."""
+
     id: str
     display_name: str
     attachments: List[DrgAttachmentData]
@@ -197,6 +216,7 @@ class DrgData(BaseModel):
 
 class CpeData(BaseModel):
     """Represents a Customer-Premises Equipment."""
+
     id: str
     display_name: str
     ip_address: str
@@ -205,6 +225,7 @@ class CpeData(BaseModel):
 
 class PhaseOneDetails(BaseModel):
     """Represents the encryption details of Phase 1 (IKE)."""
+
     is_custom: bool
     authentication_algorithm: str
     encryption_algorithm: str
@@ -214,6 +235,7 @@ class PhaseOneDetails(BaseModel):
 
 class PhaseTwoDetails(BaseModel):
     """Represents the encryption details of Phase 2 (IPSec)."""
+
     is_custom: bool
     authentication_algorithm: Optional[str] = None
     encryption_algorithm: str
@@ -222,6 +244,7 @@ class PhaseTwoDetails(BaseModel):
 
 class BgpSessionInfo(BaseModel):
     """Represents the details of a BGP session in a VPN tunnel."""
+
     oracle_bgp_asn: Optional[str] = "N/A"
     customer_bgp_asn: Optional[str] = "N/A"
     oracle_interface_ip: Optional[str] = "N/A"
@@ -230,6 +253,7 @@ class BgpSessionInfo(BaseModel):
 
 class TunnelData(BaseModel):
     """Represents a tunnel of an IPSec connection with encryption details."""
+
     id: str
     display_name: str
     status: str
@@ -246,6 +270,7 @@ class TunnelData(BaseModel):
 
 class IpsecData(BaseModel):
     """Represents an IPSec connection, its static routes, and tunnels."""
+
     id: str
     display_name: str
     status: str
@@ -256,9 +281,9 @@ class IpsecData(BaseModel):
 
 
 # --- Kubernetes (OKE) Schemas ---
-
 class NodePoolData(BaseModel):
     """Represents a Node Pool within an OKE Cluster."""
+
     name: str
     kubernetes_version: str
     shape: str
@@ -272,6 +297,7 @@ class NodePoolData(BaseModel):
 
 class OkeClusterData(BaseModel):
     """Represents an OKE Cluster and its Node Pools."""
+
     id: str
     name: str
     kubernetes_version: str
@@ -285,9 +311,9 @@ class OkeClusterData(BaseModel):
 
 
 # --- Main Aggregator Schemas ---
-
 class InstanceData(BaseModel):
     """Aggregates all collected details from a single OCI instance."""
+
     host_name: str
     lifecycle_state: str
     shape: str
@@ -297,7 +323,6 @@ class InstanceData(BaseModel):
     boot_volume_gb: str
     boot_volume_id: Optional[str] = None
     private_ip: str
-
     public_ip: Optional[str] = "N/A"
     backup_policy_name: str
     block_volumes: List[BlockVolume]
@@ -309,6 +334,7 @@ class InstanceData(BaseModel):
 
 class InfrastructureData(BaseModel):
     """Aggregates all infrastructure data collected from a compartment."""
+
     instances: List[InstanceData]
     vcns: List[VcnData]
     drgs: List[DrgData]
@@ -320,9 +346,9 @@ class InfrastructureData(BaseModel):
 
 
 # --- API Request Body Schemas ---
-
 class NewHostRequest(BaseModel):
     """Defines the request body for fetching new host details."""
+
     instance_ids: List[str]
     compartment_id: str
     compartment_name: str
@@ -330,6 +356,22 @@ class NewHostRequest(BaseModel):
 
 class GenerateDocRequest(BaseModel):
     """Defines the request body for the document generation endpoint."""
+
     doc_type: str
     infra_data: InfrastructureData
     responsible_name: str = Field(..., min_length=1)
+
+
+# --- Asynchronous Task Schemas ---
+class TaskCreationResponse(BaseModel):
+    """Defines the response body when a new background task is created."""
+
+    task_id: str
+
+
+class TaskStatusResponse(BaseModel):
+    """Defines the response body for checking the status of a background task."""
+
+    task_id: str
+    status: str
+    result: Optional[Any] = None
