@@ -6,3 +6,5 @@ oci
 python-docx
 python-multipart
 uvicorn[standard]
+celery
+redis

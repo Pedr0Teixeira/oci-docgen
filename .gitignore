@@ -18,7 +18,7 @@ __pycache__/
 .coverage
 
 # =========================================
-# Frontend Dependencies & Build Files (NEW)
+# Frontend Dependencies & Build Files
 # If you use npm/yarn for frontend tools, these are essential.
 # =========================================
 node_modules/
@@ -62,3 +62,10 @@ backend/generated_docs/
 # =========================================
 .DS_Store
 Thumbs.db
+
+# =========================================
+# Local Database Files
+# Ignore data persistence files from local databases like Redis.
+# =========================================
+dump.rdb
+appendonly.aof
