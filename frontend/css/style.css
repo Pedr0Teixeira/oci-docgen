@@ -1,7 +1,7 @@
 /**
  * OCI DocGen
  * Author: Pedro Teixeira
- * Date: September 26, 2025
+ * Date: September 29, 2025
  * Description: Main stylesheet for the OCI DocGen interface.
  */
 
@@ -489,6 +489,7 @@ fieldset legend {
   width: 20px;
   height: 20px;
   color: var(--accent-color-start);
+  flex-shrink: 0; 
 }
 
 .fieldset-divider {
@@ -803,6 +804,8 @@ fieldset legend {
 }
 
 .expand-arrow {
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   color: var(--text-secondary);
   transition: transform 0.3s ease-in-out;
@@ -1546,4 +1549,41 @@ fieldset legend {
   flex-shrink: 0;
   width: 18px;
   height: 18px;
+}
+
+/* ====================================================== */
+/* 15. PROGRESS OVERLAY ENHANCEMENTS                      */
+/* ====================================================== */
+.progress-timer {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 1.1rem;
+  letter-spacing: 1px;
+}
+
+.progress-container {
+  /* Re-ordering elements visually */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.progress-container .spinner {
+  order: 1;
+}
+
+.progress-container .progress-timer {
+  order: 2; /* Timer comes after the spinner */
+  margin-top: 16px;
+}
+
+.progress-container #progress-text {
+  order: 3; /* Text comes after the timer */
+  margin-top: 4px;
+}
+
+.progress-container .progress-bar-container {
+  order: 4; /* Progress bar is last */
+  margin-top: 16px;
 }
