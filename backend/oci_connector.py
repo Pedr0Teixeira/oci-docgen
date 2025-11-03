@@ -1,8 +1,3 @@
-# OCI DocGen
-# Author: Pedro Teixeira
-# Date: September 29, 2025
-# Description: Connector module that interacts with the OCI SDK to retrieve infrastructure data.
-
 # --- Standard Library Imports ---
 import logging
 import os
@@ -737,7 +732,7 @@ def get_infrastructure_details(
 
     task.update_state(
         state="PROGRESS",
-        meta={"current": 0, "total": 100, "step": "Inicializando clientes OCI..."},
+        meta={"current": 0, "total": 100, "step_key": "progress.initializing_clients", "context": {}},
     )
     # 1. Initialize OCI Clients
     compute_client = get_client(oci.core.ComputeClient, region)
@@ -749,13 +744,13 @@ def get_infrastructure_details(
     instances = []
 
     # 2. Collect Compute Instances in Parallel
-    step_msg = (
-        "Listando clusters OKE..."
+    step_key = (
+        "progress.listing_oke"
         if is_k8s_flow
-        else "Listando instâncias computacionais..."
+        else "progress.listing_instances"
     )
     task.update_state(
-        state="PROGRESS", meta={"current": 5, "total": 100, "step": step_msg}
+        state="PROGRESS", meta={"current": 5, "total": 100, "step_key": step_key, "context": {}}
     )
 
     all_instances_sdk = oci.pagination.list_call_get_all_results(
@@ -786,14 +781,14 @@ def get_infrastructure_details(
                 if total_instances > 0
                 else 55
             )
-            step_msg = (
-                f"Analisando nó worker: {instance_summary.display_name}"
+            step_key = (
+                "progress.analyzing_worker"
                 if is_k8s_flow
-                else f"Analisando VM: {instance_summary.display_name}"
+                else "progress.analyzing_vm"
             )
             task.update_state(
                 state="PROGRESS",
-                meta={"current": progress_percent, "total": 100, "step": step_msg},
+                meta={"current": progress_percent, "total": 100, "step_key": step_key, "context": {"name": instance_summary.display_name}},
             )
 
             try:
@@ -804,14 +799,15 @@ def get_infrastructure_details(
                     f"Error fetching details for instance {instance_summary.display_name}: {exc}"
                 )
 
-    step_msg = (
-        "Analisando redes (VCNs) dos clusters..."
+    step_key = (
+        "progress.analyzing_cluster_network"
         if is_k8s_flow
-        else "Mapeando volumes de armazenamento..."
+        else "progress.mapping_storage"
     )
     task.update_state(
-        state="PROGRESS", meta={"current": 55, "total": 100, "step": step_msg}
+        state="PROGRESS", meta={"current": 55, "total": 100, "step_key": step_key, "context": {}}
     )
+
     # 3. Map Volumes and Collect Volume Groups
     all_volumes_map = {
         i.boot_volume_id: f"Boot Volume ({i.host_name})"
@@ -825,14 +821,15 @@ def get_infrastructure_details(
         block_storage_client, compartment_id, all_volumes_map
     )
 
-    step_msg = (
-        "Verificando conectividade de rede..."
+    step_key = (
+        "progress.checking_network_connectivity"
         if is_k8s_flow
-        else "Coletando dados de conectividade (DRGs)..."
+        else "progress.collecting_connectivity"
     )
     task.update_state(
-        state="PROGRESS", meta={"current": 60, "total": 100, "step": step_msg}
+        state="PROGRESS", meta={"current": 60, "total": 100, "step_key": step_key, "context": {}}
     )
+
     # 4. Collect DRGs and Related Connectivity
     all_drgs_sdk = oci.pagination.list_call_get_all_results(
         virtual_network_client.list_drgs,
@@ -884,14 +881,15 @@ def get_infrastructure_details(
             )
         )
 
-    step_msg = (
-        "Finalizando..."
+    step_key = (
+        "progress.finishing"
         if is_k8s_flow
-        else "Coletando dados de VPN (CPEs e IPSec)..."
+        else "progress.collecting_vpn"
     )
     task.update_state(
-        state="PROGRESS", meta={"current": 65, "total": 100, "step": step_msg}
+        state="PROGRESS", meta={"current": 65, "total": 100, "step_key": step_key, "context": {}}
     )
+
     # 5. Collect CPEs
     all_cpes_sdk = oci.pagination.list_call_get_all_results(
         virtual_network_client.list_cpes,
@@ -1011,8 +1009,9 @@ def get_infrastructure_details(
 
     task.update_state(
         state="PROGRESS",
-        meta={"current": 75, "total": 100, "step": "Analisando Redes Virtuais (VCNs)..."},
+        meta={"current": 75, "total": 100, "step_key": "progress.analyzing_vcns", "context": {}},
     )
+
     # 7. Collect VCNs and Child Resources
     all_vcns_sdk = oci.pagination.list_call_get_all_results(
         virtual_network_client.list_vcns,
@@ -1165,9 +1164,11 @@ def get_infrastructure_details(
         meta={
             "current": 85,
             "total": 100,
-            "step": "Verificando clusters Kubernetes (OKE)...",
+            "step_key": "progress.checking_oke",
+             "context": {},
         },
     )
+
     # 8. Collect Kubernetes Clusters (OKE)
     vcn_map_for_oke = {
         vcn.id: {"name": vcn.display_name, "subnets": {s.id: s.display_name for s in vcn.subnets}}
@@ -1177,8 +1178,9 @@ def get_infrastructure_details(
 
     task.update_state(
         state="PROGRESS",
-        meta={"current": 90, "total": 100, "step": "Inspecionando Load Balancers..."},
+        meta={"current": 90, "total": 100, "step_key": "progress.inspecting_lbs", "context": {}},
     )
+
     # 9. Collect Load Balancers
     all_lbs_summary_sdk = oci.pagination.list_call_get_all_results(
         load_balancer_client.list_load_balancers,
@@ -1243,8 +1245,9 @@ def get_infrastructure_details(
 
     task.update_state(
         state="PROGRESS",
-        meta={"current": 99, "total": 100, "step": "Finalizando e montando o relatório..."},
+        meta={"current": 99, "total": 100, "step_key": "progress.assembling_report", "context": {}},
     )
+
     # 10. Assemble and Return Final Data Structure
     return InfrastructureData(
         instances=instances,
@@ -1274,7 +1277,8 @@ def get_new_host_details(
         meta={
             "current": 0,
             "total": total_instances,
-            "step": "Iniciando coleta de novos hosts...",
+            "step_key": "progress.starting_new_host",
+            "context": {},
         },
     )
 
@@ -1293,7 +1297,8 @@ def get_new_host_details(
                 meta={
                     "current": completed_count,
                     "total": total_instances,
-                    "step": f"Analisando host {completed_count}/{total_instances}",
+                    "step_key": "progress.analyzing_host_count",
+                    "context": {"current": completed_count, "total": total_instances},
                 },
             )
             try:
