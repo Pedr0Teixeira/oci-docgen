@@ -1,10 +1,3 @@
-/**
- * OCI DocGen
- * Author: Pedro Teixeira
- * Date: September 29, 2025
- * Description: Main stylesheet for the OCI DocGen interface.
- */
-
 /* ====================================================== */
 /* 1. GLOBAL SETTINGS & VARIABLES                         */
 /* ====================================================== */
@@ -1586,4 +1579,35 @@ fieldset legend {
 .progress-container .progress-bar-container {
   order: 4; /* Progress bar is last */
   margin-top: 16px;
+}
+
+/* ====================================================== */
+/* 16. LANGUAGE SELECTOR                                  */
+/* ====================================================== */
+.language-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto; /* Alinha à direita */
+}
+
+.language-selector-container svg {
+  color: var(--text-secondary);
+}
+
+#language-selector {
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+}
+
+#language-selector:focus {
+  border-color: var(--accent-color-start);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.4);
 }
