@@ -1,8 +1,3 @@
-# OCI DocGen
-# Author: Pedro Teixeira
-# Date: September 29, 2025
-# Description: Defines Pydantic data models (schemas) for data validation and serialization in the API.
-
 # --- Standard Library Imports ---
 from typing import Any, List, Optional
 
@@ -360,6 +355,7 @@ class GenerateDocRequest(BaseModel):
     doc_type: str
     infra_data: InfrastructureData
     responsible_name: str = Field(..., min_length=1)
+    lang: str = "pt"
 
 
 # --- Asynchronous Task Schemas ---

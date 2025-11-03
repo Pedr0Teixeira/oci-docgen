@@ -1,16 +1,9 @@
-/**
- * OCI DocGen
- * Author: Pedro Teixeira
- * Date: September 29, 2025
- * Description: Main frontend script for page interactivity, API communication, and DOM manipulation.
- */
-
 document.addEventListener('DOMContentLoaded', () => {
 
   // --- Settings and Constants ---
   const API_BASE_URL = 'http://127.0.0.1:8000'; // Uncomment for local development
   //const API_BASE_URL = ''; // Uncomment for production
-  
+
   // --- DOM Element Selectors ---
   const mainAppContainer = document.getElementById('main-app-container');
   const regionContainer = document.getElementById('region-select-container');
@@ -38,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressSpinner = loadingOverlay.querySelector('.spinner');
   const successScreen = document.getElementById('success-screen');
   const newDocBtn = document.getElementById('new-doc-btn');
+  const languageSelector = document.getElementById('language-selector');
 
   // --- SVG Icon Definitions ---
   const ICONS = {
@@ -65,6 +59,139 @@ document.addEventListener('DOMContentLoaded', () => {
   let collectionStartTime = 0;
   let progressTimerInterval = null;
   let pollingIntervalId = null;
+  let currentLanguage = 'pt';
+  let translations = {};
+  let allRegionsData = [];
+  let allCompartmentsData = [];
+  let allInstancesData = [];
+
+  // --- Internationalization (i18n) Functions ---
+
+  const loadTranslations = async (lang) => {
+    try {
+      const response = await fetch(`locales/${lang}.json`);
+      if (!response.ok) {
+        throw new Error(`Failed to load ${lang}.json`);
+      }
+      translations = await response.json();
+    } catch (error) {
+      console.error(error);
+      if (lang !== 'pt') {
+        await loadTranslations('pt');
+      }
+    }
+  };
+
+  const t = (key, context = {}) => {
+    let text = translations[key] || key;
+    for (const k in context) {
+      text = text.replace(new RegExp(`{${k}}`, 'g'), context[k]);
+    }
+    return text;
+  };
+
+  const applyStaticTranslations = () => {
+    document.querySelectorAll('[data-i18n]').forEach(element => {
+      const key = element.getAttribute('data-i18n');
+      element.textContent = t(key);
+    });
+
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
+      const key = element.getAttribute('data-i18n-placeholder');
+      element.setAttribute('placeholder', t(key));
+    });
+
+    updateUiForDocType();
+  };
+
+  const setLanguage = async (lang) => {
+    currentLanguage = lang;
+    localStorage.setItem('oci-docgen-lang', lang);
+    languageSelector.value = lang;
+
+    await loadTranslations(lang);
+
+    applyStaticTranslations();
+
+    createCustomSelect(
+      regionContainer,
+      allRegionsData,
+      t('step1_placeholder'),
+      (selectedValue) => {
+        if (selectedRegion !== selectedValue) {
+          selectedRegion = selectedValue;
+          resetAndFetchCompartments();
+        }
+      },
+      true
+    );
+    if (selectedRegion) {
+      const regionName = allRegionsData.find(r => r.key === selectedRegion)?.name;
+      if (regionName) {
+        const selectedContent = regionContainer.querySelector('.selected-item-display');
+        selectedContent.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><span class="item-text">${regionName}</span>`;
+        selectedContent.classList.remove('placeholder');
+      }
+    }
+
+    populateDocTypes();
+    if (selectedDocType) {
+        const docTypeKey = `doc_type_${selectedDocType.replace('_', '-')}`;
+        const docTypeName = t(docTypeKey);
+        const selectedContent = docTypeContainer.querySelector('.selected-item-display');
+        selectedContent.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg><span class="item-text">${docTypeName}</span>`;
+        selectedContent.classList.remove('placeholder');
+    }
+
+    const compPlaceholder = selectedRegion ? t('step3_placeholder') : t('instance_select_compartment_first');
+    createCustomSelect(
+      compartmentContainer,
+      allCompartmentsData,
+      compPlaceholder,
+      (selectedValue, selectedName) => {
+        selectedCompartmentId = selectedValue;
+        selectedCompartmentName = selectedName;
+        resetAndFetchInstances();
+        updateFetchButtonState();
+      },
+      allCompartmentsData.length > 0,
+      false
+    );
+
+    if (selectedCompartmentId && selectedCompartmentName) {
+        const selectedContent = compartmentContainer.querySelector('.selected-item-display');
+        const level = allCompartmentsData.find(c => c.id === selectedCompartmentId)?.level || 0;
+        let iconHtml = level > 0 ? `<span class="item-tree-prefix"></span>` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>`;
+        selectedContent.innerHTML = `${iconHtml}<span class="item-text">${selectedCompartmentName}</span>`;
+        selectedContent.classList.remove('placeholder');
+    }
+
+    const instPlaceholder = (selectedDocType === 'new_host' && selectedCompartmentId) ? t('step4_placeholder') : t('instance_select_compartment_first');
+    createCustomSelect(
+      instanceContainer,
+      allInstancesData,
+      instPlaceholder,
+      (value, name, isChecked) => {
+        if (isChecked) {
+          selectedInstances[value] = name;
+        } else {
+          delete selectedInstances[value];
+        }
+        updateMultiSelectDisplay();
+        updateFetchButtonState();
+      },
+      allInstancesData.length > 0 && selectedDocType === 'new_host',
+      true
+    );
+
+    if (Object.keys(selectedInstances).length > 0) {
+      updateMultiSelectDisplay();
+    }
+
+    if (Object.keys(allInfrastructureData).length > 0) {
+      summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
+    }
+  };
 
   // --- UI Functions ---
 
@@ -103,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
     progressBarContainer.style.display = 'block';
 
     progressBar.style.width = '0%';
-    progressText.textContent = 'Iniciando...';
+    progressText.textContent = t('progress.initializing_clients');
     progressTimer.textContent = '00:00';
   };
 
@@ -134,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (show) {
       progressSpinner.style.display = 'block';
       progressText.style.display = 'block';
-      progressText.textContent = 'Carregando...';
+      progressText.textContent = t('progress_loading');
 
       progressTimer.style.display = 'none';
       progressBarContainer.style.display = 'none';
@@ -188,14 +315,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const isKubernetes = selectedDocType === 'kubernetes';
     instanceStep.classList.toggle('hidden', !isNewHost);
 
-    let buttonText = 'Buscar Dados da Infraestrutura';
+    let i18nKey = 'fetch_btn_full';
     if (isNewHost) {
-      buttonText = 'Buscar Dados da(s) Instância(s)';
+      i18nKey = 'fetch_btn_new';
     } else if (isKubernetes) {
-      buttonText = 'Buscar Dados dos Clusters Kubernetes';
+      i18nKey = 'fetch_btn_k8s';
     }
 
-    fetchBtn.querySelector('span').textContent = buttonText;
+    const fetchBtnSpan = fetchBtn.querySelector('span');
+    if (fetchBtnSpan) {
+      fetchBtnSpan.setAttribute('data-i18n', i18nKey);
+      fetchBtnSpan.textContent = t(i18nKey);
+    }
+
     updateFetchButtonState();
   }
 
@@ -245,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
       searchContainer.className = 'select-search-container';
       const searchBox = document.createElement('input');
       searchBox.type = 'text';
-      searchBox.placeholder = 'Buscar...';
+      searchBox.placeholder = t('search_placeholder');
       searchBox.className = 'select-search';
       searchBox.addEventListener('click', e => e.stopPropagation());
       searchBox.addEventListener('input', () => {
@@ -367,7 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
     container.innerHTML = '';
     const selectedIds = Object.keys(selectedInstances);
     if (selectedIds.length === 0) {
-      container.innerHTML = `<span class="placeholder">Selecione uma ou mais instâncias</span>`;
+      container.innerHTML = `<span class="placeholder">${t('step4_placeholder')}</span>`;
     } else {
       selectedIds.forEach(id => {
         const tag = document.createElement('span');
@@ -408,10 +540,11 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error('Erro ao buscar regiões');
       }
       const regions = await response.json();
+      allRegionsData = regions;
       createCustomSelect(
         regionContainer,
-        regions,
-        'Selecione uma região',
+        allRegionsData,
+        t('step1_placeholder'),
         (selectedValue) => {
           if (selectedRegion !== selectedValue) {
             selectedRegion = selectedValue;
@@ -433,18 +566,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const populateDocTypes = () => {
     const docTypes = [{
       id: 'new_host',
-      name: 'Documentação de Novo Host'
+      name: t('doc_type_new')
     }, {
       id: 'full_infra',
-      name: 'Documentação de Infraestrutura'
+      name: t('doc_type_full')
     }, {
       id: 'kubernetes',
-      name: 'Documentação de Kubernetes (OKE)'
+      name: t('doc_type_k8s')
     }, ];
     createCustomSelect(
       docTypeContainer,
       docTypes,
-      'Selecione um tipo',
+      t('step2_placeholder'),
       (selectedValue) => {
         selectedDocType = selectedValue;
         updateUiForDocType();
@@ -459,16 +592,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!selectedRegion) return;
     try {
       toggleLoading(true);
-      createCustomSelect(compartmentContainer, [], 'Carregando...', () => {}, false, false);
+      createCustomSelect(compartmentContainer, [], t('progress_loading'), () => {}, false, false);
       const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/compartments`);
       if (!response.ok) {
         throw new Error('Erro ao buscar compartimentos');
       }
       const compartments = await response.json();
+      allCompartmentsData = compartments;
       createCustomSelect(
         compartmentContainer,
-        compartments,
-        'Selecione um compartimento',
+        allCompartmentsData,
+        t('step3_placeholder'),
         (selectedValue, selectedName) => {
           selectedCompartmentId = selectedValue;
           selectedCompartmentName = selectedName;
@@ -492,16 +626,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!selectedRegion || !selectedCompartmentId) return;
     try {
       toggleLoading(true);
-      createCustomSelect(instanceContainer, [], 'Carregando...', () => {}, false, true);
+      createCustomSelect(instanceContainer, [], t('progress_loading'), () => {}, false, true);
       const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/instances/${selectedCompartmentId}`);
       if (!response.ok) {
         throw new Error('Erro ao buscar instâncias');
       }
       const instances = await response.json();
+      allInstancesData = instances;
       createCustomSelect(
         instanceContainer,
-        instances,
-        'Selecione uma ou mais instâncias',
+        allInstancesData,
+        t('step4_placeholder'),
         (value, name, isChecked) => {
           if (isChecked) {
             selectedInstances[value] = name;
@@ -530,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedInstances = {};
     updateFetchButtonState();
     detailsContainer.classList.add('hidden');
-    createCustomSelect(instanceContainer, [], 'Selecione um compartimento primeiro', () => {}, false, true);
+    createCustomSelect(instanceContainer, [], t('instance_select_compartment_first'), () => {}, false, true);
     fetchCompartments();
   };
 
@@ -544,6 +679,8 @@ document.addEventListener('DOMContentLoaded', () => {
     detailsContainer.classList.add('hidden');
     if (selectedDocType === 'new_host') {
       fetchInstances();
+    } else {
+      createCustomSelect(instanceContainer, [], t('instance_select_compartment_first'), () => {}, false, true);
     }
   };
 
@@ -598,6 +735,7 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept-Language': currentLanguage
         },
         body: JSON.stringify(payload),
       });
@@ -628,7 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const response = await fetch(`${API_BASE_URL}/api/collection-status/${taskId}`);
         if (!response.ok) {
           clearInterval(pollingIntervalId);
-          showToast('Erro ao verificar status da tarefa.', 'error');
+          showToast(t('toast.network_error'), 'error');
           hideProgress();
           return;
         }
@@ -639,7 +777,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const progressInfo = data.result;
           if (progressInfo && typeof progressInfo === 'object') {
             const percentage = progressInfo.total > 0 ? (progressInfo.current / progressInfo.total) * 100 : 5;
-            updateProgress(percentage, progressInfo.step);
+            let progressMessage = progressInfo.step_key ? t(progressInfo.step_key, progressInfo.context) : (progressInfo.step || t('progress_loading'));
+            updateProgress(percentage, progressMessage);
           }
         } else if (data.status === 'SUCCESS') {
           clearInterval(pollingIntervalId);
@@ -649,12 +788,16 @@ document.addEventListener('DOMContentLoaded', () => {
           const totalSeconds = Math.floor(totalTime / 1000);
           const minutes = Math.floor(totalSeconds / 60);
           const seconds = totalSeconds % 60;
+          
           let durationString = "";
-          if (minutes > 0) durationString += `${minutes} minuto(s) e `;
-          durationString += `${seconds} segundo(s).`;
-          showToast(`Resumo gerado em ${durationString}`);
+          if (minutes > 0) {
+            durationString = t('toast.duration_minutes_and_seconds', { minutes: minutes, seconds: seconds });
+          } else {
+            durationString = t('toast.duration_seconds_only', { seconds: seconds });
+          }
+          showToast(t('toast.summary_generated_in', { duration: durationString }));
 
-          updateProgress(100, 'Dados coletados com sucesso!');
+          updateProgress(100, t('progress.success'));
           allInfrastructureData = data.result;
           summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
           detailsContainer.classList.remove('hidden');
@@ -662,13 +805,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } else if (data.status === 'FAILURE') {
           clearInterval(pollingIntervalId);
-          showToast('A tarefa de coleta de dados falhou no servidor.', 'error');
+          showToast(t('toast.server_error'), 'error');
           hideProgress();
         }
       } catch (error) {
         if (progressBar.style.width !== '100%') {
           clearInterval(pollingIntervalId);
-          showToast('Erro de conexão ao verificar status.', 'error');
+          showToast(t('toast.network_error'), 'error');
           hideProgress();
         } else {
           clearInterval(pollingIntervalId);
@@ -701,7 +844,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const createTable = (headers, rows) => {
       if (!rows || rows.length === 0) {
-        return '<p class="no-data-message">Nenhum recurso encontrado.</p>';
+        return `<p class="no-data-message">${t('summary.no_resource_found')}</p>`;
       }
       const headerHtml = headers.map(h => `<th>${h}</th>`).join('');
       const bodyHtml = rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('');
@@ -710,7 +853,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const instancesHtml = instances?.length > 0 ?
       instances.map(instance => generateInstanceSummaryCard(instance, true)).join('') :
-      '<p class="no-data-message">Nenhuma instância encontrada.</p>';
+      `<p class="no-data-message">${t('summary.no_instances_found')}</p>`;
 
     const volumeGroupsHtml = volume_groups?.length > 0 ?
       volume_groups.map(vg => {
@@ -719,34 +862,34 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const backupHtml = validation.has_backup_policy ?
           `<span class="validation-ok"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> ${validation.policy_name}</span>` :
-          `<span class="validation-fail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Nenhuma</span>`;
+          `<span class="validation-fail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> ${t('summary.none')}</span>`;
         
         const crossRegionHtml = validation.is_cross_region_replication_enabled ?
-          `<span class="validation-ok"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Habilitada</span>` :
-          `<span class="validation-fail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Desabilitada</span>`;
+          `<span class="validation-ok"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> ${t('summary.enabled')}</span>` :
+          `<span class="validation-fail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> ${t('summary.disabled')}</span>`;
         
         const membersListHtml = members && members.length > 0 ?
           `<ul class="member-list">${members.map(m => `<li>${m}</li>`).join('')}</ul>` :
-          `<p class="no-data-message">Nenhum membro encontrado.</p>`;
+          `<p class="no-data-message">${t('summary.no_members_found')}</p>`;
         
         const cardContent = `
           <div class="content-block">
-            <h5 class="subheader">Membros do Grupo</h5>
+            <h5 class="subheader">${t('summary.vg.members')}</h5>
             ${membersListHtml}
           </div>
           <div class="content-block">
-            <h5 class="subheader">Validação de Proteção de Dados</h5>
+            <h5 class="subheader">${t('summary.vg.protection_validation')}</h5>
             <div class="validation-grid">
               <div class="validation-item">
-                <label>Política de Backup</label>
+                <label>${t('summary.vg.backup_policy')}</label>
                 <div class="validation-value">${backupHtml}</div>
               </div>
               <div class="validation-item">
-                <label>Replicação Cross-Region</label>
+                <label>${t('summary.vg.cross_region_replication')}</label>
                 <div class="validation-value">${crossRegionHtml}</div>
               </div>
               <div class="validation-item">
-                <label>Destino da Replicação</label>
+                <label>${t('summary.vg.replication_target')}</label>
                 <div class="validation-value">${validation.cross_region_target}</div>
               </div>
             </div>
@@ -754,7 +897,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${availability_domain}</span><span class="status-badge status-${statusClass}">${lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
       }).join('') :
-      (isNewHostFlow ? '' : '<p class="no-data-message">Nenhum Volume Group encontrado.</p>');
+      (isNewHostFlow ? '' : `<p class="no-data-message">${t('summary.no_vgs_found')}</p>`);
 
     let relevantVcns = vcns;
     if (isKubernetesFlow && kubernetes_clusters?.length > 0) {
@@ -764,12 +907,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const vcnsHtml = relevantVcns?.length > 0 ?
       relevantVcns.map(vcn => {
-        const subnetsTable = createTable(['Nome da Subnet', 'CIDR Block'], vcn.subnets?.map(s => [s.display_name, s.cidr_block]));
-        const slTable = createTable(['Nome', 'Nº de Regras'], vcn.security_lists?.map(sl => [sl.name, `${sl.rules.length}`]));
-        const rtTable = createTable(['Nome', 'Nº de Regras'], vcn.route_tables?.map(rt => [rt.name, `${rt.rules.length}`]));
-        const nsgTable = createTable(['Nome', 'Nº de Regras'], vcn.network_security_groups?.map(nsg => [nsg.name, `${nsg.rules.length}`]));
+        const subnetsTable = createTable([t('summary.vcn.subnet_name'), 'CIDR Block'], vcn.subnets?.map(s => [s.display_name, s.cidr_block]));
+        const slTable = createTable([t('summary.name'), t('summary.rules_count')], vcn.security_lists?.map(sl => [sl.name, `${sl.rules.length}`]));
+        const rtTable = createTable([t('summary.name'), t('summary.rules_count')], vcn.route_tables?.map(rt => [rt.name, `${rt.rules.length}`]));
+        const nsgTable = createTable([t('summary.name'), t('summary.rules_count')], vcn.network_security_groups?.map(nsg => [nsg.name, `${nsg.rules.length}`]));
         const lpgTable = createTable(
-          ['Nome', 'Status do Peering', 'Route Table', 'CIDR Anunciado', 'Cross-Tenancy'],
+          [t('summary.name'), t('summary.vcn.peering_status'), 'Route Table', t('summary.vcn.advertised_cidr'), 'Cross-Tenancy'],
           vcn.lpgs?.map(lpg => {
             const statusClass = lpg.peering_status?.toLowerCase() || 'unknown';
             const statusText = lpg.peering_status_details || lpg.peering_status;
@@ -777,7 +920,7 @@ document.addEventListener('DOMContentLoaded', () => {
               `<span class="text-highlight">${lpg.display_name}</span>`,
               `<span class="status-badge status-${statusClass}">${statusText}</span>`,
               lpg.route_table_name, lpg.peer_advertised_cidr || 'N/A',
-              lpg.is_cross_tenancy_peering ? 'Sim' : 'Não'
+              lpg.is_cross_tenancy_peering ? t('summary.yes') : t('summary.no')
             ];
           })
         );
@@ -789,16 +932,16 @@ document.addEventListener('DOMContentLoaded', () => {
       load_balancers.map(lb => {
         const statusClass = lb.lifecycle_state ? lb.lifecycle_state.toLowerCase().replace('_', '-') : 'unknown';
         const cardContent = `
-          <fieldset><legend>${ICONS.LB}Informações Gerais</legend>
+          <fieldset><legend>${ICONS.LB}${t('summary.lb.general_info')}</legend>
             <div class="grid-container">
               <div class="info-group full-width">
-                <label>Endereços IP</label>
+                <label>${t('summary.lb.ip_addresses')}</label>
                 <div class="info-value">
-                  <ul class="clean-list">${lb.ip_addresses?.map(ip => `<li>${ip.ip_address} (${ip.is_public ? 'Público' : 'Privado'})</li>`).join('') || '<li>N/A</li>'}</ul>
+                  <ul class="clean-list">${lb.ip_addresses?.map(ip => `<li>${ip.ip_address} (${ip.is_public ? t('summary.public') : t('summary.private')})</li>`).join('') || '<li>N/A</li>'}</ul>
                 </div>
               </div>
               <div class="info-group full-width">
-                <label>Hostnames Virtuais</label>
+                <label>${t('summary.lb.virtual_hostnames')}</label>
                 ${createTable([], lb.hostnames?.map(h => [`<span class="text-highlight">${h.name}</span>`]))}
               </div>
             </div>
@@ -806,11 +949,11 @@ document.addEventListener('DOMContentLoaded', () => {
           <hr class="fieldset-divider">
           <div class="content-block">
             <h5 class="subheader">Listeners</h5>
-            ${createTable(['Nome', 'Protocolo', 'Porta', 'Backend Set Padrão'], lb.listeners?.map(l => [`<span class="text-highlight">${l.name}</span>`, l.protocol, l.port, l.default_backend_set_name]))}
+            ${createTable([t('summary.name'), t('summary.protocol'), t('summary.port'), t('summary.lb.default_backend_set')], lb.listeners?.map(l => [`<span class="text-highlight">${l.name}</span>`, l.protocol, l.port, l.default_backend_set_name]))}
           </div>
           <div class="content-block">
             <h5 class="subheader">Backend Sets</h5>
-            ${(lb.backend_sets && lb.backend_sets.length > 0) ? lb.backend_sets.map(bs => `<div class="backend-set-details"><h6 class="tunnel-subheader">Backend Set: <span class="text-highlight">${bs.name}</span> (Política: ${bs.policy})</h6><ul class="tunnel-basic-info"><li><strong>Health Check:</strong> ${bs.health_checker.protocol}:${bs.health_checker.port}</li><li><strong>URL Path:</strong> ${bs.health_checker.url_path || 'N/A'}</li></ul>${createTable(['Nome', 'IP', 'Porta', 'Peso'], bs.backends?.map(b => [`<span class="text-highlight">${b.name}</span>`, b.ip_address, b.port, b.weight]))}</div>`).join('') : '<p class="no-data-message">Nenhum Backend Set encontrado.</p>'}
+            ${(lb.backend_sets && lb.backend_sets.length > 0) ? lb.backend_sets.map(bs => `<div class="backend-set-details"><h6 class="tunnel-subheader">Backend Set: <span class="text-highlight">${bs.name}</span> (${t('summary.lb.policy')}: ${bs.policy})</h6><ul class="tunnel-basic-info"><li><strong>Health Check:</strong> ${bs.health_checker.protocol}:${bs.health_checker.port}</li><li><strong>URL Path:</strong> ${bs.health_checker.url_path || 'N/A'}</li></ul>${createTable([t('summary.name'), 'IP', t('summary.port'), t('summary.weight')], bs.backends?.map(b => [`<span class="text-highlight">${b.name}</span>`, b.ip_address, b.port, b.weight]))}</div>`).join('') : `<p class="no-data-message">${t('summary.no_backend_sets_found')}</p>`}
           </div>`;
         return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${lb.lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
       }).join('') :
@@ -818,8 +961,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const drgsHtml = drgs?.length > 0 ?
       drgs.map(drg => {
-        const attachmentsTable = createTable(['Nome do Anexo', 'Tipo', 'DRG Route Table'], drg.attachments?.map(a => [`<span class="text-highlight">${a.display_name}</span>`, a.network_type, a.route_table_name]));
-        const rpcsTable = createTable(['Nome', 'Status', 'Status do Peering'],
+        const attachmentsTable = createTable([t('summary.drg.attachment_name'), t('summary.type'), 'DRG Route Table'], drg.attachments?.map(a => [`<span class="text-highlight">${a.display_name}</span>`, a.network_type, a.route_table_name]));
+        const rpcsTable = createTable([t('summary.name'), t('summary.status'), t('summary.vcn.peering_status')],
           drg.rpcs?.map(rpc => {
             const statusClass = rpc.peering_status?.toLowerCase() || 'unknown';
             let statusText = rpc.peering_status_details || rpc.peering_status;
@@ -828,19 +971,19 @@ document.addEventListener('DOMContentLoaded', () => {
             return [`<span class="text-highlight">${rpc.display_name}</span>`, rpc.lifecycle_state, `<span class="status-badge status-${statusClass}">${statusText}</span>`];
           })
         );
-        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${drg.display_name}</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body"><h5 class="subheader">Anexos do DRG</h5>${attachmentsTable}<h5 class="subheader">Remote Peering Connections (RPCs)</h5>${rpcsTable}</div></div>`;
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${drg.display_name}</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body"><h5 class="subheader">${t('summary.drg.attachments')}</h5>${attachmentsTable}<h5 class="subheader">${t('summary.drg.rpcs')}</h5>${rpcsTable}</div></div>`;
       }).join('') :
       '';
 
     const cpesHtml = createTable(
-      ['Nome do CPE', 'Endereço IP', 'Fabricante'],
+      [t('summary.vpn.cpe_name'), t('summary.lb.ip_addresses'), t('summary.vpn.vendor')],
       cpes?.map(cpe => [`<span class="text-highlight">${cpe.display_name}</span>`, cpe.ip_address, cpe.vendor || 'N/A'])
     );
 
     const ipsecHtml = ipsec_connections?.length > 0 ?
       ipsec_connections.map(ipsec => {
-        const cpeName = cpes.find(c => c.id === ipsec.cpe_id)?.display_name || 'Não encontrado';
-        const drgName = drgs.find(d => d.id === ipsec.drg_id)?.display_name || 'Não encontrado';
+        const cpeName = cpes.find(c => c.id === ipsec.cpe_id)?.display_name || t('summary.none');
+        const drgName = drgs.find(d => d.id === ipsec.drg_id)?.display_name || t('summary.none');
         const tunnelsHtml = ipsec.tunnels.map(tunnel => {
           const p1 = tunnel.phase_one_details;
           const p2 = tunnel.phase_two_details;
@@ -850,39 +993,39 @@ document.addEventListener('DOMContentLoaded', () => {
             bgpDetailsHtml = `
               <div class="crypto-details-grid">
                 <div>
-                  <h6 class="tunnel-subheader">Sessão BGP</h6>
-                  <ul><li><strong>ASN Oracle:</strong> ${bgp.oracle_bgp_asn || 'N/A'}</li><li><strong>ASN Cliente:</strong> ${bgp.customer_bgp_asn || 'N/A'}</li></ul>
+                  <h6 class="tunnel-subheader">${t('summary.vpn.bgp_session')}</h6>
+                  <ul><li><strong>${t('summary.vpn.oracle_asn')}:</strong> ${bgp.oracle_bgp_asn || 'N/A'}</li><li><strong>${t('summary.vpn.customer_asn')}:</strong> ${bgp.customer_bgp_asn || 'N/A'}</li></ul>
                 </div>
                 <div>
-                  <h6 class="tunnel-subheader">IPs do Peering</h6>
-                  <ul><li><strong>Interface Oracle:</strong> ${bgp.oracle_interface_ip || 'N/A'}</li><li><strong>Interface Cliente:</strong> ${bgp.customer_interface_ip || 'N/A'}</li></ul>
+                  <h6 class="tunnel-subheader">${t('summary.vpn.peering_ips')}</h6>
+                  <ul><li><strong>${t('summary.vpn.oracle_interface')}:</strong> ${bgp.oracle_interface_ip || 'N/A'}</li><li><strong>${t('summary.vpn.customer_interface')}:</strong> ${bgp.customer_interface_ip || 'N/A'}</li></ul>
                 </div>
               </div><hr class="tunnel-divider">`;
           }
           return `
             <div class="tunnel-details">
               <div class="tunnel-header">
-                <strong>Túnel: <span class="text-highlight">${tunnel.display_name}</span></strong>
+                <strong>${t('summary.vpn.tunnel')}: <span class="text-highlight">${tunnel.display_name}</span></strong>
                 <span class="status-badge status-${tunnel.status.toLowerCase()}">${tunnel.status}</span>
               </div>
               <ul class="tunnel-basic-info">
-                <li><strong>IP Oracle:</strong> ${tunnel.vpn_oracle_ip || 'N/A'}</li><li><strong>IP do CPE:</strong> ${tunnel.cpe_ip || 'N/A'}</li>
-                <li><strong>Roteamento:</strong> ${tunnel.routing_type}</li><li><strong>IKE:</strong> ${tunnel.ike_version}</li>
+                <li><strong>${t('summary.vpn.oracle_ip')}:</strong> ${tunnel.vpn_oracle_ip || 'N/A'}</li><li><strong>${t('summary.vpn.cpe_ip')}:</strong> ${tunnel.cpe_ip || 'N/A'}</li>
+                <li><strong>${t('summary.routing')}:</strong> ${tunnel.routing_type}</li><li><strong>IKE:</strong> ${tunnel.ike_version}</li>
               </ul>
               ${bgpDetailsHtml}
               <div class="crypto-details-grid">
                 <div>
-                  <h6 class="tunnel-subheader">Fase 1 (IKE)</h6>
+                  <h6 class="tunnel-subheader">${t('summary.vpn.phase1')}</h6>
                   <ul>
-                    <li><strong>Autenticação:</strong> ${p1.authentication_algorithm}</li><li><strong>Criptografia:</strong> ${p1.encryption_algorithm}</li>
-                    <li><strong>Grupo DH:</strong> ${p1.dh_group}</li><li><strong>Lifetime:</strong> ${p1.lifetime_in_seconds}s</li>
+                    <li><strong>${t('summary.vpn.auth')}:</strong> ${p1.authentication_algorithm}</li><li><strong>${t('summary.vpn.encryption')}:</strong> ${p1.encryption_algorithm}</li>
+                    <li><strong>DH Group:</strong> ${p1.dh_group}</li><li><strong>${t('summary.lifetime')}:</strong> ${p1.lifetime_in_seconds}s</li>
                   </ul>
                 </div>
                 <div>
-                  <h6 class="tunnel-subheader">Fase 2 (IPSec)</h6>
+                  <h6 class="tunnel-subheader">${t('summary.vpn.phase2')}</h6>
                   <ul>
-                    <li><strong>Autenticação:</strong> ${p2.authentication_algorithm || 'N/A'}</li><li><strong>Criptografia:</strong> ${p2.encryption_algorithm}</li>
-                    <li><strong>Lifetime:</strong> ${p2.lifetime_in_seconds}s</li>
+                    <li><strong>${t('summary.vpn.auth')}:</strong> ${p2.authentication_algorithm || 'N/A'}</li><li><strong>${t('summary.vpn.encryption')}:</strong> ${p2.encryption_algorithm}</li>
+                    <li><strong>${t('summary.lifetime')}:</strong> ${p2.lifetime_in_seconds}s</li>
                   </ul>
                 </div>
               </div>
@@ -890,9 +1033,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('<hr class="tunnel-divider">');
         const hasBgpTunnel = ipsec.tunnels.some(t => t.routing_type === 'BGP');
         const routingDisplay = hasBgpTunnel ?
-          `<span class="full-width"><strong>Roteamento:</strong> BGP</span>` :
-          `<span class="full-width"><strong>Rotas Estáticas:</strong> ${(ipsec.static_routes && ipsec.static_routes.length > 0) ? ipsec.static_routes.join(', ') : 'Nenhuma'}</span>`;
-        return `<div class="ipsec-summary-card collapsible"><div class="ipsec-card-header"><h4 class="card-header-title">${ipsec.display_name}</h4><div class="card-status-indicator"><span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="ipsec-card-body"><div class="ipsec-details"><span><strong>CPE Associado:</strong> ${cpeName}</span><span><strong>DRG Associado:</strong> ${drgName}</span></div><div class="ipsec-details">${routingDisplay}</div><h5 class="subheader">Túneis</h5>${tunnelsHtml || '<p class="no-data-message">Nenhum túnel encontrado.</p>'}</div></div>`;
+          `<span class="full-width"><strong>${t('summary.routing')}:</strong> BGP</span>` :
+          `<span class="full-width"><strong>${t('summary.vpn.static_routes')}:</strong> ${(ipsec.static_routes && ipsec.static_routes.length > 0) ? ipsec.static_routes.join(', ') : t('summary.none')}</span>`;
+        return `<div class="ipsec-summary-card collapsible"><div class="ipsec-card-header"><h4 class="card-header-title">${ipsec.display_name}</h4><div class="card-status-indicator"><span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="ipsec-card-body"><div class="ipsec-details"><span><strong>${t('summary.vpn.associated_cpe')}:</strong> ${cpeName}</span><span><strong>${t('summary.vpn.associated_drg')}:</strong> ${drgName}</span></div><div class="ipsec-details">${routingDisplay}</div><h5 class="subheader">${t('summary.vpn.tunnels')}</h5>${tunnelsHtml || `<p class="no-data-message">${t('summary.no_tunnels_found')}</p>`}</div></div>`;
       }).join('') :
       '';
 
@@ -906,18 +1049,18 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="instance-card-body">
               <fieldset>
-                <legend>Hardware e Configuração</legend>
+                <legend>${t('summary.oke.hw_config')}</legend>
                 <div class="grid-container">
                   <div class="info-group full-width"><label>Shape</label><div class="info-value">${np.shape}</div></div>
                   <div class="info-group"><label>OCPUs</label><div class="info-value">${np.ocpus}</div></div>
-                  <div class="info-group"><label>Memória (GB)</label><div class="info-value">${np.memory_in_gbs}</div></div>
-                  <div class="info-group"><label>Disco (GB)</label><div class="info-value">${np.boot_volume_size_in_gbs}</div></div>
-                  <div class="info-group"><label>Nós</label><div class="info-value">${np.node_count}</div></div>
+                  <div class="info-group"><label>${t('summary.instance.memory')}</label><div class="info-value">${np.memory_in_gbs}</div></div>
+                  <div class="info-group"><label>${t('summary.disk')}</label><div class="info-value">${np.boot_volume_size_in_gbs}</div></div>
+                  <div class="info-group"><label>${t('summary.oke.nodes')}</label><div class="info-value">${np.node_count}</div></div>
                   <div class="info-group full-width"><label>Subnet</label><div class="info-value">${np.subnet_name}</div></div>
                 </div>
               </fieldset>
             </div>
-          </div>`).join('') || '<p class="no-data-message">Nenhum Node Pool encontrado.</p>';
+          </div>`).join('') || `<p class="no-data-message">${t('summary.no_node_pools_found')}</p>`;
         return `
           <div class="instance-summary-card collapsible">
             <div class="oke-card-header">
@@ -926,43 +1069,48 @@ document.addEventListener('DOMContentLoaded', () => {
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div>
             <div class="instance-card-body">
-              <h5 class="subheader">Conectividade do Cluster</h5>
+              <h5 class="subheader">${t('summary.oke.cluster_connectivity')}</h5>
               <div class="connectivity-grid">
-                <div class="connectivity-item full-span"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg><div class="text-content"><label>VCN Associada</label><span class="value">${cluster.vcn_name}</span></div></div>
+                <div class="connectivity-item full-span"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg><div class="text-content"><label>${t('summary.oke.associated_vcn')}</label><span class="value">${cluster.vcn_name}</span></div></div>
                 <div class="connectivity-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 0 0 9-9 9 9 0 0 0-9-9 9 9 0 0 0-9 9 9 9 0 0 0 9 9Z"></path><path d="M8 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M15 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M12 2v2"></path><path d="M12 8v2"></path></svg><div class="text-content"><label>Subnet (Load Balancer)</label><span class="value">${cluster.lb_subnet_name}</span></div></div>
                 <div class="connectivity-item"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg><div class="text-content"><label>Subnet (Worker Nodes)</label><span class="value">${cluster.nodes_subnet_name}</span></div></div>
-                <div class="connectivity-item full-span"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><div class="text-content"><label>Endpoint API Público</label><span class="value code">${cluster.public_api_endpoint || 'N/A'}</span></div></div>
-                <div class="connectivity-item full-span"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><div class="text-content"><label>Endpoint API Privado</label><span class="value code">${cluster.private_api_endpoint || 'N/A'}</span></div></div>
+                <div class="connectivity-item full-span"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><div class="text-content"><label>${t('summary.oke.public_endpoint')}</label><span class="value code">${cluster.public_api_endpoint || 'N/A'}</span></div></div>
+                <div class="connectivity-item full-span"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><div class="text-content"><label>${t('summary.oke.private_endpoint')}</label><span class="value code">${cluster.private_api_endpoint || 'N/A'}</span></div></div>
               </div>
               <h5 class="subheader">Node Pools</h5><div class="node-pool-container">${nodePoolsHtml}</div>
             </div>
           </div>`;
       }).join('') :
-      '<p class="no-data-message">Nenhum Cluster Kubernetes encontrado.</p>';
+      `<p class="no-data-message">${t('summary.no_oke_found')}</p>`;
 
-    let title = `Resumo da Infraestrutura: ${selectedCompartmentName}`;
+    let titleKey = 'summary.title.full_infra';
+    if (isNewHostFlow) {
+      titleKey = 'summary.title.new_host';
+    } else if (isKubernetesFlow) {
+      titleKey = 'summary.title.k8s';
+    }
+    let title = t(titleKey, { name: selectedCompartmentName });
+    
     let mainContentHtml = '';
 
     if (isNewHostFlow) {
-      title = `Resumo do(s) Novo(s) Host(s): ${selectedCompartmentName}`;
       mainContentHtml = `
-        <fieldset><legend>${ICONS.INSTANCES}Instâncias Computacionais</legend><div class="instances-container">${instancesHtml}</div></fieldset>
-        ${volumeGroupsHtml ? `<hr class="fieldset-divider"><fieldset><legend>${ICONS.VOLUME_GROUPS}Volume Groups Associados</legend><div class="vg-container">${volumeGroupsHtml}</div></fieldset>`: ''}`;
+        <fieldset><legend>${ICONS.INSTANCES}${t('summary.compute_instances')}</legend><div class="instances-container">${instancesHtml}</div></fieldset>
+        ${volumeGroupsHtml ? `<hr class="fieldset-divider"><fieldset><legend>${ICONS.VOLUME_GROUPS}${t('summary.associated_vgs')}</legend><div class="vg-container">${volumeGroupsHtml}</div></fieldset>`: ''}`;
     } else if (isKubernetesFlow) {
-      title = `Resumo dos Clusters Kubernetes: ${selectedCompartmentName}`;
       mainContentHtml = `
-        <fieldset><legend>${ICONS.OKE}Clusters OKE</legend><div class="oke-container">${okeClustersHtml}</div></fieldset>
+        <fieldset><legend>${ICONS.OKE}${t('summary.oke_clusters')}</legend><div class="oke-container">${okeClustersHtml}</div></fieldset>
         <hr class="fieldset-divider">
-        <fieldset><legend>${ICONS.VCNS}Virtual Cloud Networks (VCNs)</legend><div class="vcn-container">${vcnsHtml || '<p class="no-data-message">Nenhuma VCN associada aos clusters encontrada.</p>'}</div></fieldset>`;
+        <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('summary.no_vcns_associated')}</p>`}</div></fieldset>`;
     } else { // Full Infra
       mainContentHtml = `
-        <fieldset><legend>${ICONS.INSTANCES}Instâncias Computacionais</legend><div class="instances-container">${instancesHtml}</div></fieldset>
-        ${volumeGroupsHtml ? `<hr class="fieldset-divider"><fieldset><legend>${ICONS.VOLUME_GROUPS}Volume Groups</legend><div class="vg-container">${volumeGroupsHtml}</div></fieldset>`: ''}
-        <hr class="fieldset-divider"><fieldset><legend>${ICONS.VCNS}Virtual Cloud Networks (VCNs)</legend><div class="vcn-container">${vcnsHtml || '<p class="no-data-message">Nenhuma VCN encontrada.</p>'}</div></fieldset>
-        <hr class="fieldset-divider"><fieldset><legend>${ICONS.OKE}Clusters Kubernetes (OKE)</legend><div class="oke-container">${okeClustersHtml}</div></fieldset>
-        <hr class="fieldset-divider"><fieldset><legend>${ICONS.LB}Load Balancers (LBaaS)</legend><div class="lb-container">${loadBalancersHtml || '<p class="no-data-message">Nenhum Load Balancer encontrado.</p>'}</div></fieldset>
-        <hr class="fieldset-divider"><fieldset><legend>${ICONS.ROUTING}Conectividade de Roteamento</legend><div class="drg-container">${drgsHtml || '<p class="no-data-message">Nenhum DRG encontrado.</p>'}</div></fieldset>
-        <hr class="fieldset-divider"><fieldset><legend>${ICONS.VPN}Conectividade VPN</legend><h4 class="subheader">Customer-Premises Equipment (CPEs)</h4>${cpesHtml}<h4 class="subheader">Conexões VPN IPSec</h4><div class="ipsec-container">${ipsecHtml || '<p class="no-data-message">Nenhuma conexão IPSec encontrada.</p>'}</div></fieldset>`;
+        <fieldset><legend>${ICONS.INSTANCES}${t('summary.compute_instances')}</legend><div class="instances-container">${instancesHtml}</div></fieldset>
+        ${volumeGroupsHtml ? `<hr class="fieldset-divider"><fieldset><legend>${ICONS.VOLUME_GROUPS}${t('summary.vgs')}</legend><div class="vg-container">${volumeGroupsHtml}</div></fieldset>`: ''}
+        <hr class="fieldset-divider"><fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('summary.no_vcns_found')}</p>`}</div></fieldset>
+        <hr class="fieldset-divider"><fieldset><legend>${ICONS.OKE}${t('summary.oke_clusters')}</legend><div class="oke-container">${okeClustersHtml}</div></fieldset>
+        <hr class="fieldset-divider"><fieldset><legend>${ICONS.LB}${t('summary.lbs')}</legend><div class="lb-container">${loadBalancersHtml || `<p class="no-data-message">${t('summary.no_lbs_found')}</p>`}</div></fieldset>
+        <hr class="fieldset-divider"><fieldset><legend>${ICONS.ROUTING}${t('summary.routing_connectivity')}</legend><div class="drg-container">${drgsHtml || `<p class="no-data-message">${t('summary.no_drgs_found')}</p>`}</div></fieldset>
+        <hr class="fieldset-divider"><fieldset><legend>${ICONS.VPN}${t('summary.vpn_connectivity')}</legend><h4 class="subheader">${t('summary.vpn.cpes')}</h4>${cpesHtml}<h4 class="subheader">${t('summary.vpn.ipsec_connections')}</h4><div class="ipsec-container">${ipsecHtml || `<p class="no-data-message">${t('summary.no_ipsec_found')}</p>`}</div></fieldset>`;
     }
 
     return `<div><h3 class="infra-summary-main-title">${title}</h3>${mainContentHtml}</div>`;
@@ -976,48 +1124,48 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   function generateInstanceSummaryCard(data, isCollapsible = false) {
     const cardContent = `
-      <fieldset><legend>${ICONS.INSTANCE_DATA}Dados da Instância</legend>
+      <fieldset><legend>${ICONS.INSTANCE_DATA}${t('summary.instance.data')}</legend>
         <div class="grid-container">
           <div class="info-group"><label>Shape</label><div class="info-value">${data.shape}</div></div>
           <div class="info-group"><label>OCPUs</label><div class="info-value">${data.ocpus}</div></div>
-          <div class="info-group"><label>Memória (GB)</label><div class="info-value">${data.memory}</div></div>
-          <div class="info-group"><label>Boot Volume (GB)</label><div class="info-value">${data.boot_volume_gb}</div></div>
-          <div class="info-group full-width"><label>Sistema Operacional</label><div class="info-value">${data.os_name}</div></div>
-          <div class="info-group"><label>IP Privado</label><div class="info-value">${data.private_ip}</div></div>
-          <div class="info-group"><label>IP Público</label><div class="info-value">${data.public_ip || 'N/A'}</div></div>
-          <div class="info-group full-width"><label>Política de Backup (Boot Volume)</label><div class="info-value">${data.backup_policy_name}</div></div>
+          <div class="info-group"><label>${t('summary.instance.memory')}</label><div class="info-value">${data.memory}</div></div>
+          <div class="info-group"><label>${t('summary.instance.boot_volume')}</label><div class="info-value">${data.boot_volume_gb}</div></div>
+          <div class="info-group full-width"><label>${t('summary.instance.os')}</label><div class="info-value">${data.os_name}</div></div>
+          <div class="info-group"><label>${t('summary.instance.private_ip')}</label><div class="info-value">${data.private_ip}</div></div>
+          <div class="info-group"><label>${t('summary.instance.public_ip')}</label><div class="info-value">${data.public_ip || 'N/A'}</div></div>
+          <div class="info-group full-width"><label>${t('summary.instance.backup_policy')}</label><div class="info-value">${data.backup_policy_name}</div></div>
         </div>
       </fieldset>
       <hr class="fieldset-divider">
-      <fieldset><legend>${ICONS.BLOCK_VOLUMES}Block Volumes Anexados</legend>
+      <fieldset><legend>${ICONS.BLOCK_VOLUMES}${t('summary.instance.attached_volumes')}</legend>
         <div class="table-container">
           ${data.block_volumes && data.block_volumes.length > 0 ? 
-            `<table class="bv-table"><thead><tr><th>Nome do Volume</th><th>Tamanho (GB)</th><th>Política de Backup</th></tr></thead><tbody>${data.block_volumes.map(vol => `<tr><td>${vol.display_name}</td><td>${vol.size_in_gbs}</td><td>${vol.backup_policy_name}</td></tr>`).join('')}</tbody></table>` : 
-            `<p class="no-data-message">Nenhum Block Volume adicional anexado.</p>`
+            `<table class="bv-table"><thead><tr><th>${t('summary.instance.volume_name')}</th><th>${t('summary.instance.size')}</th><th>${t('summary.instance.backup_policy')}</th></tr></thead><tbody>${data.block_volumes.map(vol => `<tr><td>${vol.display_name}</td><td>${vol.size_in_gbs}</td><td>${vol.backup_policy_name}</td></tr>`).join('')}</tbody></table>` : 
+            `<p class="no-data-message">${t('summary.no_block_volumes_found')}</p>`
           }
         </div>
       </fieldset>
       <hr class="fieldset-divider">
-      <fieldset><legend>${ICONS.CONNECTIVITY}Resumo de Conectividade de Rede</legend>
+      <fieldset><legend>${ICONS.CONNECTIVITY}${t('summary.instance.network_summary')}</legend>
         <div class="summary-grid">
           <div class="summary-group">
             <label>Security Lists</label>
-            <div class="summary-box">${data.security_lists && data.security_lists.length > 0 ? data.security_lists.map(sl => `<span class="summary-item">${sl.name}</span>`).join('') : `<span class="summary-item empty">Nenhuma</span>`}</div>
+            <div class="summary-box">${data.security_lists && data.security_lists.length > 0 ? data.security_lists.map(sl => `<span class="summary-item">${sl.name}</span>`).join('') : `<span class="summary-item empty">${t('summary.none')}</span>`}</div>
           </div>
           <div class="summary-group">
             <label>Network Security Groups (NSGs)</label>
-            <div class="summary-box">${data.network_security_groups && data.network_security_groups.length > 0 ? data.network_security_groups.map(nsg => `<span class="summary-item">${nsg.name}</span>`).join('') : `<span class="summary-item empty">Nenhuma</span>`}</div>
+            <div class="summary-box">${data.network_security_groups && data.network_security_groups.length > 0 ? data.network_security_groups.map(nsg => `<span class="summary-item">${nsg.name}</span>`).join('') : `<span class="summary-item empty">${t('summary.none')}</span>`}</div>
           </div>
           <div class="summary-group full-width">
             <label>Route Table</label>
-            <div class="summary-box">${data.route_table && data.route_table.name ? `<span class="summary-item">${data.route_table.name}</span>` : `<span class="summary-item empty">Nenhuma</span>`}</div>
+            <div class="summary-box">${data.route_table && data.route_table.name ? `<span class="summary-item">${data.route_table.name}</span>` : `<span class="summary-item empty">${t('summary.none')}</span>`}</div>
           </div>
         </div>
       </fieldset>`;
 
     if (isCollapsible) {
       const isRunning = data.lifecycle_state === 'RUNNING';
-      const statusText = isRunning ? 'Ligada' : 'Desligada';
+      const statusText = isRunning ? t('summary.instance.running') : t('summary.instance.stopped');
       const statusClass = isRunning ? 'running' : 'stopped';
       return `
         <div class="instance-summary-card collapsible">
@@ -1046,7 +1194,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const generateDocument = () => {
     const responsibleName = responsibleNameInput.value.trim();
     if (!responsibleName) {
-      showToast("Por favor, preencha o nome do responsável.", 'error');
+      showToast(t('toast.responsible_required'), 'error');
       responsibleNameInput.focus();
       return;
     }
@@ -1057,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', () => {
         allInfrastructureData.vcns?.length);
 
     if (!hasData) {
-      showToast("Busque os dados antes de gerar o documento.", 'error');
+      showToast(t('toast.fetch_data_first'), 'error');
       return;
     }
 
@@ -1068,6 +1216,7 @@ document.addEventListener('DOMContentLoaded', () => {
         doc_type: selectedDocType,
         infra_data: allInfrastructureData,
         responsible_name: responsibleName,
+        lang: currentLanguage
       };
 
       formData.append('json_data', JSON.stringify(payload));
@@ -1078,13 +1227,13 @@ document.addEventListener('DOMContentLoaded', () => {
       xhr.open('POST', `${API_BASE_URL}/api/generate-document`, true);
       xhr.responseType = 'blob';
       xhr.onloadend = () => toggleLoading(false);
-      xhr.onerror = () => showToast("Ocorreu um erro de rede que impediu o download.", 'error');
+      xhr.onerror = () => showToast(t('toast.network_error'), 'error');
 
       xhr.onload = function() {
         if (this.status === 200) {
           const blob = this.response;
           if (blob.size === 0) {
-            showToast("Erro: O servidor retornou uma resposta vazia.", 'error');
+            showToast(t('toast.empty_response'), 'error');
             return;
           }
           const url = window.URL.createObjectURL(blob);
@@ -1102,9 +1251,9 @@ document.addEventListener('DOMContentLoaded', () => {
           reader.onload = function() {
             try {
               const error = JSON.parse(this.result);
-              showToast(`Erro do servidor: ${error.detail || this.statusText}`, 'error');
+              showToast(`${t('toast.server_error')}: ${error.detail || this.statusText}`, 'error');
             } catch (e) {
-              showToast(`Erro do servidor: ${this.status} - ${this.statusText}`, 'error');
+              showToast(`${t('toast.server_error')}: ${this.status} - ${this.statusText}`, 'error');
             }
           }
           reader.readAsText(this.response);
@@ -1112,7 +1261,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       xhr.send(formData);
     } catch (error) {
-      showToast("Erro crítico no download: " + error.toString(), 'error');
+      showToast(`${t('toast.critical_error')}: ` + error.toString(), 'error');
       toggleLoading(false);
     }
   };
@@ -1201,12 +1350,10 @@ document.addEventListener('DOMContentLoaded', () => {
   /**
    * Initializes the application by fetching initial data and setting up UI components.
    */
-  const initializeApp = () => {
+  const initializeApp = async () => {
+    const savedLang = localStorage.getItem('oci-docgen-lang') || 'pt';
+    await setLanguage(savedLang);
     fetchRegions();
-    populateDocTypes();
-    createCustomSelect(compartmentContainer, [], 'Selecione uma região primeiro', () => {}, false, false);
-    createCustomSelect(instanceContainer, [], 'Selecione um compartimento primeiro', () => {}, false, true);
-    instanceStep.classList.add('hidden');
   };
 
   // --- Event Listeners ---
@@ -1229,6 +1376,7 @@ document.addEventListener('DOMContentLoaded', () => {
   antivirusUploadGroup.addEventListener('paste', (e) => handlePaste(e, antivirusImageFiles, antivirusFileList));
   architectureFileList.addEventListener('click', (e) => handleFileDelete(e, architectureImageFiles, architectureFileList));
   antivirusFileList.addEventListener('click', (e) => handleFileDelete(e, antivirusImageFiles, antivirusFileList));
+  languageSelector.addEventListener('change', (e) => setLanguage(e.target.value));
 
   // --- Initial Load ---
   initializeApp();

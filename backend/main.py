@@ -1,8 +1,3 @@
-# OCI DocGen
-# Author: Pedro Teixeira
-# Date: September 29, 2025
-# Description: Main API (backend) built with FastAPI to serve OCI data and generate documents.
-
 # --- Standard Library Imports ---
 import json
 import logging
@@ -184,6 +179,7 @@ async def create_document(
             responsible_name=request_data.responsible_name,
             architecture_image_bytes_list=architecture_image_bytes_list,
             antivirus_image_bytes_list=antivirus_image_bytes_list,
+            lang=request_data.lang,
         )
         logging.info(f"doc_generator returned file path: {file_path}")
 

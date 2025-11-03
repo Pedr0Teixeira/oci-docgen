@@ -1,8 +1,3 @@
-# OCI DocGen
-# Author: Pedro Teixeira
-# Date: September 29, 2025
-# Description: Defines Celery tasks for long-running OCI data collection processes.
-
 # --- Third-Party Imports ---
 from celery import Celery
 
