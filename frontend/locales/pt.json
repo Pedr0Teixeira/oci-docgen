@@ -29,7 +29,7 @@
   "success_btn": "OK",
   "search_placeholder": "Buscar...",
   "instance_select_compartment_first": "Selecione um compartimento primeiro",
-  "progress.initializing_clients": "Inicializando clientes OCI...",
+  "progress.initializing_clients": "Iniciando...",
   "progress.listing_instances": "Listando instâncias computacionais...",
   "progress.listing_oke": "Listando clusters OKE...",
   "progress.analyzing_vm": "Analisando VM: {name}",
