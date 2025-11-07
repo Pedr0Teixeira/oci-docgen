@@ -643,6 +643,7 @@ def _get_volume_groups(
 
 def _get_oke_clusters(
     ce_client: oci.container_engine.ContainerEngineClient,
+    compute_client: oci.core.ComputeClient,
     compartment_id: str,
     vcn_map: Dict[str, Any],
 ) -> List[OkeClusterData]:
@@ -672,11 +673,27 @@ def _get_oke_clusters(
             )
             subnet_name = vcn_info["subnets"].get((np.subnet_ids or [None])[0], "N/A")
             node_pool_size = np.node_config_details.size if np.node_config_details else 0
-            boot_vol_size = (
-                int(np.node_source_details.boot_volume_size_in_gbs)
-                if np.node_source_details
-                else 0
-            )
+            boot_vol_size = 0
+            if (
+                np.node_source_details
+                and np.node_source_details.boot_volume_size_in_gbs is not None
+            ):
+                # Case 1: Custom size is explicitly defined (e.g., 50 GB)
+                boot_vol_size = int(np.node_source_details.boot_volume_size_in_gbs)
+            elif np.node_image_id:
+                # Case 2: Custom size is None, fetch default size from the image
+                try:
+                    image = _safe_api_call(
+                        compute_client.get_image, np.node_image_id
+                    )
+                    if image and image.boot_volume_size_in_gbs:
+                        boot_vol_size = int(image.boot_volume_size_in_gbs)
+                    else:
+                        boot_vol_size = 47  # Common OKE default fallback
+                except Exception:
+                    boot_vol_size = 47  # Fallback on error
+            else:
+                boot_vol_size = 47  # Final fallback
             node_pools_data.append(
                 NodePoolData(
                     name=np.name,
@@ -1174,7 +1191,9 @@ def get_infrastructure_details(
         vcn.id: {"name": vcn.display_name, "subnets": {s.id: s.display_name for s in vcn.subnets}}
         for vcn in vcns
     }
-    kubernetes_clusters = _get_oke_clusters(ce_client, compartment_id, vcn_map_for_oke)
+    kubernetes_clusters = _get_oke_clusters(
+        ce_client, compute_client, compartment_id, vcn_map_for_oke
+    )
 
     task.update_state(
         state="PROGRESS",
