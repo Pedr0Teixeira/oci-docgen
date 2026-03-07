@@ -1,11 +1,20 @@
-# --- Standard Library Imports ---
+# ==============================================================================
+# PT-BR: Módulo de geração de documentos .docx para o OCI DocGen.
+#        Converte dados de infraestrutura coletados em documentos Word formatados,
+#        com suporte a múltiplos tipos de documentação e idiomas (PT-BR / EN).
+# EN: .docx document generation module for OCI DocGen.
+#     Converts collected infrastructure data into formatted Word documents,
+#     with support for multiple documentation types and languages (PT-BR / EN).
+# ==============================================================================
+
+# Standard Library Imports
 import os
 import re
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
-# --- Third-Party Imports ---
+# Third-Party Imports
 import docx
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
@@ -17,10 +26,13 @@ from docx.oxml.shared import OxmlElement, qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
-# --- Local Application Imports ---
-from schemas import InfrastructureData, InstanceData
+# Local Application Imports
+from schemas import InfrastructureData, InstanceData, LoadBalancerData
 
-# --- i18n Translation Service ---
+# ==============================================================================
+# PT-BR: Serviço de Internacionalização (i18n) — Traduções PT-BR e EN
+# EN: Internationalization (i18n) Service — PT-BR and EN Translations
+# ==============================================================================
 
 DOC_STRINGS = {
     "pt": {
@@ -181,6 +193,34 @@ DOC_STRINGS = {
         "doc.headings.additional_configs": "Configurações Adicionais",
         "doc.headings.antivirus_config": "Configuração do Antivírus",
         "doc.headings.responsible": "RESPONSÁVEL",
+        "doc.type.waf_report": "Documentação de WAF",
+        "doc.identifier.waf_report": "WAF",
+        "doc.headings.waf_config": "Configuração de Web Application Firewall (WAF)",
+        "doc.headings.waf_policy_name": "Política WAF",
+        "doc.headings.waf_integration": "Integração WAF",
+        "doc.headings.waf_firewall": "Web App Firewall (Firewall)",
+        "doc.headings.overview": "Visão Geral",
+        "doc.headings.lb_integration": "Integração com Load Balancer",
+        "doc.headings.network_infrastructure": "Infraestrutura de Rede",
+        "doc.headings.waf_protection_config": "Configuração de Proteção WAF",
+        "doc.headings.waf_actions": "Ações (Actions)",
+        "doc.headings.waf_access_control": "Controle de Acesso",
+        "doc.headings.waf_rate_limiting": "Rate Limiting",
+        "doc.headings.waf_protection_rules": "Regras de Proteção",
+        "doc.headers.protected_domains": "Domínios Protegidos",
+        "doc.headers.capabilities": "Capabilities",
+        "doc.headers.action": "Ação",
+        "doc.headers.condition": "Condição",
+        "doc.headers.certificates": "Certificados",
+        "doc.headers.expiration": "Expiração",
+        "doc.common.compartment": "Compartimento",
+        "doc.common.region": "Região",
+        "doc.common.time_created": "Data de Criação",
+        "doc.common.code": "Código HTTP",
+        "doc.messages.no_lb_association": "Esta política WAF não possui Load Balancer associado.",
+        "doc.messages.no_network_found": "Nenhuma Infraestrutura de Rede encontrada.",
+        "doc.messages.no_config_found": "Nenhuma configuração encontrada.",
+        "doc.messages.no_certificates_found": "Nenhum certificado configurado.",
         "doc.headings.responsible_desc": "Responsável pelo preenchimento da documentação:",
         "doc.headings.instance_connectivity": "Conectividade de Rede da(s) Instância(s)",
         # --- Descriptions ---
@@ -197,7 +237,7 @@ DOC_STRINGS = {
         "doc.messages.no_rules_for": "Nenhuma regra configurada para este",
         "doc.messages.resource_not_provisioned": "Este recurso não está provisionado neste ambiente.",
         "doc.messages.no_vg_members": "Este Volume Group não possui membros.",
-        "doc.messages.no_vcn_found": "Nenhuma VCN encontrada neste escopo.",
+        "doc.messages.no_vcn_found": "Nenhuma infraestrutura de rede associada foi encontrada.",
         "doc.messages.no_subnet_found": "Nenhuma subnet encontrada nesta VCN.",
         "doc.messages.no_sl_found": "Nenhuma Security List encontrada nesta VCN.",
         "doc.messages.no_rt_found": "Nenhuma Route Table encontrada nesta VCN.",
@@ -214,9 +254,23 @@ DOC_STRINGS = {
         "doc.messages.no_vpn_found": "Nenhuma Conexão VPN IPSec encontrada neste compartimento.",
         "doc.messages.no_tunnel_found": "Nenhum túnel encontrado para esta conexão.",
         "doc.messages.insert_image_error": "Erro ao inserir imagem",
+        "doc.messages.no_rules_found": "Nenhuma regra configurada.",
+        "doc.messages.no_routes_found": "Nenhuma rota configurada.",
+        "doc.headers.vcn_name": "Nome da VCN",
+        "doc.headers.vcn_cidr": "CIDR da VCN",
+        "doc.headers.subnet_name": "Nome da Subnet",
+        "doc.headers.subnet_cidr": "CIDR da Subnet",
+        "doc.headers.destination_cidr": "CIDR de Destino",
+        "doc.headers.common_name": "COMMON NAME",
+        "doc.headers.sans": "SANs",
+        "doc.headers.key_algo": "ALGORITMO DA CHAVE",
+        "doc.headers.sig_algo": "ALGORITMO DE ASSINATURA",
+        "doc.headers.valid_from": "VÁLIDO DE",
+        "doc.headers.valid_to": "VÁLIDO ATÉ",
+        "doc.headers.associated_listener": "ASSOCIADO AO LISTENER",
+        "doc.common.none": "Nenhum",
         # --- Document Types ---
-        "doc.type.full_infra": "Documentação de Infraestrutura",
-        "doc.type.new_host": "Documentação de Novo Host",
+        "doc.type.full_infra": "Documentação de Infraestrutura",        "doc.type.new_host": "Documentação de Novo Host",
         "doc.type.kubernetes": "Documentação de Kubernetes (OKE)",
         "doc.type.default": "Documentação Técnica",
         "doc.identifier.full_infra": "Infraestrutura",
@@ -382,6 +436,34 @@ DOC_STRINGS = {
         "doc.headings.additional_configs": "Additional Configurations",
         "doc.headings.antivirus_config": "Antivirus Configuration",
         "doc.headings.responsible": "RESPONSIBLE",
+        "doc.type.waf_report": "WAF Documentation",
+        "doc.identifier.waf_report": "WAF",
+        "doc.headings.waf_config": "Web Application Firewall (WAF) Configuration",
+        "doc.headings.waf_policy_name": "WAF Policy",
+        "doc.headings.waf_integration": "WAF Integration",
+        "doc.headings.waf_firewall": "Web App Firewall (Firewall)",
+        "doc.headings.overview": "Overview",
+        "doc.headings.lb_integration": "Load Balancer Integration",
+        "doc.headings.network_infrastructure": "Network Infrastructure",
+        "doc.headings.waf_protection_config": "WAF Protection Configuration",
+        "doc.headings.waf_actions": "Actions",
+        "doc.headings.waf_access_control": "Access Control",
+        "doc.headings.waf_rate_limiting": "Rate Limiting",
+        "doc.headings.waf_protection_rules": "Protection Rules",
+        "doc.headers.protected_domains": "Protected Domains",
+        "doc.headers.capabilities": "Capabilities",
+        "doc.headers.action": "Action",
+        "doc.headers.condition": "Condition",
+        "doc.headers.certificates": "Certificates",
+        "doc.headers.expiration": "Expiration",
+        "doc.common.compartment": "Compartment",
+        "doc.common.region": "Region",
+        "doc.common.time_created": "Time Created",
+        "doc.common.code": "HTTP Code",
+        "doc.messages.no_lb_association": "This WAF policy has no associated Load Balancer.",
+        "doc.messages.no_network_found": "No Network Infrastructure found.",
+        "doc.messages.no_config_found": "No configuration found.",
+        "doc.messages.no_certificates_found": "No certificates configured.",
         "doc.headings.responsible_desc": "Responsible for filling out the documentation:",
         "doc.headings.instance_connectivity": "Instance Network Connectivity",
         # --- Descriptions ---
@@ -398,7 +480,7 @@ DOC_STRINGS = {
         "doc.messages.no_rules_for": "No rules configured for this",
         "doc.messages.resource_not_provisioned": "This resource is not provisioned in this environment.",
         "doc.messages.no_vg_members": "This Volume Group has no members.",
-        "doc.messages.no_vcn_found": "No VCN found in this scope.",
+        "doc.messages.no_vcn_found": "No associated network infrastructure found.",
         "doc.messages.no_subnet_found": "No subnet found in this VCN.",
         "doc.messages.no_sl_found": "No Security List found in this VCN.",
         "doc.messages.no_rt_found": "No Route Table found in this VCN.",
@@ -415,6 +497,21 @@ DOC_STRINGS = {
         "doc.messages.no_vpn_found": "No IPSec VPN Connection found in this compartment.",
         "doc.messages.no_tunnel_found": "No tunnels found for this connection.",
         "doc.messages.insert_image_error": "Error inserting image",
+        "doc.messages.no_rules_found": "No rules configured.",
+        "doc.messages.no_routes_found": "No routes configured.",
+        "doc.headers.vcn_name": "VCN Name",
+        "doc.headers.vcn_cidr": "VCN CIDR",
+        "doc.headers.subnet_name": "Subnet Name",
+        "doc.headers.subnet_cidr": "Subnet CIDR",
+        "doc.headers.destination_cidr": "Destination CIDR",
+        "doc.headers.common_name": "COMMON NAME",
+        "doc.headers.sans": "SANs",
+        "doc.headers.key_algo": "KEY ALGORITHM",
+        "doc.headers.sig_algo": "SIGNATURE ALGORITHM",
+        "doc.headers.valid_from": "VALID FROM",
+        "doc.headers.valid_to": "VALID TO",
+        "doc.headers.associated_listener": "ASSOCIATED LISTENER",
+        "doc.common.none": "None",
         # --- Document Types ---
         "doc.type.full_infra": "Infrastructure Documentation",
         "doc.type.new_host": "New Host Documentation",
@@ -440,7 +537,10 @@ def t(key: str, lang: str) -> str:
     return strings.get(key, DOC_STRINGS.get("pt", {}).get(key, key))
 
 
-# --- Table of Contents & Hyperlink Helpers ---
+# ==============================================================================
+# PT-BR: Auxiliares de Sumário e Hyperlinks
+# EN: Table of Contents and Hyperlink Helpers
+# ==============================================================================
 def _define_toc_styles(document: Document):
     """Creates and configures 'TOC 1-3' styles with correct indentation if they don't exist."""
     styles = document.styles
@@ -547,7 +647,10 @@ def _add_and_bookmark_heading(
     return heading
 
 
-# --- Table Styling Helpers ---
+# ==============================================================================
+# PT-BR: Auxiliares de Estilo de Tabelas
+# EN: Table Styling Helpers
+# ==============================================================================
 def _shade_cell(cell, color="4472C4"):
     """Applies a background color shading to a table cell."""
     shading_xml = r'<w:shd {} w:fill="{}"/>'.format(nsdecls("w"), color)
@@ -593,7 +696,10 @@ def _create_titled_key_value_table(
     document.add_paragraph()
 
 
-# --- Content Formatting Helpers ---
+# ==============================================================================
+# PT-BR: Auxiliares de Formatação de Conteúdo
+# EN: Content Formatting Helpers
+# ==============================================================================
 def _add_network_resource_details(
     document: Document,
     resource_title: str,
@@ -639,8 +745,25 @@ def _add_network_resource_details(
                 cells[3].text = rule.source_or_destination or "N/A"
                 cells[4].text = rule.description or ""
             else:  # route
+                target_str = rule.target
+                # Se o target for um OCID bruto (não traduzido pelo backend), aplica tradução genérica
+                if target_str and target_str.startswith("ocid1."):
+                    target_lower = target_str.lower()
+                    if "internetgateway" in target_lower:
+                        target_str = "Internet Gateway"
+                    elif "natgateway" in target_lower:
+                        target_str = "NAT Gateway"
+                    elif "servicegateway" in target_lower:
+                        target_str = "Service Gateway"
+                    elif "drg" in target_lower:
+                        target_str = "Dynamic Routing Gateway (DRG)"
+                    elif "localpeeringgateway" in target_lower:
+                        target_str = "Local Peering Gateway (LPG)"
+                    elif "privateip" in target_lower:
+                        target_str = "Private IP"
+
                 cells[0].text = rule.destination
-                cells[1].text = rule.target
+                cells[1].text = target_str
                 cells[2].text = rule.description or ""
     else:
         document.add_paragraph(f"{t('doc.messages.no_rules_for', lang)} {resource_title}.")
@@ -648,7 +771,10 @@ def _add_network_resource_details(
     document.add_paragraph()
 
 
-# --- Document Section Generators ---
+# ==============================================================================
+# PT-BR: Geradores de Seções do Documento
+# EN: Document Section Generators
+# ==============================================================================
 def _add_instances_table(document: Document, instances: List[InstanceData], lang: str):
     """Adds the main summary table of compute instances to the document."""
     if not instances:
@@ -1065,78 +1191,7 @@ def _add_load_balancers_section(
             toc_list,
             counters,
         )
-        ip_strings = [
-            f"{ip.ip_address} ({t('doc.common.public', lang) if ip.is_public else t('doc.common.private', lang)})"
-            for ip in lb.ip_addresses
-        ]
-        ip_list = "\n".join(ip_strings)
-        lb_info = {
-            t("doc.common.name", lang): lb.display_name,
-            t("doc.headers.shape", lang): lb.shape_name,
-            t("doc.common.state", lang): lb.lifecycle_state,
-            t("doc.headers.lb_ip_addresses", lang): ip_list,
-        }
-        _create_titled_key_value_table(
-            document, t("doc.headings.lb_general_info", lang), lb_info
-        )
-        _add_and_bookmark_heading(
-            document, t("doc.headings.lb_listeners", lang), 4, toc_list, counters
-        )
-        if lb.listeners:
-            headers = [
-                t("doc.common.name", lang),
-                t("doc.common.protocol", lang),
-                t("doc.common.port", lang),
-                t("doc.headers.lb_backend_set_default", lang),
-            ]
-            table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
-            _style_table_headers(table, headers)
-            for listener in lb.listeners:
-                cells = table.add_row().cells
-                cells[0].text = listener.name
-                cells[1].text = listener.protocol
-                cells[2].text = str(listener.port)
-                cells[3].text = listener.default_backend_set_name
-        else:
-            document.add_paragraph(t("doc.messages.no_listener_found", lang))
-        document.add_paragraph()
-        _add_and_bookmark_heading(
-            document, t("doc.headings.lb_backend_sets", lang), 4, toc_list, counters
-        )
-        if lb.backend_sets:
-            for bs in lb.backend_sets:
-                bs_info = {
-                    t("doc.headers.lb_backend_policy", lang): bs.policy,
-                    t("doc.headers.lb_health_checker", lang): f"{bs.health_checker.protocol}:{bs.health_checker.port} (Path: {bs.health_checker.url_path})",
-                }
-                _create_titled_key_value_table(
-                    document,
-                    f"{t('doc.headings.lb_backend_set_config', lang)}: {bs.name}",
-                    bs_info,
-                )
-                if bs.backends:
-                    headers = [
-                        t("doc.headers.lb_backend_name", lang),
-                        t("doc.headers.lb_backend_ip", lang),
-                        t("doc.headers.lb_backend_port", lang),
-                        t("doc.headers.lb_backend_weight", lang),
-                    ]
-                    table = document.add_table(
-                        rows=1, cols=len(headers), style="Table Grid"
-                    )
-                    _style_table_headers(table, headers)
-                    for backend in bs.backends:
-                        cells = table.add_row().cells
-                        cells[0].text = backend.name
-                        cells[1].text = backend.ip_address
-                        cells[2].text = str(backend.port)
-                        cells[3].text = str(backend.weight)
-                    document.add_paragraph()
-                else:
-                    document.add_paragraph(t("doc.messages.no_backend_found", lang))
-        else:
-            document.add_paragraph(t("doc.messages.no_backend_set_found", lang))
-        document.add_paragraph()
+        _render_single_load_balancer(document, lb, infra_data, toc_list, counters, lang, base_level=3)
 
 
 def _add_connectivity_section(
@@ -1357,7 +1412,81 @@ def _add_responsible_section(
     document.add_paragraph()
 
 
-# --- Main Orchestrator Function ---
+# ==============================================================================
+# PT-BR: Função Orquestradora Principal — Ponto de entrada da geração de documentos
+# EN: Main Orchestrator Function — Entry point for document generation
+# ==============================================================================
+def _add_network_resource_details(
+    document: Document,
+    resource_title: str,
+    resource_name: str,
+    rules: List[Any],
+    associated_hosts: Optional[List[str]],
+    rule_type: str,
+    lang: str,
+):
+    """Adds a standardized section for a network resource (SL, NSG, RT) and its rules."""
+    p = document.add_paragraph()
+    p.add_run(f"{resource_title}: {resource_name}").bold = True
+
+    if associated_hosts:
+        p_hosts = document.add_paragraph()
+        p_hosts.add_run(t("doc.common.associated_hosts", lang)).bold = True
+        p_hosts.add_run(", ".join(sorted(associated_hosts)))
+
+    if rule_type == "security":
+        headers = [
+            t("doc.headers.direction", lang),
+            t("doc.headers.protocol", lang),
+            t("doc.headers.ports", lang),
+            t("doc.headers.source_destination", lang),
+            t("doc.headers.description", lang),
+        ]
+    else:  # route
+        headers = [
+            t("doc.headers.destination", lang),
+            t("doc.headers.target", lang),
+            t("doc.headers.description", lang),
+        ]
+
+    if rules:
+        table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+        _style_table_headers(table, headers)
+        for rule in rules:
+            cells = table.add_row().cells
+            if rule_type == "security":
+                cells[0].text = rule.direction
+                cells[1].text = rule.protocol
+                cells[2].text = rule.ports or t("doc.common.all", lang)
+                cells[3].text = rule.source_or_destination or "N/A"
+                cells[4].text = rule.description or ""
+            else:  # route
+                target_str = rule.target
+                # Traduz caso o backend não consiga resolver o nome real e envie o OCID cru
+                if target_str and target_str.startswith("ocid1."):
+                    target_lower = target_str.lower()
+                    if "internetgateway" in target_lower:
+                        target_str = "Internet Gateway"
+                    elif "natgateway" in target_lower:
+                        target_str = "NAT Gateway"
+                    elif "servicegateway" in target_lower:
+                        target_str = "Service Gateway"
+                    elif "drg" in target_lower:
+                        target_str = "Dynamic Routing Gateway (DRG)"
+                    elif "localpeeringgateway" in target_lower:
+                        target_str = "Local Peering Gateway (LPG)"
+                    elif "privateip" in target_lower:
+                        target_str = "Private IP"
+
+                cells[0].text = rule.destination
+                cells[1].text = target_str
+                cells[2].text = rule.description or ""
+    else:
+        document.add_paragraph(f"{t('doc.messages.no_rules_for', lang)} {resource_title}.")
+
+    document.add_paragraph()
+
+
 def generate_documentation(
     doc_type: str,
     infra_data: InfrastructureData,
@@ -1374,12 +1503,13 @@ def generate_documentation(
     font.size = Pt(11)
     _define_toc_styles(document)
 
-    # --- Determine Client Name and Document Type ---
     client_name = "N/A"
     if infra_data.instances:
         client_name = infra_data.instances[0].compartment_name.replace("SERVERS-", "")
     elif infra_data.kubernetes_clusters:
         client_name = "Compartimento_OKE"
+    elif hasattr(infra_data, "waf_policies") and infra_data.waf_policies:
+        client_name = infra_data.waf_policies[0].compartment_name
     elif infra_data.vcns:
         client_name = "Compartimento"
     else:
@@ -1387,18 +1517,10 @@ def generate_documentation(
 
     safe_client_name = re.sub(r'[\\/*?:"<>|]', "", client_name)
     doc_type_map = {
-        "full_infra": (
-            t("doc.type.full_infra", lang),
-            t("doc.identifier.full_infra", lang),
-        ),
-        "new_host": (
-            t("doc.type.new_host", lang),
-            t("doc.identifier.new_host", lang),
-        ),
-        "kubernetes": (
-            t("doc.type.kubernetes", lang),
-            t("doc.identifier.kubernetes", lang),
-        ),
+        "full_infra": (t("doc.type.full_infra", lang), t("doc.identifier.full_infra", lang)),
+        "new_host": (t("doc.type.new_host", lang), t("doc.identifier.new_host", lang)),
+        "kubernetes": (t("doc.type.kubernetes", lang), t("doc.identifier.kubernetes", lang)),
+        "waf_report": (t("doc.type.waf_report", lang), t("doc.identifier.waf_report", lang)),
     }
     doc_title_text, doc_identifier = doc_type_map.get(
         doc_type, (t("doc.type.default", lang), t("doc.identifier.default", lang))
@@ -1407,7 +1529,6 @@ def generate_documentation(
     headings_for_toc: List[Tuple[str, str, int]] = []
     numbering_counters: Dict[int, int] = {i: 0 for i in range(1, 6)}
 
-    # --- Build Document Structure ---
     title_p = document.add_paragraph(doc_title_text, style="Title")
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     document.add_paragraph(
@@ -1418,34 +1539,17 @@ def generate_documentation(
     document.add_page_break()
 
     if architecture_image_bytes_list:
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.architecture", lang),
-            1,
-            headings_for_toc,
-            numbering_counters,
-        )
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.architecture_drawing", lang),
-            2,
-            headings_for_toc,
-            numbering_counters,
-        )
+        _add_and_bookmark_heading(document, t("doc.headings.architecture", lang), 1, headings_for_toc, numbering_counters)
+        _add_and_bookmark_heading(document, t("doc.headings.architecture_drawing", lang), 2, headings_for_toc, numbering_counters)
         for image_bytes in architecture_image_bytes_list:
             try:
                 document.add_picture(BytesIO(image_bytes), width=Inches(6.0))
                 document.add_paragraph()
             except Exception as e:
-                document.add_paragraph(
-                    f"{t('doc.messages.insert_image_error', lang)}: {e}"
-                )
+                document.add_paragraph(f"{t('doc.messages.insert_image_error', lang)}: {e}")
 
-    # --- Add Content Based on Document Type ---
     if doc_type == "kubernetes":
-        cluster_vcn_ids = {
-            cluster.vcn_id for cluster in infra_data.kubernetes_clusters
-        }
+        cluster_vcn_ids = {cluster.vcn_id for cluster in infra_data.kubernetes_clusters}
         relevant_vcns = [vcn for vcn in infra_data.vcns if vcn.id in cluster_vcn_ids]
         filtered_infra_data = infra_data.copy(deep=True)
         filtered_infra_data.vcns = relevant_vcns
@@ -1455,170 +1559,162 @@ def generate_documentation(
         filtered_infra_data.ipsec_connections = []
         filtered_infra_data.load_balancers = []
         filtered_infra_data.volume_groups = []
-        _add_kubernetes_section(
-            document,
-            filtered_infra_data,
-            headings_for_toc,
-            numbering_counters,
-            lang,
-        )
-        _add_vcn_details_section(
-            document,
-            filtered_infra_data,
-            headings_for_toc,
-            numbering_counters,
-            lang,
-        )
+        _add_kubernetes_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
+        _add_vcn_details_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
+
+    elif doc_type == "waf_report":
+        # 1. Filtra apenas Políticas Ativas
+        active_waf_policies = []
+        if hasattr(infra_data, "waf_policies") and infra_data.waf_policies:
+            active_waf_policies = [p for p in infra_data.waf_policies if getattr(p, "lifecycle_state", "").upper() == "ACTIVE"]
+
+        target_lb_names = set()
+        target_subnet_ids = set()
+        target_subnet_names = set()
+        target_vcn_names = set()
+        target_lbs = []
+
+        # 2. Extrai LBs e referências de rede atreladas aos Firewalls
+        for policy in active_waf_policies:
+            if getattr(policy, "integration", None) and getattr(policy.integration, "firewall", None) and getattr(policy.integration, "load_balancer", None):
+                lb = policy.integration.load_balancer
+                lb_name = getattr(lb, "display_name", "Unknown_LB")
+                if lb_name not in target_lb_names:
+                    target_lb_names.add(lb_name)
+                    target_lbs.append(lb)
+                    for subnet_id in getattr(lb, "subnet_ids", []):
+                        target_subnet_ids.add(subnet_id)
+            
+            # Utiliza a network_infrastructure mapeada apenas como último recurso
+            net = getattr(policy, "network_infrastructure", None)
+            if net:
+                if getattr(net, "subnet_name", "N/A") != "N/A":
+                    target_subnet_names.add(net.subnet_name)
+                if getattr(net, "vcn_name", "N/A") != "N/A":
+                    target_vcn_names.add(net.vcn_name)
+
+        # 3. Filtra as VCNs rigorosamente
+        filtered_vcns = []
+        if target_subnet_ids or target_subnet_names or target_vcn_names:
+            for vcn in getattr(infra_data, "vcns", []):
+                vcn_name = getattr(vcn, "display_name", getattr(vcn, "name", ""))
+                vcn_has_target = False
+                matching_subnets = []
+                matching_sl_ids = set()
+                matching_rt_ids = set()
+
+                for sub in getattr(vcn, "subnets", []):
+                    sub_id = getattr(sub, "id", None)
+                    sub_name = getattr(sub, "display_name", getattr(sub, "name", None))
+                    
+                    if (sub_id and sub_id in target_subnet_ids) or (sub_name and sub_name in target_subnet_names) or (vcn_name in target_vcn_names):
+                        vcn_has_target = True
+                        matching_subnets.append(sub)
+                        for sl_id in getattr(sub, "security_list_ids", []):
+                            matching_sl_ids.add(sl_id)
+                        if getattr(sub, "route_table_id", None):
+                            matching_rt_ids.add(getattr(sub, "route_table_id"))
+
+                if not vcn_has_target and vcn_name in target_vcn_names:
+                    vcn_has_target = True
+                    matching_subnets = getattr(vcn, "subnets", [])
+
+                if vcn_has_target:
+                    filtered_vcn = vcn.copy(deep=True)
+                    filtered_vcn.subnets = matching_subnets
+                    if getattr(filtered_vcn, "security_lists", None) and matching_sl_ids:
+                        filtered_vcn.security_lists = [sl for sl in filtered_vcn.security_lists if getattr(sl, "id", None) in matching_sl_ids]
+                    if getattr(filtered_vcn, "route_tables", None) and matching_rt_ids:
+                        filtered_vcn.route_tables = [rt for rt in filtered_vcn.route_tables if getattr(rt, "id", None) in matching_rt_ids]
+                    filtered_vcn.network_security_groups = []
+                    filtered_vcn.lpgs = []
+                    filtered_vcns.append(filtered_vcn)
+
+        # 4. Payload estritamente isolado para a numeração sair perfeita
+        filtered_infra_data = infra_data.copy(deep=True)
+        filtered_infra_data.instances = []
+        filtered_infra_data.drgs = []
+        filtered_infra_data.cpes = []
+        filtered_infra_data.ipsec_connections = []
+        filtered_infra_data.volume_groups = []
+        filtered_infra_data.kubernetes_clusters = []
+        filtered_infra_data.load_balancers = target_lbs
+        filtered_infra_data.vcns = filtered_vcns
+        filtered_infra_data.waf_policies = active_waf_policies
+        
+        # 5. MÁGICA DA ORDENAÇÃO NATIVA (Sem recriar layouts)
+        if target_lbs or filtered_vcns:
+            _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
+            if filtered_vcns:
+                _add_vcn_details_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
+            else:
+                document.add_paragraph(t("doc.messages.no_network_found", lang))
+
+            if target_lbs:
+                _add_load_balancers_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
+            else:
+                document.add_paragraph(t("doc.messages.no_lb_association", lang))
+        
+        # Chama a aba do WAF Limpa
+        _add_waf_report_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
+        
     elif doc_type == "new_host":
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.infra_config", lang),
-            1,
-            headings_for_toc,
-            numbering_counters,
-        )
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.compute_instances", lang),
-            2,
-            headings_for_toc,
-            numbering_counters,
-        )
+        _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
+        _add_and_bookmark_heading(document, t("doc.headings.compute_instances", lang), 2, headings_for_toc, numbering_counters)
         _add_instances_table(document, infra_data.instances, lang)
-        _add_volume_and_backup_section(
-            document, infra_data, headings_for_toc, numbering_counters, lang
-        )
+        _add_volume_and_backup_section(document, infra_data, headings_for_toc, numbering_counters, lang)
         if hasattr(infra_data, "volume_groups") and infra_data.volume_groups:
-            _add_volume_groups_section(
-                document, infra_data, headings_for_toc, numbering_counters, lang
-            )
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.instance_connectivity", lang),
-            2,
-            headings_for_toc,
-            numbering_counters,
-        )
+            _add_volume_groups_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        
+        _add_and_bookmark_heading(document, t("doc.headings.instance_connectivity", lang), 2, headings_for_toc, numbering_counters)
         sl_map, nsg_map, rt_map = {}, {}, {}
         for data in infra_data.instances:
             for sl in data.security_lists:
                 entry = sl_map.setdefault(sl.name, {"rules": sl.rules, "hosts": []})
-                if data.host_name not in entry["hosts"]:
-                    entry["hosts"].append(data.host_name)
+                if data.host_name not in entry["hosts"]: entry["hosts"].append(data.host_name)
             for nsg in data.network_security_groups:
                 entry = nsg_map.setdefault(nsg.name, {"rules": nsg.rules, "hosts": []})
-                if data.host_name not in entry["hosts"]:
-                    entry["hosts"].append(data.host_name)
+                if data.host_name not in entry["hosts"]: entry["hosts"].append(data.host_name)
             if data.route_table:
-                entry = rt_map.setdefault(
-                    data.route_table.name,
-                    {"rules": data.route_table.rules, "hosts": []},
-                )
-                if data.host_name not in entry["hosts"]:
-                    entry["hosts"].append(data.host_name)
-        _add_and_bookmark_heading(
-            document, t("doc.headings.security_lists", lang), 3, headings_for_toc, numbering_counters
-        )
+                entry = rt_map.setdefault(data.route_table.name, {"rules": data.route_table.rules, "hosts": []})
+                if data.host_name not in entry["hosts"]: entry["hosts"].append(data.host_name)
+
+        _add_and_bookmark_heading(document, t("doc.headings.security_lists", lang), 3, headings_for_toc, numbering_counters)
         for name, info in sorted(sl_map.items()):
-            _add_network_resource_details(
-                document,
-                t("doc.headings.sl_rules", lang),
-                name,
-                info["rules"],
-                info.get("hosts"),
-                "security",
-                lang,
-            )
-        _add_and_bookmark_heading(
-            document, t("doc.headings.nsgs", lang), 3, headings_for_toc, numbering_counters
-        )
+            _add_network_resource_details(document, t("doc.headings.sl_rules", lang), name, info["rules"], info.get("hosts"), "security", lang)
+            
+        _add_and_bookmark_heading(document, t("doc.headings.nsgs", lang), 3, headings_for_toc, numbering_counters)
         for name, info in sorted(nsg_map.items()):
-            _add_network_resource_details(
-                document,
-                t("doc.headings.nsg_rules", lang),
-                name,
-                info["rules"],
-                info.get("hosts"),
-                "security",
-                lang,
-            )
-        _add_and_bookmark_heading(
-            document, t("doc.headings.route_tables", lang), 3, headings_for_toc, numbering_counters
-        )
+            _add_network_resource_details(document, t("doc.headings.nsg_rules", lang), name, info["rules"], info.get("hosts"), "security", lang)
+            
+        _add_and_bookmark_heading(document, t("doc.headings.route_tables", lang), 3, headings_for_toc, numbering_counters)
         for name, info in sorted(rt_map.items()):
-            _add_network_resource_details(
-                document,
-                t("doc.headings.rt_rules", lang),
-                name,
-                info["rules"],
-                info.get("hosts"),
-                "route",
-                lang,
-            )
+            _add_network_resource_details(document, t("doc.headings.rt_rules", lang), name, info["rules"], info.get("hosts"), "route", lang)
+            
     else:  # 'full_infra'
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.infra_config", lang),
-            1,
-            headings_for_toc,
-            numbering_counters,
-        )
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.compute_instances", lang),
-            2,
-            headings_for_toc,
-            numbering_counters,
-        )
+        _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
+        _add_and_bookmark_heading(document, t("doc.headings.compute_instances", lang), 2, headings_for_toc, numbering_counters)
         _add_instances_table(document, infra_data.instances, lang)
-        _add_volume_and_backup_section(
-            document, infra_data, headings_for_toc, numbering_counters, lang
-        )
+        _add_volume_and_backup_section(document, infra_data, headings_for_toc, numbering_counters, lang)
         if hasattr(infra_data, "volume_groups") and infra_data.volume_groups:
-            _add_volume_groups_section(
-                document, infra_data, headings_for_toc, numbering_counters, lang
-            )
-        _add_vcn_details_section(
-            document, infra_data, headings_for_toc, numbering_counters, lang
-        )
-        _add_kubernetes_section(
-            document, infra_data, headings_for_toc, numbering_counters, lang
-        )
+            _add_volume_groups_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        _add_vcn_details_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        _add_kubernetes_section(document, infra_data, headings_for_toc, numbering_counters, lang)
         if hasattr(infra_data, "load_balancers") and infra_data.load_balancers:
-            _add_load_balancers_section(
-                document, infra_data, headings_for_toc, numbering_counters, lang
-            )
-        _add_connectivity_section(
-            document, infra_data, headings_for_toc, numbering_counters, lang
-        )
+            _add_load_balancers_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters, lang)
 
     if antivirus_image_bytes_list:
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.additional_configs", lang),
-            1,
-            headings_for_toc,
-            numbering_counters,
-        )
-        _add_and_bookmark_heading(
-            document,
-            t("doc.headings.antivirus_config", lang),
-            2,
-            headings_for_toc,
-            numbering_counters,
-        )
+        _add_and_bookmark_heading(document, t("doc.headings.additional_configs", lang), 1, headings_for_toc, numbering_counters)
+        _add_and_bookmark_heading(document, t("doc.headings.antivirus_config", lang), 2, headings_for_toc, numbering_counters)
         for image_bytes in antivirus_image_bytes_list:
             try:
                 document.add_picture(BytesIO(image_bytes), width=Inches(6.0))
                 document.add_paragraph()
             except Exception as e:
-                document.add_paragraph(
-                    f"{t('doc.messages.insert_image_error', lang)}: {e}"
-                )
+                document.add_paragraph(f"{t('doc.messages.insert_image_error', lang)}: {e}")
 
-    _add_responsible_section(
-        document, headings_for_toc, numbering_counters, responsible_name, lang
-    )
+    _add_responsible_section(document, headings_for_toc, numbering_counters, responsible_name, lang)
 
     # --- Finalize Document (Generate TOC and Save) ---
     for text, bookmark, level in reversed(headings_for_toc):
@@ -1635,3 +1731,352 @@ def generate_documentation(
 
     document.save(output_path)
     return output_path
+
+
+def _add_waf_report_section(
+    document: Document,
+    infra_data: InfrastructureData,
+    toc_list: list,
+    counters: Dict[int, int],
+    lang: str,
+):
+    """Adds the WAF Policies details section to the document."""
+    if not hasattr(infra_data, "waf_policies") or not infra_data.waf_policies:
+        return
+
+    _add_and_bookmark_heading(
+        document, t("doc.headings.waf_config", lang), 1, toc_list, counters
+    )
+
+    for policy in sorted(infra_data.waf_policies, key=lambda p: p.display_name):
+        _add_and_bookmark_heading(
+            document,
+            f"{t('doc.headings.waf_policy_name', lang)}: {policy.display_name}",
+            2, toc_list, counters,
+        )
+
+        # ── 1. Visão Geral ────────────────────────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.overview", lang), 3, toc_list, counters)
+        _create_titled_key_value_table(document, t("doc.headings.general_info", lang), {
+            t("doc.common.name",        lang): policy.display_name,
+            "OCID":                            policy.id,
+            t("doc.common.compartment", lang): policy.compartment_name,
+            t("doc.common.region",      lang): policy.region,
+            t("doc.common.state",       lang): policy.lifecycle_state,
+            t("doc.common.time_created",lang): policy.time_created,
+        })
+
+        # ── 2. Web App Firewall ───────────────────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.waf_firewall", lang), 3, toc_list, counters)
+        fw = None
+        if policy.integration and getattr(policy.integration, "firewall", None):
+            fw = policy.integration.firewall
+            _create_titled_key_value_table(document, t("doc.headings.waf_firewall", lang), {
+                t("doc.common.name",  lang): fw.display_name,
+                "OCID":                      fw.id,
+                "Backend Type":              fw.backend_type,
+            })
+        else:
+            document.add_paragraph("Esta política WAF não possui Web Application Firewall associado.")
+            continue
+
+        # ── 3. Integração com Load Balancer ───────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.lb_integration", lang), 3, toc_list, counters)
+        lb_obj = getattr(policy.integration, "load_balancer", None)
+        if lb_obj:
+            # Enrich with full LB data from infra_data if available
+            full_lb = None
+            for lb in (getattr(infra_data, "load_balancers", []) or []):
+                if getattr(lb, "display_name", "") == getattr(lb_obj, "display_name", ""):
+                    full_lb = lb
+                    break
+            lb_show = full_lb or lb_obj
+
+            ip_strings = [
+                f"{ip.ip_address} ({t('doc.common.public', lang) if ip.is_public else t('doc.common.private', lang)})"
+                for ip in (getattr(lb_show, "ip_addresses", []) or [])
+            ]
+            _create_titled_key_value_table(document, t("doc.headings.lb_integration", lang), {
+                t("doc.common.name",  lang):  getattr(lb_show, "display_name", "N/A"),
+                "OCID":                       getattr(lb_show, "id", "N/A"),
+                "Endereços IP":               "\n".join(ip_strings) or "N/A",
+                t("doc.common.state", lang):  getattr(lb_show, "lifecycle_state", "N/A"),
+                "Enforcement Point":          "Load Balancer",
+            })
+        else:
+            document.add_paragraph(t("doc.messages.no_lb_association", lang))
+
+        # ── 4. Proteção WAF ───────────────────────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.waf_protection_config", lang), 3, toc_list, counters)
+
+        # Actions
+        _add_and_bookmark_heading(document, t("doc.headings.waf_actions", lang), 4, toc_list, counters)
+        if policy.actions:
+            headers = [t("doc.common.name", lang), t("doc.common.type", lang), t("doc.common.code", lang)]
+            table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+            _style_table_headers(table, headers)
+            for a in policy.actions:
+                cells = table.add_row().cells
+                cells[0].text = a.name
+                cells[1].text = a.type
+                cells[2].text = str(a.code) if a.code else "N/A"
+            document.add_paragraph()
+        else:
+            document.add_paragraph(t("doc.messages.no_config_found", lang))
+
+        # Access Control
+        _add_and_bookmark_heading(document, t("doc.headings.waf_access_control", lang), 4, toc_list, counters)
+        if policy.access_control_rules:
+            headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.condition", lang)]
+            table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+            _style_table_headers(table, headers)
+            for r in policy.access_control_rules:
+                cells = table.add_row().cells
+                cells[0].text = r.name
+                cells[1].text = r.action_name
+                cells[2].text = r.condition or "N/A"
+            document.add_paragraph()
+        else:
+            document.add_paragraph(t("doc.messages.no_config_found", lang))
+
+        # Rate Limiting
+        _add_and_bookmark_heading(document, t("doc.headings.waf_rate_limiting", lang), 4, toc_list, counters)
+        if policy.rate_limiting_rules:
+            headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.condition", lang)]
+            table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+            _style_table_headers(table, headers)
+            for r in policy.rate_limiting_rules:
+                cells = table.add_row().cells
+                cells[0].text = r.name
+                cells[1].text = r.action_name
+                cells[2].text = r.condition or "N/A"
+            document.add_paragraph()
+        else:
+            document.add_paragraph(t("doc.messages.no_config_found", lang))
+
+        # Protection Rules
+        _add_and_bookmark_heading(document, t("doc.headings.waf_protection_rules", lang), 4, toc_list, counters)
+        if policy.protection_rules:
+            headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.capabilities", lang)]
+            table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+            _style_table_headers(table, headers)
+            for r in policy.protection_rules:
+                cells = table.add_row().cells
+                cells[0].text = r.name
+                cells[1].text = r.action_name
+                caps = [f"{c.key} (v{c.version})" for c in r.protection_capabilities]
+                cells[2].text = ", ".join(caps) if caps else "N/A"
+            document.add_paragraph()
+        else:
+            document.add_paragraph(t("doc.messages.no_config_found", lang))
+
+
+def _render_single_load_balancer(
+    document: Document,
+    lb: LoadBalancerData,
+    infra_data: InfrastructureData,
+    toc_list: list,
+    counters: Dict[int, int],
+    lang: str,
+    base_level: int = 3,
+):
+    """Renders the standard details of a Load Balancer."""
+
+    # ── General info ──────────────────────────────────────────────────────────
+    ip_strings = [
+        f"{ip.ip_address} ({t('doc.common.public', lang) if ip.is_public else t('doc.common.private', lang)})"
+        for ip in lb.ip_addresses
+    ]
+    lb_info = {
+        t("doc.common.name",   lang): lb.display_name,
+        t("doc.headers.shape", lang): lb.shape_name,
+        t("doc.common.state",  lang): lb.lifecycle_state,
+        t("doc.headers.lb_ip_addresses", lang): "\n".join(ip_strings) or "N/A",
+    }
+    _create_titled_key_value_table(document, t("doc.headings.lb_general_info", lang), lb_info)
+
+    # ── WAF Integration (if present) ──────────────────────────────────────────
+    if getattr(lb, "waf_firewall_name", None) and getattr(lb, "waf_policy_name", None):
+        waf_info = {
+            t("doc.headings.waf_firewall",     lang): lb.waf_firewall_name,
+            "Firewall OCID":                         lb.waf_firewall_id or "N/A",
+            t("doc.headings.waf_policy_name",  lang): lb.waf_policy_name,
+            "Policy OCID":                           lb.waf_policy_id  or "N/A",
+        }
+        _create_titled_key_value_table(document, t("doc.headings.waf_integration", lang), waf_info)
+
+    # ── Hostnames virtuais ────────────────────────────────────────────────────
+    if getattr(lb, "hostnames", None):
+        _add_and_bookmark_heading(
+            document, "Hostnames Virtuais", base_level + 1, toc_list, counters
+        )
+        if lb.hostnames:
+            headers = [t("doc.common.name", lang)]
+            table = document.add_table(rows=1, cols=1, style="Table Grid")
+            _style_table_headers(table, headers)
+            for h in lb.hostnames:
+                table.add_row().cells[0].text = h.name
+            document.add_paragraph()
+        else:
+            document.add_paragraph(t("doc.messages.no_resources_found", lang))
+
+    # ── Listeners ─────────────────────────────────────────────────────────────
+    _add_and_bookmark_heading(
+        document, t("doc.headings.lb_listeners", lang), base_level + 1, toc_list, counters
+    )
+    if lb.listeners:
+        # Build cert OCID → name map from infra_data
+        certs_list   = list(getattr(infra_data, "certificates", []) or [])
+        cert_id_map  = {c.get("id"): c.get("name") for c in certs_list if isinstance(c, dict) and c.get("id")}
+        has_ssl      = any(
+            (getattr(l, "ssl_certificate_ids", None) or [])
+            for l in lb.listeners
+        )
+
+        headers = [
+            t("doc.common.name",    lang),
+            t("doc.common.protocol", lang),
+            t("doc.common.port",    lang),
+            t("doc.headers.lb_backend_set_default", lang),
+        ]
+        if has_ssl:
+            headers.append("Certificado TLS")
+
+        table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+        _style_table_headers(table, headers)
+
+        for listener in lb.listeners:
+            cells = table.add_row().cells
+            cells[0].text = listener.name
+            cells[1].text = listener.protocol
+            cells[2].text = str(listener.port)
+            cells[3].text = listener.default_backend_set_name
+            if has_ssl:
+                ssl_ids   = getattr(listener, "ssl_certificate_ids", None) or []
+                cert_strs = [cert_id_map.get(oid, oid[-12:]) for oid in ssl_ids]
+                cells[4].text = ", ".join(cert_strs) if cert_strs else "—"
+    else:
+        document.add_paragraph(t("doc.messages.no_listener_found", lang))
+    document.add_paragraph()
+
+    # ── Certificates ─────────────────────────────────────────────────────────
+    _add_and_bookmark_heading(
+        document, t("doc.headers.certificates", lang), base_level + 1, toc_list, counters
+    )
+    certificates = list(getattr(infra_data, "certificates", []) or [])
+    # Filter to only ACTIVE and PENDING_DELETION
+    certs_to_show = [c for c in certificates
+                     if isinstance(c, dict) and
+                     (c.get("lifecycle_state", "").upper() in ("ACTIVE", "PENDING_DELETION"))]
+
+    if certs_to_show:
+        # Build listener OCID→name lookup for "used by" column
+        listener_cert_map: dict = {}
+        for listener in (lb.listeners or []):
+            for oid in (getattr(listener, "ssl_certificate_ids", None) or []):
+                listener_cert_map.setdefault(oid, []).append(listener.name)
+
+        for cert in certs_to_show:
+            subj  = cert.get("subject") or {}
+            cvs   = cert.get("current_version_summary") or {}
+            state = cert.get("lifecycle_state", "N/A")
+
+            # SANs: list of {san_type, value}
+            sans_raw = cert.get("subject_alternative_names") or []
+            sans_str = ", ".join(
+                s.get("value", "") for s in sans_raw if isinstance(s, dict)
+            ) if sans_raw else "N/A"
+
+            # Stages
+            stages = cvs.get("stages") or []
+            stages_str = ", ".join(stages) if stages else "N/A"
+
+            # Listener binding
+            cert_id    = cert.get("id", "")
+            used_by    = listener_cert_map.get(cert_id, [])
+            used_str   = ", ".join(used_by) if used_by else t("doc.common.none", lang)
+
+            # Time of deletion
+            tod = cert.get("time_of_deletion", "—")
+
+            cert_info = {
+                t("doc.common.name",  lang):       cert.get("name", "N/A"),
+                t("doc.common.state", lang):       state,
+                "OCID":                            cert_id or "N/A",
+                t("doc.common.type",  lang):       cert.get("config_type", "N/A"),
+                "Common Name":                     subj.get("common_name", "N/A"),
+                "Organização":                     subj.get("organization", "N/A"),
+                "Localidade":                      subj.get("locality_name", "N/A"),
+                "Estado/Província":                subj.get("state_or_province_name", "N/A"),
+                "País":                            subj.get("country", "N/A"),
+                "SANs":                            sans_str,
+                "Algoritmo da Chave":              cert.get("key_algorithm", "N/A"),
+                "Algoritmo de Assinatura":         cert.get("signature_algorithm", "N/A"),
+                "Versão":                          str(cvs.get("version_number", "N/A")),
+                "Stages":                          stages_str,
+                "Número de Série":                 cvs.get("serial_number", "N/A"),
+                "Válido de":                       cvs.get("valid_not_before", "N/A"),
+                "Válido até":                      cvs.get("valid_not_after",  "N/A"),
+                t("doc.common.time_created", lang): cert.get("time_created", "N/A"),
+                "Deleção Agendada":                tod if tod and tod != "—" else "N/A",
+                "Vinculado ao Listener":           used_str,
+            }
+            title = f"Certificado: {cert.get('name', 'N/A')} ({state})"
+            _create_titled_key_value_table(document, title, cert_info)
+
+            # Associations sub-table
+            assocs = cert.get("associations") or []
+            if assocs:
+                para = document.add_paragraph()
+                run  = para.add_run(f"Associações de Recursos ({len(assocs)})")
+                run.bold = True
+                headers = [t("doc.common.name", lang), "Tipo de Recurso", t("doc.common.state", lang), "OCID do Recurso", t("doc.common.time_created", lang)]
+                tbl = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+                _style_table_headers(tbl, headers)
+                for assoc in assocs:
+                    cells = tbl.add_row().cells
+                    cells[0].text = assoc.get("display_name", "N/A")
+                    cells[1].text = assoc.get("resource_type", "N/A")
+                    cells[2].text = assoc.get("lifecycle_state", "N/A")
+                    cells[3].text = assoc.get("associated_resource_id", "N/A")
+                    cells[4].text = assoc.get("time_created", "N/A")
+            document.add_paragraph()
+    else:
+        document.add_paragraph(t("doc.messages.no_certificates_found", lang))
+    document.add_paragraph()
+
+    # ── Backend Sets ─────────────────────────────────────────────────────────
+    _add_and_bookmark_heading(
+        document, t("doc.headings.lb_backend_sets", lang), base_level + 1, toc_list, counters
+    )
+    if lb.backend_sets:
+        for bs in lb.backend_sets:
+            bs_info = {
+                t("doc.headers.lb_backend_policy",  lang): bs.policy,
+                t("doc.headers.lb_health_checker",  lang): f"{bs.health_checker.protocol}:{bs.health_checker.port} (Path: {bs.health_checker.url_path})",
+            }
+            _create_titled_key_value_table(
+                document,
+                f"{t('doc.headings.lb_backend_set_config', lang)}: {bs.name}",
+                bs_info,
+            )
+            if bs.backends:
+                headers = [
+                    t("doc.headers.lb_backend_name",   lang),
+                    t("doc.headers.lb_backend_ip",     lang),
+                    t("doc.headers.lb_backend_port",   lang),
+                    t("doc.headers.lb_backend_weight", lang),
+                ]
+                table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+                _style_table_headers(table, headers)
+                for backend in bs.backends:
+                    cells = table.add_row().cells
+                    cells[0].text = backend.name
+                    cells[1].text = backend.ip_address
+                    cells[2].text = str(backend.port)
+                    cells[3].text = str(backend.weight)
+                document.add_paragraph()
+            else:
+                document.add_paragraph(t("doc.messages.no_backend_found", lang))
+    else:
+        document.add_paragraph(t("doc.messages.no_backend_set_found", lang))

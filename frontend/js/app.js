@@ -1,10 +1,27 @@
+// =============================================================================
+// PT-BR: Aplicação frontend do OCI DocGen.
+//        Gerencia o fluxo completo da interface: seleção de região/compartimento,
+//        inicio de coletas assíncronas, exibição do resumo de infraestrutura
+//        e geração/download de documentos .docx.
+// EN: OCI DocGen frontend application.
+//     Manages the complete UI flow: region/compartment selection,
+//     async collection start, infrastructure summary display,
+//     and .docx document generation/download.
+// =============================================================================
+
 document.addEventListener('DOMContentLoaded', () => {
 
-  // --- Settings and Constants ---
+  // ===========================================================================
+  // PT-BR: Configurações e Constantes
+  // EN: Settings and Constants
+  // ===========================================================================
   const API_BASE_URL = 'http://127.0.0.1:8000'; // Uncomment for local development
   //const API_BASE_URL = ''; // Uncomment for production
 
-  // --- DOM Element Selectors ---
+  // ===========================================================================
+  // PT-BR: Seletores de Elementos do DOM
+  // EN: DOM Element Selectors
+  // ===========================================================================
   const mainAppContainer = document.getElementById('main-app-container');
   const regionContainer = document.getElementById('region-select-container');
   const docTypeContainer = document.getElementById('doctype-select-container');
@@ -33,8 +50,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const newDocBtn = document.getElementById('new-doc-btn');
   const languageSelector = document.getElementById('language-selector');
 
-  // --- SVG Icon Definitions ---
+  // ===========================================================================
+  // PT-BR: Definições de Ícones SVG inline
+  // EN: Inline SVG Icon Definitions
+  // ===========================================================================
   const ICONS = {
+    WAF: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg>`,
     INSTANCES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`,
     INSTANCE_DATA: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>`,
     BLOCK_VOLUMES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>`,
@@ -45,9 +66,13 @@ document.addEventListener('DOMContentLoaded', () => {
     LB: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 21a9 9 0 0 0 9-9 9 9 0 0 0-9-9 9 9 0 0 0-9 9 9 9 0 0 0 9 9Z"></path><path d="M8 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M15 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M12 2v2"></path><path d="M12 8v2"></path></svg>`,
     ROUTING: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>`,
     VPN: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`,
+    CERTIFICATES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="12" cy="8" r="6"/><path d="m9 8 2 2 4-4"/><path d="M6.5 14.5 5 20l7-2 7 2-1.5-5.5"/></svg>`,
   };
 
-  // --- Application State ---
+  // ===========================================================================
+  // PT-BR: Estado Global da Aplicação
+  // EN: Global Application State
+  // ===========================================================================
   let selectedRegion = null;
   let selectedDocType = null;
   let selectedCompartmentId = null;
@@ -65,7 +90,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let allCompartmentsData = [];
   let allInstancesData = [];
 
-  // --- Internationalization (i18n) Functions ---
+  // ===========================================================================
+  // PT-BR: Funções de Internacionalização (i18n)
+  // EN: Internationalization (i18n) Functions
+  // ===========================================================================
 
   const loadTranslations = async (lang) => {
     try {
@@ -193,13 +221,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // --- UI Functions ---
+  // ===========================================================================
+  // PT-BR: Funções de Interface do Usuário
+  // EN: User Interface Functions
+  // ===========================================================================
 
-  /**
-   * Displays a toast notification on the screen.
-   * @param {string} message The message to display.
-   * @param {'success'|'error'} type The type of toast to show.
-   */
   function showToast(message, type = 'success') {
     if (!toastContainer) return;
 
@@ -218,9 +244,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 5000);
   }
 
-  /**
-   * Shows the detailed progress indicator for the main data collection.
-   */
   const showProgress = () => {
     loadingOverlay.classList.remove('hidden');
 
@@ -234,29 +257,17 @@ document.addEventListener('DOMContentLoaded', () => {
     progressTimer.textContent = '00:00';
   };
 
-  /**
-   * Updates the progress bar and text.
-   * @param {number} percentage The new percentage for the progress bar.
-   * @param {string} text The text to display below the progress bar.
-   */
   const updateProgress = (percentage, text) => {
     progressBar.style.width = `${percentage}%`;
     progressText.textContent = text;
   };
 
-  /**
-   * Hides the progress indicator overlay.
-   */
   const hideProgress = () => {
     clearInterval(progressTimerInterval);
     clearInterval(pollingIntervalId);
     loadingOverlay.classList.add('hidden');
   };
 
-  /**
-   * Shows or hides a simple, generic loading spinner.
-   * @param {boolean} show - True to show, false to hide.
-   */
   const toggleLoading = (show) => {
     if (show) {
       progressSpinner.style.display = 'block';
@@ -271,9 +282,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /**
-   * Displays the success screen after an operation is complete.
-   */
   const showSuccessScreen = () => {
     mainAppContainer.classList.add('hidden');
     successScreen.classList.remove('hidden');
@@ -282,9 +290,6 @@ document.addEventListener('DOMContentLoaded', () => {
     icon.parentNode.replaceChild(newIcon, icon);
   };
 
-  /**
-   * Resets the entire application state to its initial view.
-   */
   const resetApp = () => {
     successScreen.classList.add('hidden');
     mainAppContainer.classList.remove('hidden');
@@ -307,12 +312,10 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
   };
 
-  /**
-   * Updates the UI elements based on the selected documentation type.
-   */
   function updateUiForDocType() {
     const isNewHost = selectedDocType === 'new_host';
     const isKubernetes = selectedDocType === 'kubernetes';
+    const isWaf = selectedDocType === 'waf_report';
     instanceStep.classList.toggle('hidden', !isNewHost);
 
     let i18nKey = 'fetch_btn_full';
@@ -320,6 +323,8 @@ document.addEventListener('DOMContentLoaded', () => {
       i18nKey = 'fetch_btn_new';
     } else if (isKubernetes) {
       i18nKey = 'fetch_btn_k8s';
+    } else if (isWaf) {
+      i18nKey = 'fetch_btn_waf';
     }
 
     const fetchBtnSpan = fetchBtn.querySelector('span');
@@ -331,9 +336,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateFetchButtonState();
   }
 
-  /**
-   * Enables or disables the main 'Fetch' button based on required selections.
-   */
   function updateFetchButtonState() {
     const isNewHost = selectedDocType === 'new_host';
     if (isNewHost) {
@@ -343,15 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /**
-   * Creates a custom, searchable select dropdown component.
-   * @param {HTMLElement} container - The container element to build the select in.
-   * @param {Array<object>} options - The array of options to populate the select.
-   * @param {string} placeholder - The placeholder text.
-   * @param {Function} onSelectCallback - The callback to execute when an option is selected.
-   * @param {boolean} isEnabled - Whether the select is enabled.
-   * @param {boolean} isMultiSelect - Whether multiple options can be selected.
-   */
   function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false) {
     container.innerHTML = '';
     const selected = document.createElement('div');
@@ -527,7 +520,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // --- API Call Functions ---
+  // ===========================================================================
+  // PT-BR: Funções de Chamadas à API Backend
+  // EN: Backend API Call Functions
+  // ===========================================================================
 
   /**
    * Fetches the list of available OCI regions and populates the selector.
@@ -573,6 +569,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }, {
       id: 'kubernetes',
       name: t('doc_type_k8s')
+    }, {
+      id: 'waf_report',
+      name: t('doc_type_waf')
     }, ];
     createCustomSelect(
       docTypeContainer,
@@ -684,7 +683,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // --- Asynchronous Flow & Data Collection ---
+  // ===========================================================================
+  // PT-BR: Fluxo Assíncrono e Coleta de Dados
+  // EN: Asynchronous Flow and Data Collection
+  // ===========================================================================
 
   /**
    * Formats milliseconds into a MM:SS string.
@@ -705,7 +707,9 @@ document.addEventListener('DOMContentLoaded', () => {
     clearInterval(pollingIntervalId);
     detailsContainer.classList.add('hidden');
 
-    const taskType = selectedDocType === 'new_host' ? 'new_host' : 'full_infra';
+    let taskType = 'full_infra';
+    if (selectedDocType === 'new_host') taskType = 'new_host';
+    else if (selectedDocType === 'waf_report') taskType = 'waf_report';
 
     const payload = {
       type: taskType,
@@ -719,6 +723,9 @@ document.addEventListener('DOMContentLoaded', () => {
         compartment_id: selectedCompartmentId,
         compartment_name: selectedCompartmentName,
       };
+    } else if (taskType === 'waf_report') {
+      payload.compartment_id = selectedCompartmentId;
+      payload.compartment_name = selectedCompartmentName;
     } else {
       payload.compartment_id = selectedCompartmentId;
     }
@@ -820,7 +827,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2000);
   };
 
-  // --- Content and Document Generation Functions ---
+  // ===========================================================================
+  // PT-BR: Geração de Resumo de Infraestrutura e Documentos
+  // EN: Infrastructure Summary and Document Generation
+  // ===========================================================================
 
   /**
    * Generates the HTML summary of the fetched infrastructure data.
@@ -830,19 +840,38 @@ document.addEventListener('DOMContentLoaded', () => {
   function generateInfrastructureSummary(data) {
     const isNewHostFlow = selectedDocType === 'new_host';
     const isKubernetesFlow = selectedDocType === 'kubernetes';
+    const isWafFlow = selectedDocType === 'waf_report';
 
     const {
-      instances,
-      vcns,
-      drgs,
-      cpes,
-      ipsec_connections,
-      load_balancers,
-      volume_groups,
-      kubernetes_clusters,
-    } = data;
+        instances,
+        vcns,
+        drgs,
+        cpes,
+        ipsec_connections,
+        load_balancers,
+        volume_groups,
+        kubernetes_clusters,
+        waf_policies,
+        certificates,
+      } = data;
 
-    const createTable = (headers, rows) => {
+      if (isWafFlow && waf_policies?.length > 0) {
+        // Filter out DELETED policies before any processing
+        const activePolicies = waf_policies.filter(p =>
+            p.lifecycle_state?.toUpperCase() !== 'DELETED'
+        );
+        activePolicies.forEach(policy => {
+            const lb = policy.integration?.load_balancer;
+            if (lb && !load_balancers.some(existing => existing.display_name === lb.display_name)) {
+                load_balancers.push(lb);
+            }
+        });
+        // Replace in-place so downstream rendering uses filtered list
+        waf_policies.length = 0;
+        activePolicies.forEach(p => waf_policies.push(p));
+      }
+
+      const createTable = (headers, rows) => {
       if (!rows || rows.length === 0) {
         return `<p class="no-data-message">${t('summary.no_resource_found')}</p>`;
       }
@@ -903,6 +932,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isKubernetesFlow && kubernetes_clusters?.length > 0) {
       const clusterVcnIds = new Set(kubernetes_clusters.map(c => c.vcn_id));
       relevantVcns = vcns.filter(v => clusterVcnIds.has(v.id));
+    } else if (isWafFlow && waf_policies?.length > 0) {
+      const wafVcnNames = new Set(
+          waf_policies
+          .map(p => p.network_infrastructure?.vcn_name)
+          .filter(n => n && n !== 'N/A')
+      );
+      relevantVcns = vcns.filter(v => wafVcnNames.has(v.display_name));
     }
 
     const vcnsHtml = relevantVcns?.length > 0 ?
@@ -947,14 +983,34 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </fieldset>
           <hr class="fieldset-divider">
+          
           <div class="content-block">
             <h5 class="subheader">Listeners</h5>
-            ${createTable([t('summary.name'), t('summary.protocol'), t('summary.port'), t('summary.lb.default_backend_set')], lb.listeners?.map(l => [`<span class="text-highlight">${l.name}</span>`, l.protocol, l.port, l.default_backend_set_name]))}
+            ${(() => {
+              const hasSSL = lb.listeners?.some(l => l.protocol === 'HTTPS' && (l.ssl_certificate_ids || []).length > 0);
+              const headers = [t('summary.name'), t('summary.protocol'), t('summary.port'), t('summary.lb.default_backend_set'), ...(hasSSL ? ['Certificado TLS'] : [])];
+              const rows = lb.listeners?.map(l => {
+                const certNames = (l.ssl_certificate_ids || []).map(ocid => {
+                  const match = (certificates || []).find(c => c.id === ocid);
+                  return match ? `<span class="text-highlight">${match.name}</span>` : `<span style="font-size:0.75em;opacity:0.6">${ocid.slice(-12)}</span>`;
+                });
+                return [
+                  `<span class="text-highlight">${l.name}</span>`,
+                  l.protocol,
+                  l.port,
+                  l.default_backend_set_name,
+                  ...(hasSSL ? [certNames.length > 0 ? certNames.join(', ') : '—'] : [])
+                ];
+              });
+              return createTable(headers, rows);
+            })()}
           </div>
+
           <div class="content-block">
             <h5 class="subheader">Backend Sets</h5>
             ${(lb.backend_sets && lb.backend_sets.length > 0) ? lb.backend_sets.map(bs => `<div class="backend-set-details"><h6 class="tunnel-subheader">Backend Set: <span class="text-highlight">${bs.name}</span> (${t('summary.lb.policy')}: ${bs.policy})</h6><ul class="tunnel-basic-info"><li><strong>Health Check:</strong> ${bs.health_checker.protocol}:${bs.health_checker.port}</li><li><strong>URL Path:</strong> ${bs.health_checker.url_path || 'N/A'}</li></ul>${createTable([t('summary.name'), 'IP', t('summary.port'), t('summary.weight')], bs.backends?.map(b => [`<span class="text-highlight">${b.name}</span>`, b.ip_address, b.port, b.weight]))}</div>`).join('') : `<p class="no-data-message">${t('summary.no_backend_sets_found')}</p>`}
           </div>`;
+
         return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${lb.lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
       }).join('') :
       '';
@@ -1083,25 +1139,320 @@ document.addEventListener('DOMContentLoaded', () => {
       }).join('') :
       `<p class="no-data-message">${t('summary.no_oke_found')}</p>`;
 
+    let wafHtml = '';
+
+    if (waf_policies && waf_policies.length > 0) {
+      waf_policies.forEach(policy => {
+        const isDeleted = policy.lifecycle_state?.toUpperCase() === 'DELETED';
+        const statusClass = policy.lifecycle_state?.toLowerCase().replace('_', '-') || 'unknown';
+        const fw = policy.integration?.firewall;
+        const lb = policy.integration?.load_balancer;
+
+        let wafCardContent = '';
+
+        if (isDeleted) {
+            wafCardContent = `<p class="no-data-message">${t('doc.messages.resource_deleted_info') || 'Recurso deletado.'}</p>`;
+        } else {
+            const firewallTable = fw ? createTable(
+                ['Nome do Firewall', 'Attachment State', 'Enforcement Point', 'Enforcement Point Name'],
+                [[
+                    `<span class="text-highlight">${fw.display_name}</span>`,
+                    `<span class="status-badge status-${fw.lifecycle_state?.toLowerCase() || 'active'}">${fw.lifecycle_state || 'ACTIVE'}</span>`,
+                    'Load Balancer',
+                    lb ? lb.display_name : 'N/A'
+                ]]
+            ) : `<p class="no-data-message">Nenhum Web Application Firewall associado.</p>`;
+
+            wafCardContent = `
+                <div class="content-block">
+                    <h5 class="subheader">Web Application Firewall Attachments</h5>
+                    ${firewallTable}
+                </div>
+                <div class="grid-container">
+                    <div class="info-group"><label>Regras de Proteção</label><div class="info-value">${policy.protection_rules?.length || 0}</div></div>
+                    <div class="info-group"><label>Controle de Acesso</label><div class="info-value">${policy.access_control_rules?.length || 0}</div></div>
+                    <div class="info-group"><label>Rate Limiting</label><div class="info-value">${policy.rate_limiting_rules?.length > 0 ? t('summary.yes') : t('summary.no')}</div></div>
+                </div>`;
+        }
+
+        wafHtml += `
+            <div class="instance-summary-card collapsible${isDeleted ? ' deleted-resource' : ''}">
+                <div class="instance-card-header">
+                    <h4 class="card-header-title">${policy.display_name}</h4>
+                    <div class="card-status-indicator"><span class="status-badge status-${statusClass}">${policy.lifecycle_state}</span></div>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="instance-card-body">${wafCardContent}</div>
+            </div>`;
+      });
+    }
+
+    if (!wafHtml) wafHtml = `<p class="no-data-message">${t('summary.no_waf_found')}</p>`;
+
     let titleKey = 'summary.title.full_infra';
     if (isNewHostFlow) {
       titleKey = 'summary.title.new_host';
     } else if (isKubernetesFlow) {
       titleKey = 'summary.title.k8s';
+    } else if (isWafFlow) {
+      titleKey = 'summary.title.waf';
     }
     let title = t(titleKey, { name: selectedCompartmentName });
     
+    // ── Certificate Cards: full visual redesign ────────────────────────────
+    const renderCertificates = (certs) => {
+      if (!certs || certs.length === 0) {
+        return `<p class="no-data-message">Nenhum certificado encontrado no compartimento.</p>`;
+      }
+
+      return certs.map(cert => {
+        const state = (cert.lifecycle_state || '').toUpperCase();
+        const isActive  = state === 'ACTIVE';
+        const isPending = state === 'PENDING_DELETION';
+        const isDeleted = state === 'DELETED';
+
+        // ── Validity period from nested current_version_summary ──────────
+        const cv = cert.current_version_summary || {};
+        const validFrom  = cv.valid_not_before || 'N/A';
+        const validUntil = cv.valid_not_after  || cert.valid_not_after || 'N/A';
+        const todayMs    = Date.now();
+        let daysUntilExpiry = null;
+        if (validUntil && validUntil !== 'N/A') {
+          daysUntilExpiry = Math.ceil((new Date(validUntil) - todayMs) / 86_400_000);
+        }
+
+        // ── Status chip ──────────────────────────────────────────────────
+        let statusChip = '';
+        if (isActive) {
+          if (daysUntilExpiry !== null && daysUntilExpiry <= 30) {
+            statusChip = `<span class="cert-status-chip cert-expiring">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Expirando em ${daysUntilExpiry}d
+            </span>`;
+          } else {
+            statusChip = `<span class="cert-status-chip cert-active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              Ativo
+            </span>`;
+          }
+        } else if (isPending) {
+          statusChip = `<span class="cert-status-chip cert-pending">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Pendente Exclusão
+          </span>`;
+        } else if (isDeleted) {
+          statusChip = `<span class="cert-status-chip cert-deleted">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            Deletado
+          </span>`;
+        }
+
+        // ── Expiry bar ───────────────────────────────────────────────────
+        let expiryBarHtml = '';
+        if (validFrom !== 'N/A' && validUntil !== 'N/A') {
+          const totalMs  = new Date(validUntil) - new Date(validFrom);
+          const usedMs   = todayMs - new Date(validFrom);
+          const pct      = Math.min(100, Math.max(0, (usedMs / totalMs) * 100));
+          const barColor = pct >= 90 ? '#ef4444' : pct >= 75 ? '#f97316' : '#22c55e';
+          expiryBarHtml = `
+            <div class="cert-expiry-bar-wrap">
+              <div class="cert-expiry-bar-track">
+                <div class="cert-expiry-bar-fill" style="width:${pct.toFixed(1)}%;background:${barColor};"></div>
+              </div>
+              <span class="cert-expiry-bar-label">${validFrom} → ${validUntil}${daysUntilExpiry !== null ? ` (${daysUntilExpiry > 0 ? daysUntilExpiry + 'd restantes' : 'EXPIRADO'})` : ''}</span>
+            </div>`;
+        }
+
+        // ── Subject ──────────────────────────────────────────────────────
+        const subject = cert.subject || cert.subject_info || {};
+        const cn   = subject.common_name            || 'N/A';
+        const org  = subject.organization           || 'N/A';
+        const loc  = subject.locality_name          || subject.locality || 'N/A';
+        const st   = subject.state_or_province_name || subject.state    || 'N/A';
+        const ctry = subject.country                || 'N/A';
+
+        // Subtitle under cert name: Common Name → first SAN → expiry date → ''
+        const rawSansForSubtitle = cert.subject_alternative_names || [];
+        const firstSan = Array.isArray(rawSansForSubtitle) && rawSansForSubtitle.length > 0
+          ? (rawSansForSubtitle[0].value || rawSansForSubtitle[0])
+          : null;
+        const subtitleText = (cn !== 'N/A') ? cn
+          : firstSan ? firstSan
+          : (validUntil !== 'N/A') ? `Expira: ${validUntil}`
+          : '';
+
+        // ── SANs ─────────────────────────────────────────────────────────
+        let sansHtml = '';
+        const rawSans = cert.subject_alternative_names;
+        if (Array.isArray(rawSans) && rawSans.length > 0) {
+          sansHtml = rawSans.map(s => {
+            const type = s.san_type || s.type || 'DNS';
+            const val  = s.value    || String(s);
+            const typeColor = type === 'IP' ? '#f97316' : '#a5b4fc';
+            return `<span class="cert-san-tag"><span class="cert-san-type" style="color:${typeColor}">${type}</span>${val}</span>`;
+          }).join('');
+        } else if (typeof rawSans === 'string' && rawSans && rawSans !== 'N/A') {
+          sansHtml = rawSans.split(',').map(s =>
+            `<span class="cert-san-tag"><span class="cert-san-type">DNS</span>${s.trim()}</span>`
+          ).join('');
+        }
+
+        // ── Version details ──────────────────────────────────────────────
+        const cvStages = Array.isArray(cv.stages) ? cv.stages : (cv.stages ? [cv.stages] : []);
+        const stagePills = cvStages.map(s => `<span class="cert-stage-pill">${s}</span>`).join('');
+        const serialNum = cv.serial_number   || 'N/A';
+        const versionNo = cv.version_number  != null ? cv.version_number : 'N/A';
+
+        // ── Associations ─────────────────────────────────────────────────
+        const assocs = cert.associations || [];
+        let assocsHtml = '';
+        if (assocs.length > 0) {
+          assocsHtml = assocs.map(a => {
+            const aName    = a.display_name || a.name || 'N/A';
+            const aType    = a.resource_type || 'N/A';
+            const aState   = a.lifecycle_state || a.state || 'N/A';
+            const aResId   = a.associated_resource_id || a.resource_id || 'N/A';
+            const aCreated = a.time_created || a.time || 'N/A';
+            const aStatusClass = aState.toLowerCase().replace(/_/g,'-');
+            return `
+              <div class="cert-assoc-card">
+                <div class="cert-assoc-header">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cert-assoc-icon"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                  <span class="cert-assoc-name">${aName}</span>
+                  <span class="status-badge status-${aStatusClass}">${aState}</span>
+                </div>
+                <div class="cert-assoc-meta">
+                  <span class="cert-assoc-type-badge">${aType}</span>
+                  <span class="cert-assoc-date">Criado: ${aCreated}</span>
+                </div>
+                <div class="cert-assoc-id"><span class="code-text">${aResId}</span></div>
+              </div>`;
+          }).join('');
+        } else {
+          assocsHtml = `<p class="no-data-message" style="margin:0;padding:8px 0;">Nenhuma associação encontrada.</p>`;
+        }
+
+        // ── Card border color based on state ─────────────────────────────
+        const cardBorderColor = isActive
+          ? (daysUntilExpiry !== null && daysUntilExpiry <= 30 ? '#f97316' : '#22c55e')
+          : isPending ? '#f59e0b'
+          : '#6b7280';
+
+        return `
+          <div class="cert-card collapsible" style="border-left-color:${cardBorderColor};">
+            <!-- Card Header -->
+            <div class="cert-card-header instance-card-header">
+              <div class="cert-card-title-area">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cert-card-icon" style="color:${cardBorderColor}"><circle cx="12" cy="8" r="6"/><path d="m9 8 2 2 4-4"/><path d="M6.5 14.5 5 20l7-2 7 2-1.5-5.5"/></svg>
+                <div>
+                  <h4 class="card-header-title">${cert.name}</h4>
+                  <span class="cert-cn-subtitle">${subtitleText}</span>
+                </div>
+              </div>
+              <div class="cert-card-badges">
+                ${statusChip}
+                <span class="cert-type-badge">${cert.config_type || 'IMPORTED'}</span>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+
+            <!-- Card Body -->
+            <div class="cert-card-body instance-card-body">
+
+              ${expiryBarHtml}
+
+              <!-- Two-column identity grid -->
+              <div class="cert-grid">
+                <div class="cert-section">
+                  <h5 class="cert-section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+                    Identidade do Certificado
+                  </h5>
+                  <div class="cert-kv-list">
+                    <div class="cert-kv-row"><span class="cert-kv-label">Common Name</span><span class="cert-kv-value text-highlight">${cn}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">Organização</span><span class="cert-kv-value">${org}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">Localidade</span><span class="cert-kv-value">${loc}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">Estado/Prov.</span><span class="cert-kv-value">${st}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">País</span><span class="cert-kv-value">${ctry}</span></div>
+                  </div>
+                </div>
+
+                <div class="cert-section">
+                  <h5 class="cert-section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Detalhes Técnicos
+                  </h5>
+                  <div class="cert-kv-list">
+                    <div class="cert-kv-row"><span class="cert-kv-label">Algoritmo Chave</span><span class="cert-kv-value">${cert.key_algorithm || 'N/A'}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">Algoritmo Assin.</span><span class="cert-kv-value">${cert.signature_algorithm || 'N/A'}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">Versão</span><span class="cert-kv-value">${versionNo}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">Stages</span><span class="cert-kv-value">${stagePills || 'N/A'}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">Criado em</span><span class="cert-kv-value">${cert.time_created || 'N/A'}</span></div>
+                    ${isPending ? `<div class="cert-kv-row cert-deletion-row"><span class="cert-kv-label">⚠ Deleção agendada</span><span class="cert-kv-value" style="color:#f59e0b;font-weight:600;">${cert.time_of_deletion || 'N/A'}</span></div>` : ''}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Serial number full-width -->
+              <div class="cert-section cert-section-full">
+                <h5 class="cert-section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                  Identificadores
+                </h5>
+                <div class="cert-kv-list">
+                  <div class="cert-kv-row"><span class="cert-kv-label">Número de Série</span><span class="cert-kv-value"><span class="code-text">${serialNum}</span></span></div>
+                  <div class="cert-kv-row"><span class="cert-kv-label">OCID</span><span class="cert-kv-value"><span class="code-text">${cert.id}</span></span></div>
+                </div>
+              </div>
+
+              <!-- SANs -->
+              <div class="cert-section cert-section-full">
+                <h5 class="cert-section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+                  Nomes Alternativos (SANs)
+                </h5>
+                <div class="cert-sans-wrap">
+                  ${sansHtml || '<span style="color:var(--text-secondary);font-size:13px">Nenhum SAN configurado.</span>'}
+                </div>
+              </div>
+
+              <!-- Associations -->
+              <div class="cert-section cert-section-full">
+                <h5 class="cert-section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  Associações de Recursos (${assocs.length})
+                </h5>
+                <div class="cert-assoc-list">${assocsHtml}</div>
+              </div>
+
+            </div>
+          </div>`;
+      }).join('');
+    };
+
+    const certificatesMainCard = renderCertificates(certificates);
     let mainContentHtml = '';
 
     if (isNewHostFlow) {
       mainContentHtml = `
-        <fieldset><legend>${ICONS.INSTANCES}${t('summary.compute_instances')}</legend><div class="instances-container">${instancesHtml}</div></fieldset>
-        ${volumeGroupsHtml ? `<hr class="fieldset-divider"><fieldset><legend>${ICONS.VOLUME_GROUPS}${t('summary.associated_vgs')}</legend><div class="vg-container">${volumeGroupsHtml}</div></fieldset>`: ''}`;
+        <fieldset><legend>${ICONS.INSTANCES}${t('summary.compute_instances')}</legend><div class="instances-container">${instancesHtml || `<p class="no-data-message">${t('summary.no_instances_found')}</p>`}</div></fieldset>
+        <hr class="fieldset-divider">
+        <fieldset><legend>${ICONS.BLOCK_VOLUMES}${t('summary.associated_vgs')}</legend><div class="vg-container">${volumeGroupsHtml || `<p class="no-data-message">${t('summary.no_vgs_found')}</p>`}</div></fieldset>`;
     } else if (isKubernetesFlow) {
       mainContentHtml = `
         <fieldset><legend>${ICONS.OKE}${t('summary.oke_clusters')}</legend><div class="oke-container">${okeClustersHtml}</div></fieldset>
         <hr class="fieldset-divider">
         <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('summary.no_vcns_associated')}</p>`}</div></fieldset>`;
+    } else if (isWafFlow) {
+      mainContentHtml = `
+        <fieldset><legend>${ICONS.WAF}${t('summary.waf_policies')}</legend><div class="instances-container">${wafHtml}</div></fieldset>
+        <hr class="fieldset-divider">
+        <fieldset><legend>${ICONS.LB}${t('summary.lbs')}</legend><div class="instances-container">${loadBalancersHtml || `<p class="no-data-message">${t('doc.messages.no_lb_association')}</p>`}</div></fieldset>
+        <hr class="fieldset-divider">
+        <fieldset><legend>${ICONS.CERTIFICATES || ''}Certificates (OCI Certificates Service)</legend><div class="instances-container">${certificatesMainCard}</div></fieldset>
+        <hr class="fieldset-divider">
+        <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('doc.messages.no_network_found')}</p>`}</div></fieldset>
+      `;
     } else { // Full Infra
       mainContentHtml = `
         <fieldset><legend>${ICONS.INSTANCES}${t('summary.compute_instances')}</legend><div class="instances-container">${instancesHtml}</div></fieldset>
@@ -1116,12 +1467,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return `<div><h3 class="infra-summary-main-title">${title}</h3>${mainContentHtml}</div>`;
   }
 
-  /**
-   * Generates a single, collapsible HTML card for an instance summary.
-   * @param {object} data - The data for a single instance.
-   * @param {boolean} isCollapsible - If the card should be collapsible.
-   * @returns {string} The generated HTML string.
-   */
   function generateInstanceSummaryCard(data, isCollapsible = false) {
     const cardContent = `
       <fieldset><legend>${ICONS.INSTANCE_DATA}${t('summary.instance.data')}</legend>
@@ -1164,16 +1509,14 @@ document.addEventListener('DOMContentLoaded', () => {
       </fieldset>`;
 
     if (isCollapsible) {
-      const isRunning = data.lifecycle_state === 'RUNNING';
-      const statusText = isRunning ? t('summary.instance.running') : t('summary.instance.stopped');
-      const statusClass = isRunning ? 'running' : 'stopped';
+      const statusClass = data.lifecycle_state === 'RUNNING' ? 'running' : 'stopped';
       return `
         <div class="instance-summary-card collapsible">
           <div class="instance-card-header">
             <h4 class="card-header-title">${data.host_name}</h4>
             <div class="card-status-indicator">
               <span class="status-dot ${statusClass}"></span>
-              <span class="status-label ${statusClass}">${statusText}</span>
+              <span class="status-label ${statusClass}">${data.lifecycle_state}</span>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </div>
@@ -1188,9 +1531,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /**
-   * Triggers the document generation process by sending data to the backend.
-   */
   const generateDocument = () => {
     const responsibleName = responsibleNameInput.value.trim();
     if (!responsibleName) {
@@ -1202,7 +1542,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasData = allInfrastructureData &&
       (allInfrastructureData.instances?.length ||
         allInfrastructureData.kubernetes_clusters?.length ||
-        allInfrastructureData.vcns?.length);
+        allInfrastructureData.vcns?.length ||
+        allInfrastructureData.waf_policies?.length);
 
     if (!hasData) {
       showToast(t('toast.fetch_data_first'), 'error');
@@ -1266,11 +1607,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /**
-   * Updates the UI to show a preview of the selected files for upload.
-   * @param {Array<File>} fileArray - The array of files to display.
-   * @param {HTMLElement} fileListContainer - The DOM element to render the list into.
-   */
   function updateFileListUI(fileArray, fileListContainer) {
     fileListContainer.innerHTML = '';
     if (fileArray.length === 0) return;
@@ -1292,12 +1628,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /**
-   * Handles the file selection event from an input element.
-   * @param {Event} event - The file input change event.
-   * @param {Array<File>} fileArray - The state array to add files to.
-   * @param {HTMLElement} fileListContainer - The UI container to update.
-   */
   function handleFileSelect(event, fileArray, fileListContainer) {
     const newFiles = event.target.files;
     if (!newFiles || newFiles.length === 0) return;
@@ -1306,12 +1636,6 @@ document.addEventListener('DOMContentLoaded', () => {
     event.target.value = '';
   }
 
-  /**
-   * Handles the paste event to allow pasting images from the clipboard.
-   * @param {ClipboardEvent} event - The paste event.
-   * @param {Array<File>} fileArray - The state array to add files to.
-   * @param {HTMLElement} fileListContainer - The UI container to update.
-   */
   async function handlePaste(event, fileArray, fileListContainer) {
     event.preventDefault();
     const items = event.clipboardData.items;
@@ -1330,12 +1654,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateFileListUI(fileArray, fileListContainer);
   }
 
-  /**
-   * Handles the click event to delete a file from the list.
-   * @param {Event} event - The click event.
-   * @param {Array<File>} fileArray - The state array to remove the file from.
-   * @param {HTMLElement} fileListContainer - The UI container to update.
-   */
   function handleFileDelete(event, fileArray, fileListContainer) {
     const deleteButton = event.target.closest('.file-list-delete-btn');
     if (!deleteButton) return;
@@ -1347,22 +1665,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /**
-   * Initializes the application by fetching initial data and setting up UI components.
-   */
   const initializeApp = async () => {
     const savedLang = localStorage.getItem('oci-docgen-lang') || 'pt';
     await setLanguage(savedLang);
     fetchRegions();
   };
 
-  // --- Event Listeners ---
+  // ===========================================================================
+  // PT-BR: Registros de Event Listeners
+  // EN: Event Listener Registrations
+  // ===========================================================================
   fetchBtn.addEventListener('click', fetchAllDetails);
   generateBtn.addEventListener('click', generateDocument);
   newDocBtn.addEventListener('click', resetApp);
   document.addEventListener('click', closeAllSelects);
   summaryContainer.addEventListener('click', (event) => {
-    const header = event.target.closest('.instance-card-header, .vcn-card-header, .ipsec-card-header, .oke-card-header');
+    const header = event.target.closest('.instance-card-header, .vcn-card-header, .ipsec-card-header, .oke-card-header, .cert-card-header');
     if (header) {
       const card = header.closest('.collapsible');
       if (card) {
@@ -1378,6 +1696,9 @@ document.addEventListener('DOMContentLoaded', () => {
   antivirusFileList.addEventListener('click', (e) => handleFileDelete(e, antivirusImageFiles, antivirusFileList));
   languageSelector.addEventListener('change', (e) => setLanguage(e.target.value));
 
-  // --- Initial Load ---
+  // ===========================================================================
+  // PT-BR: Inicialização da Aplicação
+  // EN: Application Initialization
+  // ===========================================================================
   initializeApp();
 });

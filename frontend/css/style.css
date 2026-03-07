@@ -1,5 +1,15 @@
+/* =============================================================================
+   PT-BR: Folha de estilos principal do OCI DocGen.
+          Define o sistema de design completo: variáveis CSS, layout, tipografia,
+          componentes de interface, animações e estilos responsivos.
+   EN: Main stylesheet for OCI DocGen.
+       Defines the complete design system: CSS variables, layout, typography,
+       UI components, animations, and responsive styles.
+   ============================================================================= */
+
 /* ====================================================== */
-/* 1. GLOBAL SETTINGS & VARIABLES                         */
+/* PT-BR: 1. Configurações Globais e Variáveis CSS
+   EN:    1. Global Settings and CSS Variables           */
 /* ====================================================== */
 :root {
   --font-family: 'Inter', sans-serif;
@@ -48,7 +58,8 @@ body {
 }
 
 /* ====================================================== */
-/* 2. MAIN LAYOUT & STRUCTURE                             */
+/* PT-BR: 2. Layout Principal e Estrutura
+   EN:    2. Main Layout and Structure                    */
 /* ====================================================== */
 .container {
   width: 100%;
@@ -139,7 +150,8 @@ body {
 }
 
 /* ====================================================== */
-/* 3. CUSTOM SELECT COMPONENT                             */
+/* PT-BR: 3. Componente de Select Customizado
+   EN:    3. Custom Select Component                     */
 /* ====================================================== */
 .custom-select-container {
   position: relative;
@@ -310,7 +322,8 @@ body {
 }
 
 /* ====================================================== */
-/* 4. MULTI-SELECT COMPONENT                              */
+/* PT-BR: 4. Componente Multi-Select
+   EN:    4. Multi-Select Component                       */
 /* ====================================================== */
 .select-item input[type="checkbox"] {
   display: none;
@@ -414,7 +427,8 @@ textarea {
 }
 
 /* ====================================================== */
-/* 5. BUTTONS & INTERACTION ELEMENTS                      */
+/* PT-BR: 5. Botões e Elementos de Interação
+   EN:    5. Buttons and Interaction Elements             */
 /* ====================================================== */
 .button-primary {
   display: flex;
@@ -455,7 +469,8 @@ textarea {
 }
 
 /* ====================================================== */
-/* 6. DETAILS & SUMMARY SECTION                           */
+/* PT-BR: 6. Seção de Detalhes e Resumo de Infraestrutura
+   EN:    6. Infrastructure Details and Summary Section  */
 /* ====================================================== */
 #details-container {
   margin-top: 32px;
@@ -565,6 +580,79 @@ fieldset legend {
   list-style: none;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.resource-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+  margin-bottom: 32px;
+}
+
+.resource-card {
+  background: var(--bg-main);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resource-card h3 {
+  margin: 0 0 10px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-headers);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.resource-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.warning-border {
+    border-left: 4px solid #ff9800 !important;
+}
+
+.deletion-warning {
+    color: #ff9800;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.code-text {
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-highlight-color);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    word-break: break-all;
+    white-space: pre-wrap;
+    display: inline-block;
+    max-width: 100%;
+}
+
+.details-list p {
+    margin: 4px 0;
+    font-size: 13px;
+}
+
+.resource-card p strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.deleted-resource {
+  opacity: 0.7;
+  border-left: 3px solid #ff5c5c !important;
 }
 
 .table-container {
@@ -806,23 +894,26 @@ fieldset legend {
 
 .instance-card-body,
 .vcn-card-body,
-.ipsec-card-body {
+.ipsec-card-body,
+.cert-card-body {
   max-height: 0;
   padding: 0 24px;
   overflow: hidden;
-  transition: max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
+  transition: max-height 0.5s ease-in-out, padding 0.4s ease-in-out;
 }
 
 .collapsible.expanded>.instance-card-body,
 .collapsible.expanded>.vcn-card-body,
-.collapsible.expanded>.ipsec-card-body {
-  max-height: 2500px;
-  padding-top: 24px;
-  padding-bottom: 24px;
+.collapsible.expanded>.ipsec-card-body,
+.collapsible.expanded>.cert-card-body {
+  max-height: 4000px;
+  padding-top: 18px;
+  padding-bottom: 18px;
   border-top: 1px solid var(--border-color);
 }
 
-.collapsible.expanded>*>.expand-arrow {
+.collapsible.expanded>*>.expand-arrow,
+.collapsible.expanded>.cert-card-header>.expand-arrow {
   transform: rotate(180deg);
 }
 
@@ -941,7 +1032,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 7. FILE UPLOAD COMPONENTS                              */
+/* PT-BR: 7. Componentes de Upload de Arquivos
+   EN:    7. File Upload Components                      */
 /* ====================================================== */
 .attachments-grid {
   display: grid;
@@ -1069,7 +1161,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 8. UTILITIES, ANIMATIONS & RESPONSIVENESS              */
+/* PT-BR: 8. Utilitários, Animações e Responsividade
+   EN:    8. Utilities, Animations and Responsiveness    */
 /* ====================================================== */
 #loading-overlay {
   position: fixed;
@@ -1175,7 +1268,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 9. NOTIFICATION SYSTEM (TOAST)                         */
+/* PT-BR: 9. Sistema de Notificações (Toast)
+   EN:    9. Notification System (Toast)                  */
 /* ====================================================== */
 #toast-container {
   position: fixed;
@@ -1238,7 +1332,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 10. SUCCESS SCREEN (MODAL)                             */
+/* PT-BR: 10. Tela de Sucesso (Modal)
+   EN:     10. Success Screen (Modal)                     */
 /* ====================================================== */
 #success-screen {
   position: fixed;
@@ -1341,7 +1436,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 11. STYLES FOR VOLUME GROUPS                           */
+/* PT-BR: 11. Estilos para Volume Groups
+   EN:     11. Volume Groups Styles                       */
 /* ====================================================== */
 .member-list {
   margin: 10px 0 0 0;
@@ -1361,7 +1457,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 12. STYLES FOR KUBERNETES (OKE)                        */
+/* PT-BR: 12. Estilos para Kubernetes (OKE)
+   EN:     12. Kubernetes (OKE) Styles                    */
 /* ====================================================== */
 .oke-container {
   display: flex;
@@ -1419,7 +1516,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 13. UX/UI FOR KUBERNETES SUMMARY                       */
+/* PT-BR: 13. UX/UI para Resumo do Kubernetes
+   EN:     13. Kubernetes Summary UX/UI                   */
 /* ====================================================== */
 .connectivity-grid {
   display: grid;
@@ -1500,7 +1598,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 14. STYLES FOR VALIDATION SECTION                      */
+/* PT-BR: 14. Estilos para Seção de Validação
+   EN:     14. Validation Section Styles                  */
 /* ====================================================== */
 .validation-grid {
   display: grid;
@@ -1545,7 +1644,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 15. PROGRESS OVERLAY ENHANCEMENTS                      */
+/* PT-BR: 15. Melhorias no Overlay de Progresso
+   EN:     15. Progress Overlay Enhancements              */
 /* ====================================================== */
 .progress-timer {
   margin-top: 8px;
@@ -1582,7 +1682,8 @@ fieldset legend {
 }
 
 /* ====================================================== */
-/* 16. LANGUAGE SELECTOR                                  */
+/* PT-BR: 16. Seletor de Idioma
+   EN:     16. Language Selector                          */
 /* ====================================================== */
 .language-selector-container {
   display: flex;
@@ -1610,4 +1711,354 @@ fieldset legend {
 #language-selector:focus {
   border-color: var(--accent-color-start);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.4);
+}
+/* ====================================================== */
+/* PT-BR: 17. Cards de Certificados TLS/SSL
+   EN:     17. TLS/SSL Certificate Cards                  */
+/* ====================================================== */
+
+/* ── Outer card ──────────────────────────────────────── */
+.cert-card {
+  margin-top: 16px;
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent-color-start);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-main);
+  overflow: hidden; /* clips collapsed body content — prevents expiry bar bleed */
+  transition: box-shadow 0.2s;
+}
+
+.cert-card:hover {
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.35);
+}
+
+/* ── Card header ─────────────────────────────────────── */
+.cert-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cert-card-title-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cert-card-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+}
+
+.cert-card-title-area h4.card-header-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-headers);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cert-cn-subtitle {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cert-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Status chips ────────────────────────────────────── */
+.cert-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cert-status-chip svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.cert-active {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.cert-expiring {
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  animation: pulse-expiring 2s ease-in-out infinite;
+}
+
+.cert-pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.cert-deleted {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+@keyframes pulse-expiring {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}
+
+.cert-type-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(79, 70, 229, 0.2);
+  color: #a5b4fc;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(79, 70, 229, 0.3);
+  letter-spacing: 0.3px;
+}
+
+/* ── Card body layout (only active when expanded) ────── */
+.collapsible.expanded>.cert-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Expiry progress bar ─────────────────────────────── */
+.cert-expiry-bar-wrap {
+  margin-top: 4px;
+}
+
+.cert-expiry-bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+
+.cert-expiry-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.cert-expiry-bar-label {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  letter-spacing: 0.3px;
+}
+
+/* ── Two-column section grid ─────────────────────────── */
+.cert-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 600px) {
+  .cert-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Individual section blocks ───────────────────────── */
+.cert-section {
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: rgba(0,0,0,0.15);
+}
+
+.cert-section-full {
+  grid-column: 1 / -1;
+}
+
+.cert-section-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.cert-section-title svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--accent-color-start);
+}
+
+/* ── Key-value list ──────────────────────────────────── */
+.cert-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cert-kv-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.cert-kv-label {
+  flex-shrink: 0;
+  min-width: 120px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.cert-kv-value {
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.cert-deletion-row .cert-kv-label {
+  color: #f59e0b;
+}
+
+/* ── Stage pills ─────────────────────────────────────── */
+.cert-stage-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(165, 180, 252, 0.15);
+  border: 1px solid rgba(165, 180, 252, 0.3);
+  color: #a5b4fc;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-right: 4px;
+}
+
+/* ── SANs tag cloud ──────────────────────────────────── */
+.cert-sans-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.cert-san-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.cert-san-type {
+  padding: 3px 7px;
+  background: rgba(0,0,0,0.3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.cert-san-tag > span:last-child {
+  padding: 3px 9px;
+  color: var(--text-primary);
+}
+
+/* ── Association cards ───────────────────────────────── */
+.cert-assoc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cert-assoc-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background: rgba(0,0,0,0.15);
+}
+
+.cert-assoc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cert-assoc-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--accent-color-start);
+}
+
+.cert-assoc-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cert-assoc-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.cert-assoc-type-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(79, 70, 229, 0.2);
+  color: #a5b4fc;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(79, 70, 229, 0.3);
+}
+
+.cert-assoc-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cert-assoc-id {
+  font-size: 11px;
+  word-break: break-all;
 }
