@@ -1,8 +1,5 @@
 # ==============================================================================
-# PT-BR: Servidor FastAPI da aplicação OCI DocGen.
-#        Expõe endpoints REST para listagem de regiões/compartimentos,
-#        início de coletas assíncronas e geração de documentos .docx.
-# EN: FastAPI server for the OCI DocGen application.
+# FastAPI server for the OCI DocGen application.
 #     Exposes REST endpoints for listing regions/compartments,
 #     starting asynchronous collections, and generating .docx documents.
 # ==============================================================================
@@ -31,11 +28,6 @@ logging.basicConfig(level=logging.INFO)
 
 
 # ==============================================================================
-# PT-BR: Configuração da aplicação FastAPI e middleware CORS.
-#        CORS permite que o frontend em localhost acesse a API local.
-# EN: FastAPI application configuration and CORS middleware setup.
-#     CORS allows the localhost frontend to access the local API.
-# ==============================================================================
 
 app = FastAPI(
     title="OCI DocGen API",
@@ -56,9 +48,6 @@ app.add_middleware(
 )
 
 
-# ==============================================================================
-# PT-BR: Endpoints de Consulta (GET) — Regiões, Compartimentos e Instâncias
-# EN: Query Endpoints (GET) — Regions, Compartments, and Instances
 # ==============================================================================
 
 @app.get("/api/regions", summary="Listar Regiões Disponíveis")
@@ -88,9 +77,6 @@ async def get_instances(region: str, compartment_id: str):
     return oci_connector.list_instances_in_compartment(region, compartment_id)
 
 
-# ==============================================================================
-# PT-BR: Endpoint de Início de Coleta Assíncrona
-# EN: Asynchronous Collection Start Endpoint
 # ==============================================================================
 
 @app.post(
@@ -155,9 +141,6 @@ async def start_data_collection(payload: dict = Body(...)):
 
 
 # ==============================================================================
-# PT-BR: Endpoint de Verificação de Status de Tarefa
-# EN: Task Status Check Endpoint
-# ==============================================================================
 
 @app.get(
     "/api/collection-status/{task_id}",
@@ -186,9 +169,6 @@ async def get_collection_status(task_id: str):
     return {"task_id": task_id, "status": "SUCCESS", "result": task_result.result}
 
 
-# ==============================================================================
-# PT-BR: Endpoint de Geração de Documento .docx
-# EN: .docx Document Generation Endpoint
 # ==============================================================================
 
 @app.post("/api/generate-document", summary="Gerar Documento de Infraestrutura")

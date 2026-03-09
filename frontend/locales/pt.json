@@ -197,5 +197,19 @@
   "doc.messages.no_network_found": "Nenhuma infraestrutura de rede associada.",
   "summary.waf.associated_policy": "WAF Associado",
   "doc.messages.resource_deleted_info": "Recurso deletado. Informações completas de associação não estão mais disponíveis.",
-  "doc.messages.no_config_found": "Nenhuma configuração encontrada."
+  "doc.messages.no_config_found": "Nenhuma configuração encontrada.",
+  "progress.collecting_waf_infra": "Coletando políticas WAF do compartimento...",
+  "progress.collecting_certificates": "Coletando certificados TLS/SSL...",
+  "summary.section.certificates": "Certificados TLS/SSL (OCI Certificates Service)",
+  "doc.headers.cert_org": "Organização",
+  "doc.headers.cert_key_algo": "Algoritmo da Chave",
+  "doc.headers.cert_sign_algo": "Algoritmo de Assinatura",
+  "doc.headers.cert_stages": "Stages",
+  "doc.headers.cert_valid_from": "Válido de",
+  "doc.headers.cert_valid_to": "Válido até",
+  "doc.headers.cert_deletion_date": "Deleção Agendada",
+  "doc.headings.waf_firewalls_table": "Firewalls e Load Balancers Vinculados",
+  "doc.headers.firewall_name": "Nome do Firewall",
+  "doc.headers.lb_name": "Load Balancer",
+  "doc.headers.lb_ip": "Endereços IP"
 }

@@ -1,9 +1,5 @@
 // =============================================================================
-// PT-BR: Aplicação frontend do OCI DocGen.
-//        Gerencia o fluxo completo da interface: seleção de região/compartimento,
-//        inicio de coletas assíncronas, exibição do resumo de infraestrutura
-//        e geração/download de documentos .docx.
-// EN: OCI DocGen frontend application.
+// OCI DocGen frontend application.
 //     Manages the complete UI flow: region/compartment selection,
 //     async collection start, infrastructure summary display,
 //     and .docx document generation/download.
@@ -12,15 +8,9 @@
 document.addEventListener('DOMContentLoaded', () => {
 
   // ===========================================================================
-  // PT-BR: Configurações e Constantes
-  // EN: Settings and Constants
-  // ===========================================================================
   const API_BASE_URL = 'http://127.0.0.1:8000'; // Uncomment for local development
   //const API_BASE_URL = ''; // Uncomment for production
 
-  // ===========================================================================
-  // PT-BR: Seletores de Elementos do DOM
-  // EN: DOM Element Selectors
   // ===========================================================================
   const mainAppContainer = document.getElementById('main-app-container');
   const regionContainer = document.getElementById('region-select-container');
@@ -51,9 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const languageSelector = document.getElementById('language-selector');
 
   // ===========================================================================
-  // PT-BR: Definições de Ícones SVG inline
-  // EN: Inline SVG Icon Definitions
-  // ===========================================================================
   const ICONS = {
     WAF: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg>`,
     INSTANCES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`,
@@ -69,9 +56,22 @@ document.addEventListener('DOMContentLoaded', () => {
     CERTIFICATES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="12" cy="8" r="6"/><path d="m9 8 2 2 4-4"/><path d="M6.5 14.5 5 20l7-2 7 2-1.5-5.5"/></svg>`,
   };
 
+
   // ===========================================================================
-  // PT-BR: Estado Global da Aplicação
-  // EN: Global Application State
+  function getStateLabel(state) {
+    const s = (state || '').toUpperCase();
+    if (s === 'TERMINATED') return currentLanguage === 'pt' ? 'Excluído' : 'Terminated';
+    if (s === 'RUNNING')    return currentLanguage === 'pt' ? 'Ativo'    : 'Running';
+    if (s === 'STOPPED')    return currentLanguage === 'pt' ? 'Parado'   : 'Stopped';
+    return state;
+  }
+
+  function getStateCssClass(state) {
+    const s = (state || '').toUpperCase();
+    if (s === 'TERMINATED') return 'terminated';
+    return s.toLowerCase().replace(/_/g, '-');
+  }
+
   // ===========================================================================
   let selectedRegion = null;
   let selectedDocType = null;
@@ -91,8 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let allInstancesData = [];
 
   // ===========================================================================
-  // PT-BR: Funções de Internacionalização (i18n)
-  // EN: Internationalization (i18n) Functions
+  // Internationalization (i18n) Functions
   // ===========================================================================
 
   const loadTranslations = async (lang) => {
@@ -222,8 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // PT-BR: Funções de Interface do Usuário
-  // EN: User Interface Functions
+  // User Interface Functions
   // ===========================================================================
 
   function showToast(message, type = 'success') {
@@ -521,8 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
-  // PT-BR: Funções de Chamadas à API Backend
-  // EN: Backend API Call Functions
+  // Backend API Call Functions
   // ===========================================================================
 
   /**
@@ -684,8 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // PT-BR: Fluxo Assíncrono e Coleta de Dados
-  // EN: Asynchronous Flow and Data Collection
+  // Asynchronous Flow and Data Collection
   // ===========================================================================
 
   /**
@@ -828,8 +824,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // PT-BR: Geração de Resumo de Infraestrutura e Documentos
-  // EN: Infrastructure Summary and Document Generation
+  // Infrastructure Summary and Document Generation
   // ===========================================================================
 
   /**
@@ -837,6 +832,66 @@ document.addEventListener('DOMContentLoaded', () => {
    * @param {object} data The infrastructure data from the API.
    * @returns {string} The generated HTML string.
    */
+  // ===========================================================================
+  // Builds WAF policy HTML for the full infrastructure summary.
+  //     Extracted to avoid nested backtick issues inside template literals.
+  // ===========================================================================
+  function buildWafInfraSectionHtml(policies, createTable) {
+    let html = '';
+    policies.forEach(function(policy) {
+      const statusClass    = getStateCssClass(policy.lifecycle_state);
+      const statusLabel    = getStateLabel(policy.lifecycle_state);
+      const isDeleted      = (policy.lifecycle_state || '').toUpperCase() === 'DELETED';
+      let wafCardContent   = '';
+
+      if (!isDeleted) {
+        const integrations = (policy.integrations && policy.integrations.length > 0)
+          ? policy.integrations
+          : (policy.integration ? [policy.integration] : []);
+
+        const fwRows = integrations.map(function(intg) {
+          const fw = intg.firewall;
+          const lb = intg.load_balancer;
+          const ips = lb ? (lb.ip_addresses || []).map(function(ip) { return ip.ip_address; }).join(', ') || 'N/A' : 'N/A';
+          return [
+            '<span class="text-highlight">' + (fw ? fw.display_name : 'N/A') + '</span>',
+            fw ? (fw.backend_type || 'N/A') : 'N/A',
+            lb ? ('<span class="text-highlight">' + lb.display_name + '</span> <small>(' + ips + ')</small>') : 'N/A',
+            '<span class="status-badge status-active">ACTIVE</span>'
+          ];
+        });
+
+        var fwHtml = fwRows.length > 0
+          ? '<h5 class="waf-sub-title">Firewall</h5>' + createTable(['Nome do Firewall', 'Backend', 'Load Balancer', 'Estado'], fwRows)
+          : '';
+
+        const aclCount   = (policy.access_control_rules  || []).length;
+        const rlCount    = (policy.rate_limiting_rules    || []).length;
+        const protCount  = (policy.protection_rules       || []).length;
+
+        wafCardContent = fwHtml +
+          '<p class="waf-rules-summary">' +
+            'ACL: ' + aclCount + ' regras &nbsp;|&nbsp; ' +
+            'Rate Limit: ' + rlCount + ' regras &nbsp;|&nbsp; ' +
+            'Prote\u00e7\u00e3o: ' + protCount + ' regras' +
+          '</p>';
+      }
+
+      html +=
+        '<div class="instance-summary-card collapsible">' +
+          '<div class="instance-card-header">' +
+            '<h4 class="card-header-title">' + policy.display_name + '</h4>' +
+            '<div class="card-status-indicator">' +
+              '<span class="status-badge status-' + statusClass + '">' + statusLabel + '</span>' +
+            '</div>' +
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+          '</div>' +
+          '<div class="instance-card-body">' + wafCardContent + '</div>' +
+        '</div>';
+    });
+    return html || '<p class="no-data-message">' + t('summary.no_waf_found') + '</p>';
+  }
+
   function generateInfrastructureSummary(data) {
     const isNewHostFlow = selectedDocType === 'new_host';
     const isKubernetesFlow = selectedDocType === 'kubernetes';
@@ -856,17 +911,20 @@ document.addEventListener('DOMContentLoaded', () => {
       } = data;
 
       if (isWafFlow && waf_policies?.length > 0) {
-        // Filter out DELETED policies before any processing
         const activePolicies = waf_policies.filter(p =>
             p.lifecycle_state?.toUpperCase() !== 'DELETED'
         );
         activePolicies.forEach(policy => {
-            const lb = policy.integration?.load_balancer;
-            if (lb && !load_balancers.some(existing => existing.display_name === lb.display_name)) {
-                load_balancers.push(lb);
-            }
+            const integrations = (policy.integrations && policy.integrations.length > 0)
+                ? policy.integrations
+                : (policy.integration ? [policy.integration] : []);
+            integrations.forEach(intg => {
+                const lb = intg.load_balancer;
+                if (lb && !load_balancers.some(existing => existing.display_name === lb.display_name)) {
+                    load_balancers.push(lb);
+                }
+            });
         });
-        // Replace in-place so downstream rendering uses filtered list
         waf_policies.length = 0;
         activePolicies.forEach(p => waf_policies.push(p));
       }
@@ -887,7 +945,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const volumeGroupsHtml = volume_groups?.length > 0 ?
       volume_groups.map(vg => {
         const { validation, lifecycle_state, display_name, availability_domain, members } = vg;
-        const statusClass = lifecycle_state ? lifecycle_state.toLowerCase().replace('_', '-') : 'unknown';
+        const statusClass = getStateCssClass(lifecycle_state);
         
         const backupHtml = validation.has_backup_policy ?
           `<span class="validation-ok"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> ${validation.policy_name}</span>` :
@@ -924,7 +982,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>`;
         
-        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${availability_domain}</span><span class="status-badge status-${statusClass}">${lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${availability_domain}</span><span class="status-badge status-${statusClass}">${getStateLabel(lifecycle_state)}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
       }).join('') :
       (isNewHostFlow ? '' : `<p class="no-data-message">${t('summary.no_vgs_found')}</p>`);
 
@@ -966,7 +1024,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const loadBalancersHtml = load_balancers?.length > 0 ?
       load_balancers.map(lb => {
-        const statusClass = lb.lifecycle_state ? lb.lifecycle_state.toLowerCase().replace('_', '-') : 'unknown';
+        const statusClass = getStateCssClass(lb.lifecycle_state);
         const cardContent = `
           <fieldset><legend>${ICONS.LB}${t('summary.lb.general_info')}</legend>
             <div class="grid-container">
@@ -1011,7 +1069,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${(lb.backend_sets && lb.backend_sets.length > 0) ? lb.backend_sets.map(bs => `<div class="backend-set-details"><h6 class="tunnel-subheader">Backend Set: <span class="text-highlight">${bs.name}</span> (${t('summary.lb.policy')}: ${bs.policy})</h6><ul class="tunnel-basic-info"><li><strong>Health Check:</strong> ${bs.health_checker.protocol}:${bs.health_checker.port}</li><li><strong>URL Path:</strong> ${bs.health_checker.url_path || 'N/A'}</li></ul>${createTable([t('summary.name'), 'IP', t('summary.port'), t('summary.weight')], bs.backends?.map(b => [`<span class="text-highlight">${b.name}</span>`, b.ip_address, b.port, b.weight]))}</div>`).join('') : `<p class="no-data-message">${t('summary.no_backend_sets_found')}</p>`}
           </div>`;
 
-        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${lb.lifecycle_state}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${getStateLabel(lb.lifecycle_state)}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
       }).join('') :
       '';
 
@@ -1144,7 +1202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (waf_policies && waf_policies.length > 0) {
       waf_policies.forEach(policy => {
         const isDeleted = policy.lifecycle_state?.toUpperCase() === 'DELETED';
-        const statusClass = policy.lifecycle_state?.toLowerCase().replace('_', '-') || 'unknown';
+        const statusClass = getStateCssClass(policy.lifecycle_state);
         const fw = policy.integration?.firewall;
         const lb = policy.integration?.load_balancer;
 
@@ -1153,15 +1211,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isDeleted) {
             wafCardContent = `<p class="no-data-message">${t('doc.messages.resource_deleted_info') || 'Recurso deletado.'}</p>`;
         } else {
-            const firewallTable = fw ? createTable(
-                ['Nome do Firewall', 'Attachment State', 'Enforcement Point', 'Enforcement Point Name'],
-                [[
-                    `<span class="text-highlight">${fw.display_name}</span>`,
-                    `<span class="status-badge status-${fw.lifecycle_state?.toLowerCase() || 'active'}">${fw.lifecycle_state || 'ACTIVE'}</span>`,
+            // Use `integrations` (all firewalls) with fallback to singular `integration`.
+            const integrations = (policy.integrations && policy.integrations.length > 0)
+                ? policy.integrations
+                : (policy.integration ? [policy.integration] : []);
+
+            const firewallRows = integrations.map(intg => {
+                const fw = intg.firewall;
+                const lb = intg.load_balancer;
+                return [
+                    `<span class="text-highlight">${fw ? fw.display_name : 'N/A'}</span>`,
+                    `<span class="status-badge status-${fw?.lifecycle_state?.toLowerCase() || 'active'}">${fw?.lifecycle_state || 'ACTIVE'}</span>`,
                     'Load Balancer',
                     lb ? lb.display_name : 'N/A'
-                ]]
-            ) : `<p class="no-data-message">Nenhum Web Application Firewall associado.</p>`;
+                ];
+            });
+
+            const firewallTable = firewallRows.length > 0
+                ? createTable(['Nome do Firewall', 'Attachment State', 'Enforcement Point', 'Enforcement Point Name'], firewallRows)
+                : `<p class="no-data-message">Nenhum Web Application Firewall associado.</p>`;
 
             wafCardContent = `
                 <div class="content-block">
@@ -1179,7 +1247,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="instance-summary-card collapsible${isDeleted ? ' deleted-resource' : ''}">
                 <div class="instance-card-header">
                     <h4 class="card-header-title">${policy.display_name}</h4>
-                    <div class="card-status-indicator"><span class="status-badge status-${statusClass}">${policy.lifecycle_state}</span></div>
+                    <div class="card-status-indicator"><span class="status-badge status-${statusClass}">${getStateLabel(policy.lifecycle_state)}</span></div>
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
                 <div class="instance-card-body">${wafCardContent}</div>
@@ -1199,7 +1267,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     let title = t(titleKey, { name: selectedCompartmentName });
     
-    // ── Certificate Cards: full visual redesign ────────────────────────────
     const renderCertificates = (certs) => {
       if (!certs || certs.length === 0) {
         return `<p class="no-data-message">Nenhum certificado encontrado no compartimento.</p>`;
@@ -1211,7 +1278,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPending = state === 'PENDING_DELETION';
         const isDeleted = state === 'DELETED';
 
-        // ── Validity period from nested current_version_summary ──────────
         const cv = cert.current_version_summary || {};
         const validFrom  = cv.valid_not_before || 'N/A';
         const validUntil = cv.valid_not_after  || cert.valid_not_after || 'N/A';
@@ -1221,7 +1287,6 @@ document.addEventListener('DOMContentLoaded', () => {
           daysUntilExpiry = Math.ceil((new Date(validUntil) - todayMs) / 86_400_000);
         }
 
-        // ── Status chip ──────────────────────────────────────────────────
         let statusChip = '';
         if (isActive) {
           if (daysUntilExpiry !== null && daysUntilExpiry <= 30) {
@@ -1247,7 +1312,6 @@ document.addEventListener('DOMContentLoaded', () => {
           </span>`;
         }
 
-        // ── Expiry bar ───────────────────────────────────────────────────
         let expiryBarHtml = '';
         if (validFrom !== 'N/A' && validUntil !== 'N/A') {
           const totalMs  = new Date(validUntil) - new Date(validFrom);
@@ -1263,7 +1327,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
         }
 
-        // ── Subject ──────────────────────────────────────────────────────
         const subject = cert.subject || cert.subject_info || {};
         const cn   = subject.common_name            || 'N/A';
         const org  = subject.organization           || 'N/A';
@@ -1271,7 +1334,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const st   = subject.state_or_province_name || subject.state    || 'N/A';
         const ctry = subject.country                || 'N/A';
 
-        // Subtitle under cert name: Common Name → first SAN → expiry date → ''
         const rawSansForSubtitle = cert.subject_alternative_names || [];
         const firstSan = Array.isArray(rawSansForSubtitle) && rawSansForSubtitle.length > 0
           ? (rawSansForSubtitle[0].value || rawSansForSubtitle[0])
@@ -1281,7 +1343,6 @@ document.addEventListener('DOMContentLoaded', () => {
           : (validUntil !== 'N/A') ? `Expira: ${validUntil}`
           : '';
 
-        // ── SANs ─────────────────────────────────────────────────────────
         let sansHtml = '';
         const rawSans = cert.subject_alternative_names;
         if (Array.isArray(rawSans) && rawSans.length > 0) {
@@ -1297,13 +1358,11 @@ document.addEventListener('DOMContentLoaded', () => {
           ).join('');
         }
 
-        // ── Version details ──────────────────────────────────────────────
         const cvStages = Array.isArray(cv.stages) ? cv.stages : (cv.stages ? [cv.stages] : []);
         const stagePills = cvStages.map(s => `<span class="cert-stage-pill">${s}</span>`).join('');
         const serialNum = cv.serial_number   || 'N/A';
         const versionNo = cv.version_number  != null ? cv.version_number : 'N/A';
 
-        // ── Associations ─────────────────────────────────────────────────
         const assocs = cert.associations || [];
         let assocsHtml = '';
         if (assocs.length > 0) {
@@ -1332,7 +1391,6 @@ document.addEventListener('DOMContentLoaded', () => {
           assocsHtml = `<p class="no-data-message" style="margin:0;padding:8px 0;">Nenhuma associação encontrada.</p>`;
         }
 
-        // ── Card border color based on state ─────────────────────────────
         const cardBorderColor = isActive
           ? (daysUntilExpiry !== null && daysUntilExpiry <= 30 ? '#f97316' : '#22c55e')
           : isPending ? '#f59e0b'
@@ -1449,17 +1507,34 @@ document.addEventListener('DOMContentLoaded', () => {
         <hr class="fieldset-divider">
         <fieldset><legend>${ICONS.LB}${t('summary.lbs')}</legend><div class="instances-container">${loadBalancersHtml || `<p class="no-data-message">${t('doc.messages.no_lb_association')}</p>`}</div></fieldset>
         <hr class="fieldset-divider">
-        <fieldset><legend>${ICONS.CERTIFICATES || ''}Certificates (OCI Certificates Service)</legend><div class="instances-container">${certificatesMainCard}</div></fieldset>
+        <fieldset><legend>${ICONS.CERTIFICATES}${t('summary.section.certificates') || 'Certificados TLS/SSL'}</legend><div class="instances-container">${certificatesMainCard}</div></fieldset>
         <hr class="fieldset-divider">
         <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('doc.messages.no_network_found')}</p>`}</div></fieldset>
       `;
     } else { // Full Infra
+      // Active WAF: merges policies into the full infrastructure summary.
+      const activeWafPolicies = (waf_policies || []).filter(p =>
+          p.lifecycle_state?.toUpperCase() !== 'DELETED'
+      );
+      const hasWaf  = activeWafPolicies.length > 0;
+      const hasCerts = (certificates || []).filter(c =>
+          ['ACTIVE','PENDING_DELETION'].includes((c.lifecycle_state || '').toUpperCase())
+      ).length > 0;
+
+      // If WAF policies exist, inject WAF and Certificates sections.
+      //     Reuses `wafHtml` — already computed above with the same UX as the WAF Report
+      //     (Firewall table with Attachment State, rules grid, etc.).
+      const wafInfraSection  = hasWaf  ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.WAF + t('summary.waf_policies') + '</legend><div class="instances-container">' + wafHtml + '</div></fieldset>' : '';
+      const certInfraSection = hasCerts ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.CERTIFICATES + (t('summary.section.certificates') || 'Certificados TLS/SSL') + '</legend><div class="instances-container">' + renderCertificates(certificates) + '</div></fieldset>' : '';
+
       mainContentHtml = `
         <fieldset><legend>${ICONS.INSTANCES}${t('summary.compute_instances')}</legend><div class="instances-container">${instancesHtml}</div></fieldset>
         ${volumeGroupsHtml ? `<hr class="fieldset-divider"><fieldset><legend>${ICONS.VOLUME_GROUPS}${t('summary.vgs')}</legend><div class="vg-container">${volumeGroupsHtml}</div></fieldset>`: ''}
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('summary.no_vcns_found')}</p>`}</div></fieldset>
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.OKE}${t('summary.oke_clusters')}</legend><div class="oke-container">${okeClustersHtml}</div></fieldset>
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.LB}${t('summary.lbs')}</legend><div class="lb-container">${loadBalancersHtml || `<p class="no-data-message">${t('summary.no_lbs_found')}</p>`}</div></fieldset>
+        ${wafInfraSection}
+        ${certInfraSection}
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.ROUTING}${t('summary.routing_connectivity')}</legend><div class="drg-container">${drgsHtml || `<p class="no-data-message">${t('summary.no_drgs_found')}</p>`}</div></fieldset>
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.VPN}${t('summary.vpn_connectivity')}</legend><h4 class="subheader">${t('summary.vpn.cpes')}</h4>${cpesHtml}<h4 class="subheader">${t('summary.vpn.ipsec_connections')}</h4><div class="ipsec-container">${ipsecHtml || `<p class="no-data-message">${t('summary.no_ipsec_found')}</p>`}</div></fieldset>`;
     }
@@ -1509,14 +1584,17 @@ document.addEventListener('DOMContentLoaded', () => {
       </fieldset>`;
 
     if (isCollapsible) {
-      const statusClass = data.lifecycle_state === 'RUNNING' ? 'running' : 'stopped';
+      const rawState = (data.lifecycle_state || '').toUpperCase();
+      const statusClass = rawState === 'RUNNING' ? 'running'
+                        : rawState === 'TERMINATED' ? 'terminated'
+                        : 'stopped';
       return `
         <div class="instance-summary-card collapsible">
           <div class="instance-card-header">
             <h4 class="card-header-title">${data.host_name}</h4>
             <div class="card-status-indicator">
               <span class="status-dot ${statusClass}"></span>
-              <span class="status-label ${statusClass}">${data.lifecycle_state}</span>
+              <span class="status-label ${statusClass}">${rawState === 'TERMINATED' ? (currentLanguage === 'pt' ? 'Excluído' : 'Terminated') : data.lifecycle_state}</span>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </div>
@@ -1672,8 +1750,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // PT-BR: Registros de Event Listeners
-  // EN: Event Listener Registrations
+  // Event Listener Registrations
   // ===========================================================================
   fetchBtn.addEventListener('click', fetchAllDetails);
   generateBtn.addEventListener('click', generateDocument);
@@ -1697,8 +1774,7 @@ document.addEventListener('DOMContentLoaded', () => {
   languageSelector.addEventListener('change', (e) => setLanguage(e.target.value));
 
   // ===========================================================================
-  // PT-BR: Inicialização da Aplicação
-  // EN: Application Initialization
+  // Application Initialization
   // ===========================================================================
   initializeApp();
 });

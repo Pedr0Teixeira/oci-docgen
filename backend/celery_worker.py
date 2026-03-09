@@ -1,8 +1,5 @@
 # ==============================================================================
-# PT-BR: Worker Celery da aplicação OCI DocGen.
-#        Registra e executa as tarefas assíncronas de coleta de dados da OCI,
-#        isolando o processamento pesado do servidor FastAPI.
-# EN: Celery worker for the OCI DocGen application.
+# Celery worker for the OCI DocGen application.
 #     Registers and executes asynchronous OCI data collection tasks,
 #     isolating heavy processing from the FastAPI server.
 # ==============================================================================
@@ -14,11 +11,6 @@ from schemas import NewHostRequest
 
 
 # ==============================================================================
-# PT-BR: Configuração do Celery com Redis como broker e backend de resultados.
-#        O Redis deve estar rodando localmente na porta padrão 6379.
-# EN: Celery configuration using Redis as both broker and result backend.
-#     Redis must be running locally on the default port 6379.
-# ==============================================================================
 
 celery_app = Celery(
     "oci_docgen_worker",
@@ -27,9 +19,6 @@ celery_app = Celery(
 )
 
 
-# ==============================================================================
-# PT-BR: Definição das Tarefas Celery
-# EN: Celery Task Definitions
 # ==============================================================================
 
 @celery_app.task(name="collect_full_infrastructure_task", bind=True)
