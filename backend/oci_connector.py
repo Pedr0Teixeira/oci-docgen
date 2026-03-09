@@ -1,8 +1,5 @@
 # ==============================================================================
-# PT-BR: Módulo de coleta de dados da OCI (Oracle Cloud Infrastructure).
-#        Responsável por autenticar, inicializar clientes e coletar todos os
-#        dados de infraestrutura necessários para geração de documentação.
-# EN: OCI (Oracle Cloud Infrastructure) data collection module.
+# OCI (Oracle Cloud Infrastructure) data collection module.
 #     Responsible for authentication, client initialization, and collecting
 #     all infrastructure data needed for documentation generation.
 # ==============================================================================
@@ -61,12 +58,10 @@ from schemas import (
 )
 
 # ==============================================================================
-# PT-BR: Constantes e Configuração de Resiliência
-# EN: Constants and Resilience Configuration
+# Constants and Resilience Configuration
 # ==============================================================================
 
-# PT-BR: Mapeamento de códigos de protocolo IANA para nomes legíveis.
-# EN: IANA protocol code to human-readable name mapping.
+# IANA protocol code to human-readable name mapping.
 IANA_PROTOCOL_MAP: Dict[str, str] = {
     "1":   "ICMP",
     "6":   "TCP",
@@ -77,9 +72,7 @@ IANA_PROTOCOL_MAP: Dict[str, str] = {
 
 MAX_WORKERS_FOR_DETAILS = 15
 
-# PT-BR: Estratégia de retry com jitter exponencial para tolerar falhas
-#        transitórias da API OCI (throttling, erros 5xx).
-# EN: Retry strategy with exponential jitter to tolerate transient OCI API
+# Retry strategy with exponential jitter to tolerate transient OCI API
 #     failures (throttling, 5xx errors).
 retry_strategy = oci.retry.RetryStrategyBuilder(
     max_attempts=8,
@@ -89,8 +82,7 @@ retry_strategy = oci.retry.RetryStrategyBuilder(
 ).get_retry_strategy()
 
 # ==============================================================================
-# PT-BR: Autenticação e Inicialização de Clientes OCI
-# EN: OCI Authentication and Client Initialization
+# OCI Authentication and Client Initialization
 # ==============================================================================
 
 def get_auth_provider() -> Dict[str, Any]:
@@ -129,9 +121,7 @@ config = auth_details["config"]
 signer = auth_details["signer"]
 tenancy_id = auth_details["tenancy_id"]
 
-# PT-BR: Cliente de Identity inicializado globalmente para operações de
-#        compartimento que ocorrem ao longo de toda a aplicação.
-# EN: Identity client initialized globally for compartment operations
+# Identity client initialized globally for compartment operations
 #     that occur throughout the entire application.
 identity_client_for_compartment = None
 if tenancy_id:
@@ -166,8 +156,7 @@ def get_client(client_class, region: str):
         return None
 
 # ==============================================================================
-# PT-BR: Funções Auxiliares de Uso Geral
-# EN: General-Purpose Helper Functions
+# General-Purpose Helper Functions
 # ==============================================================================
 
 def _safe_api_call(func, *args, **kwargs):
@@ -316,8 +305,7 @@ def _validate_ipsec_parameters(
     return "Fora da recomendação Oracle", docs_link
 
 # ==============================================================================
-# PT-BR: Funções Públicas da API — Listagem de Recursos
-# EN: Public API Functions — Resource Listing
+# Public API Functions — Resource Listing
 # ==============================================================================
 def list_regions() -> List[Dict[str, str]]:
     """
@@ -394,8 +382,7 @@ def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict
     ]
 
 # ==============================================================================
-# PT-BR: Coleta Detalhada de Dados de Instâncias e Armazenamento
-# EN: Detailed Instance and Storage Data Collection
+# Detailed Instance and Storage Data Collection
 # ==============================================================================
 def get_instance_details(region: str, instance_id: str, compartment_name: str = "N/A") -> InstanceData:
     compute_client = get_client(oci.core.ComputeClient, region)
@@ -687,8 +674,7 @@ def _get_oke_clusters(
     return oke_clusters_data
 
 # ==============================================================================
-# PT-BR: Coleta de Certificados do OCI Certificates Service
-# EN: OCI Certificates Service Data Collection
+# OCI Certificates Service Data Collection
 # ==============================================================================
 
 def _infer_resource_type_from_ocid(ocid: str) -> str:
@@ -754,7 +740,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
             return {"common_name": "N/A", "organization": "N/A",
                     "locality_name": "N/A", "state_or_province_name": "N/A", "country": "N/A"}
         if isinstance(subj_obj, dict):
-            # dict may have kebab keys (from CLI/to_dict on some SDK versions)
             def _dk(d, *keys):
                 for k in keys:
                     v = d.get(k)
@@ -767,7 +752,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
                 "state_or_province_name": _dk(subj_obj, "state_or_province_name", "state-or-province-name"),
                 "country":                _dk(subj_obj, "country"),
             }
-        # SDK model object — use getattr()
         return {
             "common_name":            getattr(subj_obj, "common_name",            None) or "N/A",
             "organization":           getattr(subj_obj, "organization",           None) or "N/A",
@@ -784,7 +768,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
         if cvs_obj is None:
             return {}
         if isinstance(cvs_obj, dict):
-            # kebab-tolerant dict access
             def _dk(d, *keys):
                 for k in keys:
                     v = d.get(k)
@@ -808,7 +791,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
                 "time_created":     _date(_dk(cvs_obj, "time_created", "time-created")),
                 "_sans_raw":        sans_raw,
             }
-        # SDK model object — use getattr()
         val_obj = getattr(cvs_obj, "validity", None)
         nb = getattr(val_obj, "time_of_validity_not_before", None) if val_obj else None
         na = getattr(val_obj, "time_of_validity_not_after",  None) if val_obj else None
@@ -869,12 +851,10 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
                     or assoc_obj.get("certificates-resource-id") or "")
         return getattr(assoc_obj, "certificates_resource_id", None) or ""
 
-    # ─────────────────────────────────────────────────────────────────────────
     logging.info("Starting certificate collection. compartment_id=%s", compartment_id)
 
     certs_data: list = []
     try:
-        # ── Step 1: list all certificates ────────────────────────────────────
         certs_sdk = oci.pagination.list_call_get_all_results(
             certs_mgmt_client.list_certificates,
             compartment_id=compartment_id,
@@ -882,7 +862,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
         ).data
         logging.info("Found %d certificate(s) in compartment.", len(certs_sdk))
 
-        # ── Step 2: compartment-wide association fetch ────────────────────────
         assoc_map: Dict[str, list] = {}
         try:
             assocs_sdk = oci.pagination.list_call_get_all_results(
@@ -898,10 +877,8 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
         except Exception as e:
             logging.warning("Compartment-wide association fetch failed: %s", e)
 
-        # ── Step 3: process each certificate ─────────────────────────────────
         for cert_obj in certs_sdk:
             try:
-                # Use getattr() — proven reliable for top-level OCI SDK object attributes
                 cert_id = getattr(cert_obj, "id", None) or ""
                 name    = getattr(cert_obj, "name", None) or "N/A"
                 state   = (getattr(cert_obj, "lifecycle_state", None) or "").upper()
@@ -922,7 +899,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
                 except Exception as e:
                     logging.warning("Failed to get certificate detail for %s: %s", name, e)
 
-                # ── Per-cert association fallback ──────────────────────────
                 if cert_id not in assoc_map:
                     try:
                         per = oci.pagination.list_call_get_all_results(
@@ -936,9 +912,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
                     except Exception as e:
                         logging.warning("Per-cert association fallback failed for %s: %s", name, e)
 
-                # ── Subject ────────────────────────────────────────────────
-                # summary object has .subject (CertificateSubject)
-                # detail object also has .subject
                 subj_obj = getattr(cert_obj, "subject", None)
                 subj = _subject_from_obj(subj_obj)
                 if subj["common_name"] == "N/A" and cert_detail_obj:
@@ -954,15 +927,12 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
                 )
                 cvs = _cvs_from_obj(cvs_obj)
 
-                # ── SANs ───────────────────────────────────────────────────
                 sans = _sans_from_raw(cvs.pop("_sans_raw", []))
 
-                # ── Deletion time ──────────────────────────────────────────
                 tod_raw = (getattr(cert_obj, "time_of_deletion", None)
                            or (getattr(cert_detail_obj, "time_of_deletion", None) if cert_detail_obj else None))
                 time_of_deletion = _date(tod_raw) if tod_raw else "—"
 
-                # ── Build final entry ──────────────────────────────────────
                 cert_entry = {
                     "id":              cert_id,
                     "name":            name,
@@ -1003,8 +973,7 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
     return certs_data
 
 # ==============================================================================
-# PT-BR: Funções Orquestradoras Principais — Ponto de entrada das tarefas Celery
-# EN: Main Orchestrator Functions — Entry points for Celery tasks
+# Main Orchestrator Functions — Entry points for Celery tasks
 # ==============================================================================
 def get_infrastructure_details(
     task, region: str, compartment_id: str, doc_type: str
@@ -1348,6 +1317,7 @@ def get_infrastructure_details(
         # FIX: append was missing in the original code
         load_balancers.append(
             LoadBalancerData(
+                id=lb_details.id,
                 display_name=lb_details.display_name,
                 lifecycle_state=lb_details.lifecycle_state,
                 shape_name=lb_details.shape_name,
@@ -1363,6 +1333,102 @@ def get_infrastructure_details(
             )
         )
 
+    # Collects WAF policies from the compartment for inclusion in the full
+    #     infrastructure document, mirroring the same approach used for OKE.
+    task.update_state(
+        state="PROGRESS",
+        meta={"current": 94, "total": 100, "step_key": "progress.collecting_waf_infra", "context": {}},
+    )
+    waf_policies = []
+    if waf_client:
+        try:
+            waf_policies = _get_waf_policies(waf_client, compartment_id, region, compartment_name="")
+
+            # Enriches each policy with integration data (Firewall + LB).
+            #     Reuses already-collected load_balancers: each LB has waf_policy_id
+            #     populated during collection, allowing direct matching without extra calls.
+            firewalls_sdk = oci.pagination.list_call_get_all_results(
+                waf_client.list_web_app_firewalls,
+                compartment_id=compartment_id,
+                retry_strategy=retry_strategy,
+            ).data
+            active_firewalls = [fw for fw in firewalls_sdk if fw.lifecycle_state != "DELETED"]
+
+            # LB index by waf_policy_id → list, as one policy may have multiple LBs.
+            lb_by_policy_id: dict = {}
+            for lb in load_balancers:
+                if lb.waf_policy_id:
+                    lb_by_policy_id.setdefault(lb.waf_policy_id, []).append(lb)
+
+            for policy in waf_policies:
+                # Collect ALL firewalls bound to this policy (there may be more than one LB).
+                policy_firewalls = [f for f in active_firewalls if f.web_app_firewall_policy_id == policy.id]
+                policy_integrations = []
+
+                for fw in policy_firewalls:
+                    fw_data = WafFirewallData(
+                        id=fw.id,
+                        display_name=fw.display_name,
+                        backend_type=fw.backend_type,
+                        load_balancer_id=getattr(fw, "load_balancer_id", None),
+                    )
+
+                    # Resolve LB by the firewall's load_balancer_id — index lookup
+                    #     or targeted API call if it's in another compartment.
+                    fw_lb_id = getattr(fw, "load_balancer_id", None)
+                    lb_data = None
+                    if fw_lb_id:
+                        for candidate in lb_by_policy_id.get(policy.id, []):
+                            if getattr(candidate, "id", None) == fw_lb_id:
+                                lb_data = candidate
+                                break
+                        if lb_data is None:
+                            try:
+                                lb_sdk = _safe_api_call(load_balancer_client.get_load_balancer, fw_lb_id)
+                                if lb_sdk:
+                                    lb_data = LoadBalancerData(
+                                        id=fw_lb_id,
+                                        display_name=lb_sdk.display_name,
+                                        lifecycle_state=lb_sdk.lifecycle_state,
+                                        shape_name=lb_sdk.shape_name,
+                                        ip_addresses=[
+                                            LoadBalancerIpAddressData(
+                                                ip_address=ip.ip_address, is_public=ip.is_public
+                                            )
+                                            for ip in lb_sdk.ip_addresses
+                                        ],
+                                        listeners=[], backend_sets=[], hostnames=[],
+                                    )
+                            except Exception:
+                                pass
+
+                    integration = WafIntegrationData(
+                        firewall=fw_data,
+                        load_balancer=lb_data,
+                    )
+                    policy_integrations.append(integration)
+
+                # Backward compatibility: keep `integration` with the first firewall.
+                if policy_integrations:
+                    policy.integration = policy_integrations[0]
+                policy.integrations = policy_integrations
+        except Exception as e:
+            logging.warning("WAF collection skipped in infrastructure flow: %s", e)
+
+    # ── OCI Certificates Service ─────────────────────────────────────────────
+    # Collects OCI Certificates Service certificates for display in the
+    #     web summary and full infrastructure document.
+    task.update_state(
+        state="PROGRESS",
+        meta={"current": 97, "total": 100, "step_key": "progress.collecting_certificates", "context": {}},
+    )
+    all_certificates = []
+    try:
+        certs_mgmt_client = get_client(oci.certificates_management.CertificatesManagementClient, region)
+        all_certificates = _get_compartment_certificates(certs_mgmt_client, compartment_id)
+    except Exception as e:
+        logging.warning("Certificates collection skipped in infrastructure flow: %s", e)
+
     task.update_state(
         state="PROGRESS",
         meta={"current": 99, "total": 100, "step_key": "progress.assembling_report", "context": {}},
@@ -1377,6 +1443,8 @@ def get_infrastructure_details(
         load_balancers=load_balancers,
         volume_groups=volume_groups,
         kubernetes_clusters=kubernetes_clusters,
+        waf_policies=waf_policies,
+        certificates=all_certificates,
     )
 
 def get_new_host_details(
@@ -1454,12 +1522,10 @@ def _get_waf_policies(
     policies_sdk = oci.pagination.list_call_get_all_results(
         waf_client.list_web_app_firewall_policies,
         compartment_id=compartment_id,
-        # Exclude DELETED policies — they have no firewall/LB integration and clutter the report
         lifecycle_state="ACTIVE",
         retry_strategy=retry_strategy,
     ).data
     for p_summary in policies_sdk:
-        # Extra guard: skip anything not ACTIVE at the summary level
         if getattr(p_summary, "lifecycle_state", "").upper() not in ("ACTIVE", "CREATING", "UPDATING"):
             continue
         p_details = _safe_api_call(waf_client.get_web_app_firewall_policy, p_summary.id)
@@ -1523,7 +1589,6 @@ def _get_vcn_details(virtual_network_client, compartment_id: str) -> list:
         protocol_map = {"6": "TCP", "17": "UDP", "1": "ICMP", "all": "All"}
 
         for vcn in vcns_sdk:
-            # Build entity name map for human-readable gateway names in route tables
             entity_map = {}
             try:
                 for igw in oci.pagination.list_call_get_all_results(virtual_network_client.list_internet_gateways, compartment_id, vcn_id=vcn.id).data:
@@ -1639,89 +1704,95 @@ def get_waf_report_details(
     load_balancers: List[LoadBalancerData] = []
 
     for policy in waf_policies:
-        fw = next((f for f in active_firewalls if f.web_app_firewall_policy_id == policy.id), None)
-        if not fw:
-            continue
+        # Collect ALL firewalls bound to this policy.
+        policy_firewalls = [f for f in active_firewalls if f.web_app_firewall_policy_id == policy.id]
+        policy_integrations = []
 
-        firewall_data = WafFirewallData(
-            id=fw.id, display_name=fw.display_name,
-            backend_type=fw.backend_type, load_balancer_id=fw.load_balancer_id,
-        )
-        lb_data = None
+        for fw in policy_firewalls:
+            firewall_data = WafFirewallData(
+                id=fw.id, display_name=fw.display_name,
+                backend_type=fw.backend_type, load_balancer_id=fw.load_balancer_id,
+            )
+            lb_data = None
 
-        if fw.backend_type == "LOAD_BALANCER" and fw.load_balancer_id:
-            lb_info = next((lb for lb in all_lbs_sdk if lb.id == fw.load_balancer_id), None)
-            if lb_info:
-                lb_details = _safe_api_call(load_balancer_client.get_load_balancer, lb_info.id)
-                if lb_details:
-                    ip_addresses = [LoadBalancerIpAddressData(ip_address=ip.ip_address, is_public=ip.is_public) for ip in lb_details.ip_addresses]
-                    hostnames = [HostnameData(name=h.name) for h in lb_details.hostnames.values()]
-                    listeners = [
-                        ListenerData(
-                            name=l.name,
-                            # OCI SDK always returns "HTTP" as base protocol even for SSL listeners.
-                            # Infer HTTPS when ssl_configuration is present.
-                            protocol=(
-                                "HTTPS"
-                                if getattr(l, "ssl_configuration", None) is not None
-                                else l.protocol
-                            ),
-                            port=l.port,
-                            default_backend_set_name=l.default_backend_set_name,
-                            hostname_names=l.hostname_names if l.hostname_names else [],
-                            ssl_certificate_ids=(
-                                list(getattr(l.ssl_configuration, "certificate_ids", None) or [])
-                                if getattr(l, "ssl_configuration", None) is not None else []
-                            ),
-                        )
-                        for l in lb_details.listeners.values()
-                    ]
-                    backend_sets = []
-                    for bs_sdk in lb_details.backend_sets.values():
-                        hc_sdk = bs_sdk.health_checker
-                        backend_sets.append(BackendSetData(
-                            name=bs_sdk.name, policy=bs_sdk.policy,
-                            health_checker=HealthCheckerData(protocol=hc_sdk.protocol, port=hc_sdk.port, url_path=hc_sdk.url_path),
-                            backends=[BackendData(name=b.name, ip_address=b.ip_address, port=b.port, weight=b.weight) for b in bs_sdk.backends],
-                        ))
-                    lb_certs = []
-                    if getattr(lb_details, "certificates", None):
-                        for cert_name, cert_obj in lb_details.certificates.items():
-                            not_after = "N/A"
-                            if hasattr(cert_obj, "public_certificate") and cert_obj.public_certificate:
-                                not_after = str(cert_obj.public_certificate.not_valid_after)
-                            lb_certs.append(LoadBalancerCertificateData(name=cert_name, valid_not_after=not_after))
-
-                    lb_data = LoadBalancerData(
-                        display_name=lb_details.display_name,
-                        lifecycle_state=lb_details.lifecycle_state,
-                        shape_name=lb_details.shape_name,
-                        ip_addresses=ip_addresses, listeners=listeners,
-                        backend_sets=backend_sets, hostnames=hostnames,
-                        certificates=lb_certs,
-                        waf_firewall_id=fw.id, waf_firewall_name=fw.display_name,
-                        waf_policy_id=policy.id, waf_policy_name=policy.display_name,
-                    )
-
-                    if lb_details.subnet_ids:
-                        subnet = _safe_api_call(virtual_network_client.get_subnet, lb_details.subnet_ids[0])
-                        if subnet:
-                            vcn = _safe_api_call(virtual_network_client.get_vcn, subnet.vcn_id)
-                            policy.network_infrastructure = WafNetworkInfrastructure(
-                                vcn_name=vcn.display_name if vcn else "N/A",
-                                vcn_cidr=vcn.cidr_block if vcn else "N/A",
-                                subnet_name=subnet.display_name,
-                                subnet_cidr=subnet.cidr_block,
+            if fw.backend_type == "LOAD_BALANCER" and fw.load_balancer_id:
+                lb_info = next((lb for lb in all_lbs_sdk if lb.id == fw.load_balancer_id), None)
+                if lb_info:
+                    lb_details = _safe_api_call(load_balancer_client.get_load_balancer, lb_info.id)
+                    if lb_details:
+                        ip_addresses = [LoadBalancerIpAddressData(ip_address=ip.ip_address, is_public=ip.is_public) for ip in lb_details.ip_addresses]
+                        hostnames = [HostnameData(name=h.name) for h in lb_details.hostnames.values()]
+                        listeners = [
+                            ListenerData(
+                                name=l.name,
+                                protocol=(
+                                    "HTTPS"
+                                    if getattr(l, "ssl_configuration", None) is not None
+                                    else l.protocol
+                                ),
+                                port=l.port,
+                                default_backend_set_name=l.default_backend_set_name,
+                                hostname_names=l.hostname_names if l.hostname_names else [],
+                                ssl_certificate_ids=(
+                                    list(getattr(l.ssl_configuration, "certificate_ids", None) or [])
+                                    if getattr(l, "ssl_configuration", None) is not None else []
+                                ),
                             )
+                            for l in lb_details.listeners.values()
+                        ]
+                        backend_sets = []
+                        for bs_sdk in lb_details.backend_sets.values():
+                            hc_sdk = bs_sdk.health_checker
+                            backend_sets.append(BackendSetData(
+                                name=bs_sdk.name, policy=bs_sdk.policy,
+                                health_checker=HealthCheckerData(protocol=hc_sdk.protocol, port=hc_sdk.port, url_path=hc_sdk.url_path),
+                                backends=[BackendData(name=b.name, ip_address=b.ip_address, port=b.port, weight=b.weight) for b in bs_sdk.backends],
+                            ))
+                        lb_certs = []
+                        if getattr(lb_details, "certificates", None):
+                            for cert_name, cert_obj in lb_details.certificates.items():
+                                not_after = "N/A"
+                                if hasattr(cert_obj, "public_certificate") and cert_obj.public_certificate:
+                                    not_after = str(cert_obj.public_certificate.not_valid_after)
+                                lb_certs.append(LoadBalancerCertificateData(name=cert_name, valid_not_after=not_after))
 
-                    # FIX: deduplicated append – avoids duplicate LBs if multiple policies share one LB
-                    if not any(existing.display_name == lb_data.display_name for existing in load_balancers):
-                        load_balancers.append(lb_data)
+                        lb_data = LoadBalancerData(
+                            id=lb_details.id,
+                            display_name=lb_details.display_name,
+                            lifecycle_state=lb_details.lifecycle_state,
+                            shape_name=lb_details.shape_name,
+                            ip_addresses=ip_addresses, listeners=listeners,
+                            backend_sets=backend_sets, hostnames=hostnames,
+                            certificates=lb_certs,
+                            waf_firewall_id=fw.id, waf_firewall_name=fw.display_name,
+                            waf_policy_id=policy.id, waf_policy_name=policy.display_name,
+                        )
 
-        policy.integration = WafIntegrationData(
-            firewall=firewall_data.dict(),
-            load_balancer=lb_data.dict() if lb_data else None,
-        )
+                        # Set network_infrastructure from the first LB with a subnet.
+                        if lb_details.subnet_ids and not policy.network_infrastructure:
+                            subnet = _safe_api_call(virtual_network_client.get_subnet, lb_details.subnet_ids[0])
+                            if subnet:
+                                vcn = _safe_api_call(virtual_network_client.get_vcn, subnet.vcn_id)
+                                policy.network_infrastructure = WafNetworkInfrastructure(
+                                    vcn_name=vcn.display_name if vcn else "N/A",
+                                    vcn_cidr=vcn.cidr_block if vcn else "N/A",
+                                    subnet_name=subnet.display_name,
+                                    subnet_cidr=subnet.cidr_block,
+                                )
+
+                        if not any(existing.display_name == lb_data.display_name for existing in load_balancers):
+                            load_balancers.append(lb_data)
+
+            integration = WafIntegrationData(
+                firewall=firewall_data.dict(),
+                load_balancer=lb_data.dict() if lb_data else None,
+            )
+            policy_integrations.append(integration)
+
+        # Backward compatibility + full integrations list.
+        if policy_integrations:
+            policy.integration = policy_integrations[0]
+        policy.integrations = policy_integrations
 
     task.update_state(
         state="PROGRESS",

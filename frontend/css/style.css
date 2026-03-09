@@ -30,6 +30,7 @@
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
   --status-running: #22c55e;
   --status-stopped: #ef4444;
+  --status-terminated: #71717a;
   --status-provisioning: #3b82f6;
   --status-terminating: #f97316;
   --status-active: #22c55e;
@@ -489,8 +490,9 @@ fieldset legend {
   margin-bottom: 16px;
   padding: 0;
   color: var(--text-headers);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 .legend-icon {
@@ -524,6 +526,11 @@ fieldset legend {
   border-radius: var(--border-radius);
   background-color: var(--bg-card);
   overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.instance-summary-card:hover {
+  border-color: rgba(79, 70, 229, 0.4);
+  box-shadow: 0 2px 14px rgba(79, 70, 229, 0.08);
 }
 
 .instance-summary-card:not(.collapsible) {
@@ -694,6 +701,11 @@ fieldset legend {
   border-bottom: none;
 }
 
+.resource-table tbody tr:hover {
+  background-color: rgba(79, 70, 229, 0.06);
+  transition: background-color 0.15s;
+}
+
 .no-data-message {
   padding: 20px;
   color: var(--text-secondary);
@@ -758,9 +770,11 @@ fieldset legend {
 .infra-summary-main-title {
   margin-bottom: 24px;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2px solid transparent;
+  border-image: var(--accent-gradient) 1;
   color: var(--text-headers);
   font-size: 22px;
+  font-weight: 700;
 }
 
 .subheader,
@@ -807,6 +821,12 @@ fieldset legend {
   color: var(--status-stopped);
 }
 
+.status-badge.status-terminated {
+  background-color: rgba(113, 113, 122, 0.15);
+  color: var(--status-terminated);
+  text-decoration: line-through;
+}
+
 .status-badge.status-provisioning,
 .status-badge.status-starting,
 .status-badge.status-pending {
@@ -838,7 +858,8 @@ fieldset legend {
 .vcn-card-header:hover,
 .ipsec-card-header:hover,
 .oke-card-header:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(79, 70, 229, 0.06);
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
 }
 
 .card-header-title {
@@ -882,6 +903,16 @@ fieldset legend {
 
 .status-label.stopped {
   color: var(--status-stopped);
+}
+
+.status-dot.terminated {
+  background-color: var(--status-terminated);
+}
+
+.status-label.terminated {
+  color: var(--status-terminated);
+  text-decoration: line-through;
+  opacity: 0.75;
 }
 
 .expand-arrow {
@@ -1713,6 +1744,48 @@ fieldset legend {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.4);
 }
 /* ====================================================== */
+
+
+/* PT-BR: Estilos para sub-seções WAF no resumo de infraestrutura
+   EN: Styles for WAF sub-sections in the infrastructure summary */
+.waf-sub-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  margin: 14px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.waf-rules-summary {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: rgba(79, 70, 229, 0.07);
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: 6px;
+  padding: 8px 14px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+
+
+/* PT-BR: Card de instância/recurso TERMINADO — cinza e opaco para indicar exclusão
+   EN: TERMINATED instance/resource card — greyed out to indicate deletion */
+.instance-summary-card:has(.status-dot.terminated),
+.instance-summary-card:has(.status-label.terminated) {
+  opacity: 0.65;
+  border-color: rgba(113, 113, 122, 0.3);
+}
+.instance-summary-card:has(.status-dot.terminated) .instance-card-header,
+.instance-summary-card:has(.status-label.terminated) .instance-card-header {
+  background-color: rgba(113, 113, 122, 0.05);
+}
+
 /* PT-BR: 17. Cards de Certificados TLS/SSL
    EN:     17. TLS/SSL Certificate Cards                  */
 /* ====================================================== */
