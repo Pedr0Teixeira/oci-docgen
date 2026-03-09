@@ -197,5 +197,19 @@
   "doc.messages.no_network_found": "No network infrastructure associated.",
   "summary.waf.associated_policy": "Associated WAF Policy",
   "doc.messages.resource_deleted_info": "Resource deleted. Complete association information is no longer available.",
-  "doc.messages.no_config_found": "No configuration found."
+  "doc.messages.no_config_found": "No configuration found.",
+  "progress.collecting_waf_infra": "Collecting WAF policies from compartment...",
+  "progress.collecting_certificates": "Collecting TLS/SSL certificates...",
+  "summary.section.certificates": "TLS/SSL Certificates (OCI Certificates Service)",
+  "doc.headers.cert_org": "Organization",
+  "doc.headers.cert_key_algo": "Key Algorithm",
+  "doc.headers.cert_sign_algo": "Signature Algorithm",
+  "doc.headers.cert_stages": "Stages",
+  "doc.headers.cert_valid_from": "Valid From",
+  "doc.headers.cert_valid_to": "Valid To",
+  "doc.headers.cert_deletion_date": "Scheduled Deletion",
+  "doc.headings.waf_firewalls_table": "Firewalls and Bound Load Balancers",
+  "doc.headers.firewall_name": "Firewall Name",
+  "doc.headers.lb_name": "Load Balancer",
+  "doc.headers.lb_ip": "IP Addresses"
 }

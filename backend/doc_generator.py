@@ -1,20 +1,15 @@
 # ==============================================================================
-# PT-BR: Módulo de geração de documentos .docx para o OCI DocGen.
-#        Converte dados de infraestrutura coletados em documentos Word formatados,
-#        com suporte a múltiplos tipos de documentação e idiomas (PT-BR / EN).
-# EN: .docx document generation module for OCI DocGen.
+# .docx document generation module for OCI DocGen.
 #     Converts collected infrastructure data into formatted Word documents,
 #     with support for multiple documentation types and languages (PT-BR / EN).
 # ==============================================================================
 
-# Standard Library Imports
 import os
 import re
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
-# Third-Party Imports
 import docx
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
@@ -26,17 +21,14 @@ from docx.oxml.shared import OxmlElement, qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
-# Local Application Imports
 from schemas import InfrastructureData, InstanceData, LoadBalancerData
 
 # ==============================================================================
-# PT-BR: Serviço de Internacionalização (i18n) — Traduções PT-BR e EN
-# EN: Internationalization (i18n) Service — PT-BR and EN Translations
+# Internationalization (i18n) Service — PT-BR and EN Translations
 # ==============================================================================
 
 DOC_STRINGS = {
     "pt": {
-        # --- Common Terms ---
         "doc.common.client": "Cliente",
         "doc.common.generation_date": "Data de Geração",
         "doc.common.toc": "Sumário",
@@ -67,7 +59,6 @@ DOC_STRINGS = {
         "doc.common.lifetime": "Lifetime (s)",
         "doc.common.disk_gb": "DISCO (GB)",
         "doc.common.memory_gb": "MEMÓRIA (GB)",
-        # --- Headers ---
         "doc.headers.direction": "Direção",
         "doc.headers.protocol": "Protocolo",
         "doc.headers.ports": "Portas",
@@ -143,7 +134,6 @@ DOC_STRINGS = {
         "doc.headers.vpn_p2_lifetime": "Lifetime (s)",
         "doc.headers.responsible": "RESPONSÁVEL",
         "doc.headers.date": "DATA",
-        # --- Headings ---
         "doc.headings.architecture": "Arquitetura e Escopo",
         "doc.headings.architecture_drawing": "Desenho da Arquitetura",
         "doc.headings.infra_config": "Configuração de Infraestrutura",
@@ -212,6 +202,16 @@ DOC_STRINGS = {
         "doc.headers.action": "Ação",
         "doc.headers.condition": "Condição",
         "doc.headers.certificates": "Certificados",
+        "doc.headers.firewall_name": "Nome do Firewall",
+        "doc.headers.lb_name":       "Load Balancer",
+        "doc.headers.lb_ip":         "Endereços IP",
+        "doc.headers.cert_org":           "Organização",
+        "doc.headers.cert_key_algo":      "Algoritmo da Chave",
+        "doc.headers.cert_sign_algo":     "Algoritmo de Assinatura",
+        "doc.headers.cert_stages":        "Estágios",
+        "doc.headers.cert_valid_from":    "Válido De",
+        "doc.headers.cert_valid_to":      "Válido Até",
+        "doc.headers.cert_deletion_date": "Data de Exclusão",
         "doc.headers.expiration": "Expiração",
         "doc.common.compartment": "Compartimento",
         "doc.common.region": "Região",
@@ -223,7 +223,6 @@ DOC_STRINGS = {
         "doc.messages.no_certificates_found": "Nenhum certificado configurado.",
         "doc.headings.responsible_desc": "Responsável pelo preenchimento da documentação:",
         "doc.headings.instance_connectivity": "Conectividade de Rede da(s) Instância(s)",
-        # --- Descriptions ---
         "doc.descriptions.instance_table": "A tabela a seguir detalha as configurações das instâncias computacionais no escopo.",
         "doc.descriptions.block_volume_table": "A tabela abaixo detalha os Block Volumes anexados às instâncias.",
         "doc.descriptions.backup_policy_table": "A tabela a seguir consolida as políticas de backup para todos os volumes (Boot e Block) das instâncias.",
@@ -233,7 +232,6 @@ DOC_STRINGS = {
         "doc.descriptions.backup_policy_details_4": "Essa política garante que, em caso de falhas, seja possível recuperar o volume rapidamente.",
         "doc.descriptions.volume_groups": "Volume Groups são conjuntos de volumes (Boot e Block) que podem ser gerenciados como uma única unidade, especialmente para backups consistentes e replicação entre regiões.",
         "doc.descriptions.vpn_config_warning": "Os parâmetros de criptografia customizados para este túnel divergem das recomendações padrão da Oracle.",
-        # --- Messages ---
         "doc.messages.no_rules_for": "Nenhuma regra configurada para este",
         "doc.messages.resource_not_provisioned": "Este recurso não está provisionado neste ambiente.",
         "doc.messages.no_vg_members": "Este Volume Group não possui membros.",
@@ -269,7 +267,6 @@ DOC_STRINGS = {
         "doc.headers.valid_to": "VÁLIDO ATÉ",
         "doc.headers.associated_listener": "ASSOCIADO AO LISTENER",
         "doc.common.none": "Nenhum",
-        # --- Document Types ---
         "doc.type.full_infra": "Documentação de Infraestrutura",        "doc.type.new_host": "Documentação de Novo Host",
         "doc.type.kubernetes": "Documentação de Kubernetes (OKE)",
         "doc.type.default": "Documentação Técnica",
@@ -279,7 +276,6 @@ DOC_STRINGS = {
         "doc.identifier.default": "Geral",
     },
     "en": {
-        # --- Common Terms ---
         "doc.common.client": "Client",
         "doc.common.generation_date": "Generation Date",
         "doc.common.toc": "Table of Contents",
@@ -310,7 +306,6 @@ DOC_STRINGS = {
         "doc.common.lifetime": "Lifetime (s)",
         "doc.common.disk_gb": "DISK (GB)",
         "doc.common.memory_gb": "MEMORY (GB)",
-        # --- Headers ---
         "doc.headers.direction": "Direction",
         "doc.headers.protocol": "Protocol",
         "doc.headers.ports": "Ports",
@@ -386,7 +381,6 @@ DOC_STRINGS = {
         "doc.headers.vpn_p2_lifetime": "Lifetime (s)",
         "doc.headers.responsible": "RESPONSIBLE",
         "doc.headers.date": "DATE",
-        # --- Headings ---
         "doc.headings.architecture": "Architecture and Scope",
         "doc.headings.architecture_drawing": "Architecture Drawing",
         "doc.headings.infra_config": "Infrastructure Configuration",
@@ -455,6 +449,16 @@ DOC_STRINGS = {
         "doc.headers.action": "Action",
         "doc.headers.condition": "Condition",
         "doc.headers.certificates": "Certificates",
+        "doc.headers.firewall_name": "Firewall Name",
+        "doc.headers.lb_name":       "Load Balancer",
+        "doc.headers.lb_ip":         "IP Addresses",
+        "doc.headers.cert_org":           "Organization",
+        "doc.headers.cert_key_algo":      "Key Algorithm",
+        "doc.headers.cert_sign_algo":     "Signature Algorithm",
+        "doc.headers.cert_stages":        "Stages",
+        "doc.headers.cert_valid_from":    "Valid From",
+        "doc.headers.cert_valid_to":      "Valid To",
+        "doc.headers.cert_deletion_date": "Deletion Date",
         "doc.headers.expiration": "Expiration",
         "doc.common.compartment": "Compartment",
         "doc.common.region": "Region",
@@ -466,7 +470,6 @@ DOC_STRINGS = {
         "doc.messages.no_certificates_found": "No certificates configured.",
         "doc.headings.responsible_desc": "Responsible for filling out the documentation:",
         "doc.headings.instance_connectivity": "Instance Network Connectivity",
-        # --- Descriptions ---
         "doc.descriptions.instance_table": "The following table details the configurations of the compute instances in scope.",
         "doc.descriptions.block_volume_table": "The table below details the Block Volumes attached to the instances.",
         "doc.descriptions.backup_policy_table": "The following table consolidates the backup policies for all volumes (Boot and Block) of the instances.",
@@ -476,7 +479,6 @@ DOC_STRINGS = {
         "doc.descriptions.backup_policy_details_4": "This policy ensures that in case of failures, the volume can be recovered quickly.",
         "doc.descriptions.volume_groups": "Volume Groups are sets of volumes (Boot and Block) that can be managed as a single unit, especially for consistent backups and cross-region replication.",
         "doc.descriptions.vpn_config_warning": "The custom encryption parameters for this tunnel differ from Oracle's standard recommendations.",
-        # --- Messages ---
         "doc.messages.no_rules_for": "No rules configured for this",
         "doc.messages.resource_not_provisioned": "This resource is not provisioned in this environment.",
         "doc.messages.no_vg_members": "This Volume Group has no members.",
@@ -512,7 +514,6 @@ DOC_STRINGS = {
         "doc.headers.valid_to": "VALID TO",
         "doc.headers.associated_listener": "ASSOCIATED LISTENER",
         "doc.common.none": "None",
-        # --- Document Types ---
         "doc.type.full_infra": "Infrastructure Documentation",
         "doc.type.new_host": "New Host Documentation",
         "doc.type.kubernetes": "Kubernetes (OKE) Documentation",
@@ -527,19 +528,15 @@ DOC_STRINGS = {
 
 def t(key: str, lang: str) -> str:
     """Fetches a translation string based on the key and language."""
-    # Default to 'pt' if the language is not supported
     lang_to_use = lang if lang in DOC_STRINGS else "pt"
     
-    # Get the translations for the chosen language
     strings = DOC_STRINGS.get(lang_to_use, {})
     
-    # Get the string, or fall back to 'pt' translation, or finally to the key itself
     return strings.get(key, DOC_STRINGS.get("pt", {}).get(key, key))
 
 
 # ==============================================================================
-# PT-BR: Auxiliares de Sumário e Hyperlinks
-# EN: Table of Contents and Hyperlink Helpers
+# Table of Contents and Hyperlink Helpers
 # ==============================================================================
 def _define_toc_styles(document: Document):
     """Creates and configures 'TOC 1-3' styles with correct indentation if they don't exist."""
@@ -648,8 +645,7 @@ def _add_and_bookmark_heading(
 
 
 # ==============================================================================
-# PT-BR: Auxiliares de Estilo de Tabelas
-# EN: Table Styling Helpers
+# Table Styling Helpers
 # ==============================================================================
 def _shade_cell(cell, color="4472C4"):
     """Applies a background color shading to a table cell."""
@@ -657,6 +653,102 @@ def _shade_cell(cell, color="4472C4"):
     shading_elm = parse_xml(shading_xml)
     cell._tc.get_or_add_tcPr().append(shading_elm)
 
+
+# State-to-row-background-color mapping (hex without '#').
+#     TERMINATED  → light red    (critical alert: resource deleted).
+#     STOPPED     → light orange (warning: resource stopped).
+#     PENDING_DELETION → light yellow (warning: scheduled for removal).
+#     Other active states → no color (default white background).
+_STATE_ROW_COLORS: Dict[str, Optional[str]] = {
+    "TERMINATED":      "FADBD8",   # light red
+    "TERMINATING":     "FADBD8",   # light red
+    "STOPPED":         "FDEBD0",   # light orange
+    "STOPPING":        "FDEBD0",   # light orange
+    "PENDING_DELETION":"FEF9C3",   # light yellow
+}
+
+_STATE_TEXT_COLORS: Dict[str, str] = {
+    "TERMINATED":      "922B21",   # dark red text
+    "TERMINATING":     "922B21",
+    "STOPPED":         "784212",   # dark brown/orange text
+    "STOPPING":        "784212",
+    "PENDING_DELETION":"7D6608",   # dark yellow/olive text
+}
+
+
+def _style_row_by_state(row, state_raw: str) -> None:
+    """
+    PT-BR: Aplica cor de fundo e cor de texto em todas as células de uma linha
+           com base no estado do recurso. Recursos TERMINATED também recebem
+           strikethrough para reforçar visualmente que foram excluídos.
+    EN: Applies background color and text color to all cells in a row based on
+        the resource lifecycle state. TERMINATED rows also get strikethrough
+        to visually reinforce that the resource has been deleted.
+    """
+    state_key = state_raw.upper()
+    bg_color   = _STATE_ROW_COLORS.get(state_key)
+    text_color = _STATE_TEXT_COLORS.get(state_key)
+    is_terminated = state_key in ("TERMINATED", "TERMINATING")
+
+    if not bg_color and not text_color:
+        return  # Active resources — no styling needed
+
+    for cell in row.cells:
+        if bg_color:
+            _shade_cell(cell, bg_color)
+
+        for para in cell.paragraphs:
+            for run in para.runs:
+                if text_color:
+                    run.font.color.rgb = RGBColor.from_string(text_color)
+                if is_terminated:
+                    run.font.strike = True
+            # If the paragraph has text but no runs (text set directly on cell),
+            #     clear and re-add with correct formatting.
+            if para.text and not para.runs:
+                text = para.text
+                para.clear()
+                run = para.add_run(text)
+                if text_color:
+                    run.font.color.rgb = RGBColor.from_string(text_color)
+                if is_terminated:
+                    run.font.strike = True
+
+
+
+
+def _style_cert_kv_table_by_state(document: Document, state: str) -> None:
+    """
+    PT-BR: Localiza a ultima tabela adicionada ao documento (tabela key-value
+           do certificado) e aplica cor de fundo em todas as linhas de dados
+           com base no estado do certificado. Linha de titulo mantem azul padrao.
+    EN: Locates the last table added (certificate key-value table) and applies
+        background color to all data rows based on the certificate state.
+        The title row keeps the default blue color.
+    """
+    state_key  = state.upper()
+    bg_color   = _STATE_ROW_COLORS.get(state_key)
+    text_color = _STATE_TEXT_COLORS.get(state_key)
+    if not bg_color and not text_color:
+        return
+    tables = document.tables
+    if not tables:
+        return
+    table = tables[-1]
+    for row in table.rows[1:]:
+        for cell in row.cells:
+            if bg_color:
+                _shade_cell(cell, bg_color)
+            for para in cell.paragraphs:
+                for run in para.runs:
+                    if text_color:
+                        run.font.color.rgb = RGBColor.from_string(text_color)
+                if para.text and not para.runs:
+                    text = para.text
+                    para.clear()
+                    run = para.add_run(text)
+                    if text_color:
+                        run.font.color.rgb = RGBColor.from_string(text_color)
 
 def _style_table_headers(table, headers, shade_color="4472C4"):
     """Applies standard formatting to a table's header row."""
@@ -697,8 +789,7 @@ def _create_titled_key_value_table(
 
 
 # ==============================================================================
-# PT-BR: Auxiliares de Formatação de Conteúdo
-# EN: Content Formatting Helpers
+# Content Formatting Helpers
 # ==============================================================================
 def _add_network_resource_details(
     document: Document,
@@ -772,16 +863,22 @@ def _add_network_resource_details(
 
 
 # ==============================================================================
-# PT-BR: Geradores de Seções do Documento
-# EN: Document Section Generators
+# Document Section Generators
 # ==============================================================================
 def _add_instances_table(document: Document, instances: List[InstanceData], lang: str):
     """Adds the main summary table of compute instances to the document."""
     if not instances:
         return
+    state_label_map = {
+        "RUNNING":    "Ativo"         if lang == "pt" else "Running",
+        "STOPPED":    "Parado"        if lang == "pt" else "Stopped",
+        "TERMINATED": "Excluído"      if lang == "pt" else "Terminated",
+        "TERMINATING":"Excluindo..."  if lang == "pt" else "Terminating...",
+    }
     document.add_paragraph(t("doc.descriptions.instance_table", lang))
     headers = [
         t("doc.headers.host", lang),
+        t("doc.common.state", lang),
         t("doc.headers.shape", lang),
         t("doc.headers.ocpu", lang),
         t("doc.headers.memory_gb", lang),
@@ -793,15 +890,19 @@ def _add_instances_table(document: Document, instances: List[InstanceData], lang
     table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
     _style_table_headers(table, headers)
     for data in instances:
+        state_raw = (data.lifecycle_state or "").upper()
+        state_display = state_label_map.get(state_raw, data.lifecycle_state or "N/A")
         cells = table.add_row().cells
         cells[0].text = data.host_name
-        cells[1].text = data.shape
-        cells[2].text = str(data.ocpus)
-        cells[3].text = str(data.memory)
-        cells[4].text = str(data.boot_volume_gb)
-        cells[5].text = data.os_name
-        cells[6].text = data.private_ip
-        cells[7].text = data.public_ip or "N/A"
+        cells[1].text = state_display
+        cells[2].text = data.shape
+        cells[3].text = str(data.ocpus)
+        cells[4].text = str(data.memory)
+        cells[5].text = str(data.boot_volume_gb)
+        cells[6].text = data.os_name
+        cells[7].text = data.private_ip
+        cells[8].text = data.public_ip or "N/A"
+        _style_row_by_state(table.rows[-1], state_raw)
     document.add_paragraph()
 
 
@@ -856,31 +957,47 @@ def _add_volume_and_backup_section(
         document, t("doc.headings.backup_policies", lang), 3, toc_list, counters
     )
     document.add_paragraph(t("doc.descriptions.backup_policy_table", lang))
+
+    state_label_map = {
+        "RUNNING":    "Ativo"    if lang == "pt" else "Running",
+        "STOPPED":    "Parado"   if lang == "pt" else "Stopped",
+        "TERMINATED": "Excluído" if lang == "pt" else "Terminated",
+    }
+
     headers = [
         t("doc.headers.associated_host", lang),
-        t("doc.headers.volume_name", lang),
+        t("doc.common.state",            lang),
+        t("doc.headers.volume_name",     lang),
         t("doc.headers.backup_policy_applied", lang),
     ]
     table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
     _style_table_headers(table, headers)
     for instance in instances:
+        state_raw     = (instance.lifecycle_state or "").upper()
+        state_display = state_label_map.get(state_raw, instance.lifecycle_state or "N/A")
+
         boot_cells = table.add_row().cells
         boot_cells[0].text = instance.host_name
-        boot_cells[1].text = t("doc.common.boot_volume", lang)
+        boot_cells[1].text = state_display
+        boot_cells[2].text = t("doc.common.boot_volume", lang)
         if instance.boot_volume_id in volume_to_vg_map:
-            boot_cells[2].text = (
+            boot_cells[3].text = (
                 f"{t('doc.common.managed_by_vg', lang)}: {volume_to_vg_map.get(instance.boot_volume_id)}"
             )
         else:
-            boot_cells[2].text = instance.backup_policy_name
+            boot_cells[3].text = instance.backup_policy_name
+        _style_row_by_state(table.rows[-1], state_raw)
+
         for vol in instance.block_volumes:
             block_cells = table.add_row().cells
             block_cells[0].text = instance.host_name
-            block_cells[1].text = vol.display_name
+            block_cells[1].text = state_display
+            block_cells[2].text = vol.display_name
             if vol.id in volume_to_vg_map:
-                block_cells[2].text = f"{t('doc.common.managed_by_vg', lang)}: {volume_to_vg_map.get(vol.id)}"
+                block_cells[3].text = f"{t('doc.common.managed_by_vg', lang)}: {volume_to_vg_map.get(vol.id)}"
             else:
-                block_cells[2].text = vol.backup_policy_name
+                block_cells[3].text = vol.backup_policy_name
+            _style_row_by_state(table.rows[-1], state_raw)
     document.add_paragraph()
 
     has_instance_policy = any(
@@ -1413,8 +1530,7 @@ def _add_responsible_section(
 
 
 # ==============================================================================
-# PT-BR: Função Orquestradora Principal — Ponto de entrada da geração de documentos
-# EN: Main Orchestrator Function — Entry point for document generation
+# Main Orchestrator Function — Entry point for document generation
 # ==============================================================================
 def _add_network_resource_details(
     document: Document,
@@ -1563,7 +1679,6 @@ def generate_documentation(
         _add_vcn_details_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
 
     elif doc_type == "waf_report":
-        # 1. Filtra apenas Políticas Ativas
         active_waf_policies = []
         if hasattr(infra_data, "waf_policies") and infra_data.waf_policies:
             active_waf_policies = [p for p in infra_data.waf_policies if getattr(p, "lifecycle_state", "").upper() == "ACTIVE"]
@@ -1574,17 +1689,22 @@ def generate_documentation(
         target_vcn_names = set()
         target_lbs = []
 
-        # 2. Extrai LBs e referências de rede atreladas aos Firewalls
+        # Iterate over ALL policy integrations (support for multiple LBs per policy).
         for policy in active_waf_policies:
-            if getattr(policy, "integration", None) and getattr(policy.integration, "firewall", None) and getattr(policy.integration, "load_balancer", None):
-                lb = policy.integration.load_balancer
-                lb_name = getattr(lb, "display_name", "Unknown_LB")
-                if lb_name not in target_lb_names:
-                    target_lb_names.add(lb_name)
-                    target_lbs.append(lb)
-                    for subnet_id in getattr(lb, "subnet_ids", []):
-                        target_subnet_ids.add(subnet_id)
-            
+            all_integrations = getattr(policy, "integrations", []) or []
+            if not all_integrations and getattr(policy, "integration", None):
+                all_integrations = [policy.integration]
+
+            for intg in all_integrations:
+                lb = getattr(intg, "load_balancer", None)
+                if lb:
+                    lb_name = getattr(lb, "display_name", "Unknown_LB")
+                    if lb_name not in target_lb_names:
+                        target_lb_names.add(lb_name)
+                        target_lbs.append(lb)
+                        for subnet_id in getattr(lb, "subnet_ids", []):
+                            target_subnet_ids.add(subnet_id)
+
             # Utiliza a network_infrastructure mapeada apenas como último recurso
             net = getattr(policy, "network_infrastructure", None)
             if net:
@@ -1593,7 +1713,6 @@ def generate_documentation(
                 if getattr(net, "vcn_name", "N/A") != "N/A":
                     target_vcn_names.add(net.vcn_name)
 
-        # 3. Filtra as VCNs rigorosamente
         filtered_vcns = []
         if target_subnet_ids or target_subnet_names or target_vcn_names:
             for vcn in getattr(infra_data, "vcns", []):
@@ -1630,7 +1749,6 @@ def generate_documentation(
                     filtered_vcn.lpgs = []
                     filtered_vcns.append(filtered_vcn)
 
-        # 4. Payload estritamente isolado para a numeração sair perfeita
         filtered_infra_data = infra_data.copy(deep=True)
         filtered_infra_data.instances = []
         filtered_infra_data.drgs = []
@@ -1641,8 +1759,11 @@ def generate_documentation(
         filtered_infra_data.load_balancers = target_lbs
         filtered_infra_data.vcns = filtered_vcns
         filtered_infra_data.waf_policies = active_waf_policies
-        
-        # 5. MÁGICA DA ORDENAÇÃO NATIVA (Sem recriar layouts)
+        # Preserve certificates in the filtered payload — the deep copy already
+        #     carries them from infra_data, so we just ensure they weren't cleared.
+        if not getattr(filtered_infra_data, "certificates", None):
+            filtered_infra_data.certificates = getattr(infra_data, "certificates", []) or []
+
         if target_lbs or filtered_vcns:
             _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
             if filtered_vcns:
@@ -1654,9 +1775,23 @@ def generate_documentation(
                 _add_load_balancers_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
             else:
                 document.add_paragraph(t("doc.messages.no_lb_association", lang))
-        
-        # Chama a aba do WAF Limpa
+
         _add_waf_report_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
+
+        waf_active_certs = [
+            c for c in (getattr(filtered_infra_data, "certificates", []) or [])
+            if isinstance(c, dict)
+            and c.get("lifecycle_state", "").upper() in ("ACTIVE", "PENDING_DELETION")
+        ]
+        if waf_active_certs:
+            _add_and_bookmark_heading(
+                document,
+                t("doc.headers.certificates", lang),
+                1, headings_for_toc, numbering_counters,
+            )
+            _add_compartment_certificates_section(
+                document, filtered_infra_data, headings_for_toc, numbering_counters, lang
+            )
         
     elif doc_type == "new_host":
         _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
@@ -1704,6 +1839,24 @@ def generate_documentation(
             _add_load_balancers_section(document, infra_data, headings_for_toc, numbering_counters, lang)
         _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters, lang)
 
+        _add_waf_report_section(
+            document, infra_data, headings_for_toc, numbering_counters, lang
+        )
+        active_certs = [
+            c for c in (getattr(infra_data, "certificates", []) or [])
+            if isinstance(c, dict)
+            and c.get("lifecycle_state", "").upper() in ("ACTIVE", "PENDING_DELETION")
+        ]
+        if active_certs:
+            _add_and_bookmark_heading(
+                document,
+                t("doc.headers.certificates", lang),
+                1, headings_for_toc, numbering_counters,
+            )
+            _add_compartment_certificates_section(
+                document, infra_data, headings_for_toc, numbering_counters, lang
+            )
+
     if antivirus_image_bytes_list:
         _add_and_bookmark_heading(document, t("doc.headings.additional_configs", lang), 1, headings_for_toc, numbering_counters)
         _add_and_bookmark_heading(document, t("doc.headings.antivirus_config", lang), 2, headings_for_toc, numbering_counters)
@@ -1716,7 +1869,6 @@ def generate_documentation(
 
     _add_responsible_section(document, headings_for_toc, numbering_counters, responsible_name, lang)
 
-    # --- Finalize Document (Generate TOC and Save) ---
     for text, bookmark, level in reversed(headings_for_toc):
         style_name = f"TOC {level}" if f"TOC {level}" in document.styles else "TOC 1"
         p = document.add_paragraph(style=style_name)
@@ -1755,7 +1907,6 @@ def _add_waf_report_section(
             2, toc_list, counters,
         )
 
-        # ── 1. Visão Geral ────────────────────────────────────────────────────
         _add_and_bookmark_heading(document, t("doc.headings.overview", lang), 3, toc_list, counters)
         _create_titled_key_value_table(document, t("doc.headings.general_info", lang), {
             t("doc.common.name",        lang): policy.display_name,
@@ -1766,50 +1917,65 @@ def _add_waf_report_section(
             t("doc.common.time_created",lang): policy.time_created,
         })
 
-        # ── 2. Web App Firewall ───────────────────────────────────────────────
+        # ── 2. Firewalls e Load Balancers Vinculados (tabela única) ─────────────
+        # A single table consolidates the Firewall and its bound LB — each row
+        #     represents a complete binding (Firewall → LB), removing the duplication
+        #     that existed between the former sections 2.1.2 and 2.1.3.
         _add_and_bookmark_heading(document, t("doc.headings.waf_firewall", lang), 3, toc_list, counters)
-        fw = None
-        if policy.integration and getattr(policy.integration, "firewall", None):
-            fw = policy.integration.firewall
-            _create_titled_key_value_table(document, t("doc.headings.waf_firewall", lang), {
-                t("doc.common.name",  lang): fw.display_name,
-                "OCID":                      fw.id,
-                "Backend Type":              fw.backend_type,
-            })
-        else:
+
+        all_integrations = getattr(policy, "integrations", []) or []
+        if not all_integrations and getattr(policy, "integration", None):
+            all_integrations = [policy.integration]
+
+        if not all_integrations:
             document.add_paragraph("Esta política WAF não possui Web Application Firewall associado.")
             continue
 
-        # ── 3. Integração com Load Balancer ───────────────────────────────────
-        _add_and_bookmark_heading(document, t("doc.headings.lb_integration", lang), 3, toc_list, counters)
-        lb_obj = getattr(policy.integration, "load_balancer", None)
-        if lb_obj:
-            # Enrich with full LB data from infra_data if available
-            full_lb = None
-            for lb in (getattr(infra_data, "load_balancers", []) or []):
-                if getattr(lb, "display_name", "") == getattr(lb_obj, "display_name", ""):
-                    full_lb = lb
-                    break
+        # Binding table without OCIDs — already documented in sections
+        #      1.2.x (LB General Info) and 2.1.1 (Policy Overview).
+        #      Columns: Firewall | Bound LB | IPs | State | Enforcement
+        binding_headers = [
+            t("doc.headers.firewall_name", lang),
+            t("doc.headers.lb_name",       lang),
+            t("doc.headers.lb_ip",         lang),
+            t("doc.common.state",          lang),
+            "Enforcement Point",
+        ]
+        binding_table = document.add_table(rows=1, cols=len(binding_headers), style="Table Grid")
+        _style_table_headers(binding_table, binding_headers)
+
+        for intg in all_integrations:
+            fw     = getattr(intg, "firewall",      None)
+            lb_obj = getattr(intg, "load_balancer", None)
+            if not fw:
+                continue
+
+            full_lb = next(
+                (lb for lb in (getattr(infra_data, "load_balancers", []) or [])
+                 if lb_obj and getattr(lb, "display_name", "") == getattr(lb_obj, "display_name", "")),
+                None,
+            )
             lb_show = full_lb or lb_obj
 
-            ip_strings = [
+            ip_strings = ", ".join(
                 f"{ip.ip_address} ({t('doc.common.public', lang) if ip.is_public else t('doc.common.private', lang)})"
                 for ip in (getattr(lb_show, "ip_addresses", []) or [])
-            ]
-            _create_titled_key_value_table(document, t("doc.headings.lb_integration", lang), {
-                t("doc.common.name",  lang):  getattr(lb_show, "display_name", "N/A"),
-                "OCID":                       getattr(lb_show, "id", "N/A"),
-                "Endereços IP":               "\n".join(ip_strings) or "N/A",
-                t("doc.common.state", lang):  getattr(lb_show, "lifecycle_state", "N/A"),
-                "Enforcement Point":          "Load Balancer",
-            })
-        else:
-            document.add_paragraph(t("doc.messages.no_lb_association", lang))
+            ) if lb_show else "N/A"
 
-        # ── 4. Proteção WAF ───────────────────────────────────────────────────
+            lb_state = getattr(lb_show, "lifecycle_state", "N/A") if lb_show else "N/A"
+
+            cells = binding_table.add_row().cells
+            cells[0].text = getattr(fw,      "display_name", "N/A")
+            cells[1].text = getattr(lb_show, "display_name", "N/A") if lb_show else "N/A"
+            cells[2].text = ip_strings or "N/A"
+            cells[3].text = lb_state
+            cells[4].text = "Load Balancer"
+            _style_row_by_state(binding_table.rows[-1], lb_state)
+
+        document.add_paragraph()
+
         _add_and_bookmark_heading(document, t("doc.headings.waf_protection_config", lang), 3, toc_list, counters)
 
-        # Actions
         _add_and_bookmark_heading(document, t("doc.headings.waf_actions", lang), 4, toc_list, counters)
         if policy.actions:
             headers = [t("doc.common.name", lang), t("doc.common.type", lang), t("doc.common.code", lang)]
@@ -1824,7 +1990,6 @@ def _add_waf_report_section(
         else:
             document.add_paragraph(t("doc.messages.no_config_found", lang))
 
-        # Access Control
         _add_and_bookmark_heading(document, t("doc.headings.waf_access_control", lang), 4, toc_list, counters)
         if policy.access_control_rules:
             headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.condition", lang)]
@@ -1839,7 +2004,6 @@ def _add_waf_report_section(
         else:
             document.add_paragraph(t("doc.messages.no_config_found", lang))
 
-        # Rate Limiting
         _add_and_bookmark_heading(document, t("doc.headings.waf_rate_limiting", lang), 4, toc_list, counters)
         if policy.rate_limiting_rules:
             headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.condition", lang)]
@@ -1854,7 +2018,6 @@ def _add_waf_report_section(
         else:
             document.add_paragraph(t("doc.messages.no_config_found", lang))
 
-        # Protection Rules
         _add_and_bookmark_heading(document, t("doc.headings.waf_protection_rules", lang), 4, toc_list, counters)
         if policy.protection_rules:
             headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.capabilities", lang)]
@@ -1882,7 +2045,6 @@ def _render_single_load_balancer(
 ):
     """Renders the standard details of a Load Balancer."""
 
-    # ── General info ──────────────────────────────────────────────────────────
     ip_strings = [
         f"{ip.ip_address} ({t('doc.common.public', lang) if ip.is_public else t('doc.common.private', lang)})"
         for ip in lb.ip_addresses
@@ -1895,7 +2057,6 @@ def _render_single_load_balancer(
     }
     _create_titled_key_value_table(document, t("doc.headings.lb_general_info", lang), lb_info)
 
-    # ── WAF Integration (if present) ──────────────────────────────────────────
     if getattr(lb, "waf_firewall_name", None) and getattr(lb, "waf_policy_name", None):
         waf_info = {
             t("doc.headings.waf_firewall",     lang): lb.waf_firewall_name,
@@ -1905,7 +2066,6 @@ def _render_single_load_balancer(
         }
         _create_titled_key_value_table(document, t("doc.headings.waf_integration", lang), waf_info)
 
-    # ── Hostnames virtuais ────────────────────────────────────────────────────
     if getattr(lb, "hostnames", None):
         _add_and_bookmark_heading(
             document, "Hostnames Virtuais", base_level + 1, toc_list, counters
@@ -1920,12 +2080,10 @@ def _render_single_load_balancer(
         else:
             document.add_paragraph(t("doc.messages.no_resources_found", lang))
 
-    # ── Listeners ─────────────────────────────────────────────────────────────
     _add_and_bookmark_heading(
         document, t("doc.headings.lb_listeners", lang), base_level + 1, toc_list, counters
     )
     if lb.listeners:
-        # Build cert OCID → name map from infra_data
         certs_list   = list(getattr(infra_data, "certificates", []) or [])
         cert_id_map  = {c.get("id"): c.get("name") for c in certs_list if isinstance(c, dict) and c.get("id")}
         has_ssl      = any(
@@ -1959,93 +2117,6 @@ def _render_single_load_balancer(
         document.add_paragraph(t("doc.messages.no_listener_found", lang))
     document.add_paragraph()
 
-    # ── Certificates ─────────────────────────────────────────────────────────
-    _add_and_bookmark_heading(
-        document, t("doc.headers.certificates", lang), base_level + 1, toc_list, counters
-    )
-    certificates = list(getattr(infra_data, "certificates", []) or [])
-    # Filter to only ACTIVE and PENDING_DELETION
-    certs_to_show = [c for c in certificates
-                     if isinstance(c, dict) and
-                     (c.get("lifecycle_state", "").upper() in ("ACTIVE", "PENDING_DELETION"))]
-
-    if certs_to_show:
-        # Build listener OCID→name lookup for "used by" column
-        listener_cert_map: dict = {}
-        for listener in (lb.listeners or []):
-            for oid in (getattr(listener, "ssl_certificate_ids", None) or []):
-                listener_cert_map.setdefault(oid, []).append(listener.name)
-
-        for cert in certs_to_show:
-            subj  = cert.get("subject") or {}
-            cvs   = cert.get("current_version_summary") or {}
-            state = cert.get("lifecycle_state", "N/A")
-
-            # SANs: list of {san_type, value}
-            sans_raw = cert.get("subject_alternative_names") or []
-            sans_str = ", ".join(
-                s.get("value", "") for s in sans_raw if isinstance(s, dict)
-            ) if sans_raw else "N/A"
-
-            # Stages
-            stages = cvs.get("stages") or []
-            stages_str = ", ".join(stages) if stages else "N/A"
-
-            # Listener binding
-            cert_id    = cert.get("id", "")
-            used_by    = listener_cert_map.get(cert_id, [])
-            used_str   = ", ".join(used_by) if used_by else t("doc.common.none", lang)
-
-            # Time of deletion
-            tod = cert.get("time_of_deletion", "—")
-
-            cert_info = {
-                t("doc.common.name",  lang):       cert.get("name", "N/A"),
-                t("doc.common.state", lang):       state,
-                "OCID":                            cert_id or "N/A",
-                t("doc.common.type",  lang):       cert.get("config_type", "N/A"),
-                "Common Name":                     subj.get("common_name", "N/A"),
-                "Organização":                     subj.get("organization", "N/A"),
-                "Localidade":                      subj.get("locality_name", "N/A"),
-                "Estado/Província":                subj.get("state_or_province_name", "N/A"),
-                "País":                            subj.get("country", "N/A"),
-                "SANs":                            sans_str,
-                "Algoritmo da Chave":              cert.get("key_algorithm", "N/A"),
-                "Algoritmo de Assinatura":         cert.get("signature_algorithm", "N/A"),
-                "Versão":                          str(cvs.get("version_number", "N/A")),
-                "Stages":                          stages_str,
-                "Número de Série":                 cvs.get("serial_number", "N/A"),
-                "Válido de":                       cvs.get("valid_not_before", "N/A"),
-                "Válido até":                      cvs.get("valid_not_after",  "N/A"),
-                t("doc.common.time_created", lang): cert.get("time_created", "N/A"),
-                "Deleção Agendada":                tod if tod and tod != "—" else "N/A",
-                "Vinculado ao Listener":           used_str,
-            }
-            title = f"Certificado: {cert.get('name', 'N/A')} ({state})"
-            _create_titled_key_value_table(document, title, cert_info)
-
-            # Associations sub-table
-            assocs = cert.get("associations") or []
-            if assocs:
-                para = document.add_paragraph()
-                run  = para.add_run(f"Associações de Recursos ({len(assocs)})")
-                run.bold = True
-                headers = [t("doc.common.name", lang), "Tipo de Recurso", t("doc.common.state", lang), "OCID do Recurso", t("doc.common.time_created", lang)]
-                tbl = document.add_table(rows=1, cols=len(headers), style="Table Grid")
-                _style_table_headers(tbl, headers)
-                for assoc in assocs:
-                    cells = tbl.add_row().cells
-                    cells[0].text = assoc.get("display_name", "N/A")
-                    cells[1].text = assoc.get("resource_type", "N/A")
-                    cells[2].text = assoc.get("lifecycle_state", "N/A")
-                    cells[3].text = assoc.get("associated_resource_id", "N/A")
-                    cells[4].text = assoc.get("time_created", "N/A")
-            document.add_paragraph()
-    else:
-        document.add_paragraph(t("doc.messages.no_certificates_found", lang))
-    document.add_paragraph()
-
-    # ── Backend Sets ─────────────────────────────────────────────────────────
     _add_and_bookmark_heading(
         document, t("doc.headings.lb_backend_sets", lang), base_level + 1, toc_list, counters
     )
@@ -2080,3 +2151,109 @@ def _render_single_load_balancer(
                 document.add_paragraph(t("doc.messages.no_backend_found", lang))
     else:
         document.add_paragraph(t("doc.messages.no_backend_set_found", lang))
+
+
+def _add_compartment_certificates_section(
+    document: Document,
+    infra_data: InfrastructureData,
+    toc_list: list,
+    counters: Dict[int, int],
+    lang: str,
+) -> None:
+    """
+    PT-BR: Adiciona uma seção resumida dos certificados OCI Certificates Service
+           à documentação de infraestrutura completa. Lista campos chave como
+           Common Name, algoritmos, validade e associações de cada certificado.
+    EN: Adds a summarized OCI Certificates Service section to the full
+        infrastructure document. Lists key fields like Common Name, algorithms,
+        validity window, and associations for each certificate.
+    """
+    certificates = [
+        c for c in (getattr(infra_data, "certificates", []) or [])
+        if isinstance(c, dict)
+        and c.get("lifecycle_state", "").upper() in ("ACTIVE", "PENDING_DELETION")
+    ]
+    if not certificates:
+        document.add_paragraph(t("doc.messages.no_certificates_found", lang))
+        return
+
+    # Build OCID → display_name index from all LBs in the compartment
+    #     to resolve the name of the resource associated with the certificate.
+    #     Uses lb.id directly — field now present in LoadBalancerData.
+    lb_ocid_to_name = {
+        lb.id: lb.display_name
+        for lb in (getattr(infra_data, "load_balancers", []) or [])
+        if lb.id
+    }
+
+    for cert in sorted(certificates, key=lambda c: c.get("name", "")):
+        name  = cert.get("name", "N/A")
+        state = cert.get("lifecycle_state", "N/A")
+        subj  = cert.get("subject", {}) or {}
+        cvs   = cert.get("current_version_summary", {}) or {}
+        assoc = cert.get("associations", []) or []
+
+        _add_and_bookmark_heading(document, name, 2, toc_list, counters)
+
+        cert_info = {
+            t("doc.common.state",           lang): state,
+            "Common Name":                         subj.get("common_name", "N/A"),
+            t("doc.headers.cert_org",        lang): subj.get("organization", "N/A"),
+            t("doc.headers.cert_key_algo",   lang): cert.get("key_algorithm", "N/A"),
+            t("doc.headers.cert_sign_algo",  lang): cert.get("signature_algorithm", "N/A"),
+            t("doc.headers.cert_stages",     lang): ", ".join(cvs.get("stages", [])) or "N/A",
+            t("doc.headers.cert_valid_from", lang): cvs.get("valid_not_before", "N/A"),
+            t("doc.headers.cert_valid_to",   lang): cvs.get("valid_not_after",  "N/A"),
+        }
+        if state == "PENDING_DELETION":
+            cert_info[t("doc.headers.cert_deletion_date", lang)] = cert.get("time_of_deletion", "—")
+
+        _create_titled_key_value_table(document, t("doc.headings.general_info", lang), cert_info)
+
+        _style_cert_kv_table_by_state(document, state)
+
+        sans = cert.get("subject_alternative_names", []) or []
+        if sans:
+            headers_san = ["SAN Type", "Value"]
+            table_san = document.add_table(rows=1, cols=2, style="Table Grid")
+            _style_table_headers(table_san, headers_san)
+            for san in sans:
+                if isinstance(san, dict):
+                    cells = table_san.add_row().cells
+                    cells[0].text = san.get("san_type", san.get("type", "N/A"))
+                    cells[1].text = san.get("value", "N/A")
+                    _style_row_by_state(table_san.rows[-1], state)
+            document.add_paragraph()
+
+        # Certificate associations with other resources.
+        #     The display_name field of the association is the association name (e.g. "certificate-loadbalancer-xxx"),
+        #     not the name of the bound resource. The LB index lookup is therefore the primary source.
+        if assoc:
+            headers_a = [
+                t("doc.common.name",  lang),
+                t("doc.common.type",  lang),
+                t("doc.common.state", lang),
+                "OCID do Vínculo" if lang == "pt" else "Binding OCID",
+            ]
+            table_a = document.add_table(rows=1, cols=len(headers_a), style="Table Grid")
+            _style_table_headers(table_a, headers_a)
+            for a in assoc:
+                if isinstance(a, dict):
+                    # Name resolution order for the bound resource:
+                    #     1. Lookup by resource OCID in the LB index (most reliable source)
+                    #     2. Fallback to display_name (association name, less readable)
+                    #     3. Last resort: last 12 chars of the OCID
+                    resource_ocid = a.get("associated_resource_id", "")
+                    resolved_name = (
+                        lb_ocid_to_name.get(resource_ocid)
+                        or a.get("display_name")
+                        or (resource_ocid[-12:] if resource_ocid else "N/A")
+                    )
+                    assoc_state = a.get("lifecycle_state", "N/A")
+                    cells = table_a.add_row().cells
+                    cells[0].text = resolved_name
+                    cells[1].text = a.get("resource_type", "N/A")
+                    cells[2].text = assoc_state
+                    cells[3].text = resource_ocid or "N/A"
+                    _style_row_by_state(table_a.rows[-1], assoc_state)
+            document.add_paragraph()
