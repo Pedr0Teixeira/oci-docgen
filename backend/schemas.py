@@ -1,5 +1,8 @@
 # ==============================================================================
-# Pydantic schema module for the OCI DocGen application.
+# PT-BR: Módulo de schemas Pydantic da aplicação OCI DocGen.
+#        Define os modelos de dados utilizados para validação, serialização
+#        e transferência entre as camadas da aplicação (API ↔ Celery ↔ DocGen).
+# EN: Pydantic schema module for the OCI DocGen application.
 #     Defines data models used for validation, serialization, and transfer
 #     between application layers (API ↔ Celery ↔ DocGen).
 # ==============================================================================
@@ -10,7 +13,8 @@ from pydantic import BaseModel, Field
 
 
 # ==============================================================================
-# Network Rule Models
+# PT-BR: Modelos de Regras de Rede
+# EN: Network Rule Models
 # ==============================================================================
 
 class SecurityRule(BaseModel):
@@ -36,7 +40,8 @@ class RouteRule(BaseModel):
 
 
 # ==============================================================================
-# Compute and Storage Models
+# PT-BR: Modelos de Compute e Armazenamento
+# EN: Compute and Storage Models
 # ==============================================================================
 
 class BlockVolume(BaseModel):
@@ -76,7 +81,8 @@ class VolumeGroupData(BaseModel):
 
 
 # ==============================================================================
-# Virtual Network (VCN) Models
+# PT-BR: Modelos de Rede Virtual (VCN)
+# EN: Virtual Network (VCN) Models
 # ==============================================================================
 
 class SecurityList(BaseModel):
@@ -152,7 +158,8 @@ class VcnData(BaseModel):
 
 
 # ==============================================================================
-# Load Balancer Models
+# PT-BR: Modelos de Load Balancer
+# EN: Load Balancer Models
 # ==============================================================================
 
 class BackendData(BaseModel):
@@ -197,7 +204,8 @@ class ListenerData(BaseModel):
     port: int
     default_backend_set_name: str
     hostname_names: List[str] = []
-    # OCIDs of OCI Certificates Service certs bound to this listener (HTTPS).
+    # PT-BR: OCIDs dos certificados do OCI Certificates Service vinculados (HTTPS).
+    # EN: OCIDs of OCI Certificates Service certs bound to this listener (HTTPS).
     ssl_certificate_ids: List[str] = []
 
 
@@ -249,7 +257,8 @@ class LoadBalancerData(BaseModel):
 
 
 # ==============================================================================
-# External Connectivity Models (DRG / VPN IPSec)
+# PT-BR: Modelos de Conectividade Externa (DRG / VPN IPSec)
+# EN: External Connectivity Models (DRG / VPN IPSec)
 # ==============================================================================
 
 class RpcData(BaseModel):
@@ -367,7 +376,8 @@ class IpsecData(BaseModel):
 
 
 # ==============================================================================
-# Kubernetes (OKE) Models
+# PT-BR: Modelos de Kubernetes (OKE)
+# EN: Kubernetes (OKE) Models
 # ==============================================================================
 
 class NodePoolData(BaseModel):
@@ -404,7 +414,8 @@ class OkeClusterData(BaseModel):
 
 
 # ==============================================================================
-# WAF (Web Application Firewall) Models
+# PT-BR: Modelos de WAF (Web Application Firewall)
+# EN: WAF (Web Application Firewall) Models
 # ==============================================================================
 
 class WafAction(BaseModel):
@@ -512,7 +523,8 @@ class WafPolicyData(BaseModel):
 
 
 # ==============================================================================
-# Main Infrastructure Aggregator Model
+# PT-BR: Modelo Agregador Principal de Infraestrutura
+# EN: Main Infrastructure Aggregator Model
 # ==============================================================================
 
 class InstanceData(BaseModel):
@@ -554,13 +566,16 @@ class InfrastructureData(BaseModel):
     volume_groups: List[VolumeGroupData]
     kubernetes_clusters: List[OkeClusterData] = []
     waf_policies: List[WafPolicyData] = []
-    # Certificates stored as dicts for maximum flexibility, as their
+    # PT-BR: Certificados armazenados como dicts para flexibilidade máxima,
+    #        pois sua estrutura varia conforme o tipo de certificado OCI.
+    # EN: Certificates stored as dicts for maximum flexibility, as their
     #     structure varies depending on the OCI certificate type.
     certificates: Optional[List[dict]] = []
 
 
 # ==============================================================================
-# API Request / Response Schemas
+# PT-BR: Schemas de Requisição/Resposta da API
+# EN: API Request / Response Schemas
 # ==============================================================================
 
 class NewHostRequest(BaseModel):
@@ -573,15 +588,22 @@ class NewHostRequest(BaseModel):
     compartment_name: str
 
 
+class ImageSectionMeta(BaseModel):
+    """Metadata for a user-defined image section (name, position, file count, captions)."""
+    name: str = Field(..., min_length=1)
+    position: str = Field("end", pattern="^(start|end)$")
+    file_count: int = Field(0, ge=0)
+    text_above: str = ""
+    text_below: str = ""
+
+
 class GenerateDocRequest(BaseModel):
-    """
-    PT-BR: Corpo da requisição para geração de documento .docx.
-    EN: Request body for .docx document generation.
-    """
+    """Request body for .docx document generation."""
     doc_type: str
     infra_data: InfrastructureData
     responsible_name: str = Field(..., min_length=1)
     lang: str = "pt"
+    image_sections: List[ImageSectionMeta] = []
 
 
 class TaskCreationResponse(BaseModel):

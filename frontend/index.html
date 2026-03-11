@@ -10,137 +10,430 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Loading Overlay
+  ═══════════════════════════════════════════════════════════ -->
   <div id="loading-overlay" class="hidden">
     <div class="progress-container">
-      <div class="spinner"></div>
-      <span id="progress-timer" class="progress-timer">00:00</span>
-      <span id="progress-text">Carregando...</span>
-      <div class="progress-bar-container">
-        <div id="progress-bar"></div>
+      <div class="progress-icon-ring">
+        <div class="spinner"></div>
+        <svg class="progress-inner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+        </svg>
       </div>
+      <span id="progress-timer" class="progress-timer">00:00</span>
+      <span id="progress-text" class="progress-text">Carregando...</span>
+      <div class="progress-bar-container"><div id="progress-bar"></div></div>
     </div>
   </div>
 
-  <div id="main-app-container">
-    <div class="container">
-      <header class="app-header">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="header-icon">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
+  <!-- ═══════════════════════════════════════════════════════════
+       Login Modal (optional — triggered by sidebar button)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="auth-modal" class="hidden">
+    <div class="auth-modal-backdrop"></div>
+    <div class="auth-modal-card">
+
+      <button class="auth-modal-close" id="auth-modal-close-btn" aria-label="Fechar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
-        <h1 data-i18n="docgen_title">OCI DocGen</h1>
-        <span class="header-subtitle">by Pedro Teixeira</span>
-        <div class="language-selector-container">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
-          <select id="language-selector">
-            <option value="pt">Português</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-      </header>
+      </button>
 
-      <main class="content-card">
-        <div class="step">
-          <div class="step-number">1</div>
-          <div class="step-content">
-            <label data-i18n="step1_label">Selecione a Região</label>
-            <div id="region-select-container" class="custom-select-container"></div>
-          </div>
-        </div>
+      <!-- Tab switcher -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Entrar</button>
+        <button class="auth-tab" data-tab="register">Criar conta</button>
+      </div>
 
-        <div class="step">
-          <div class="step-number">2</div>
-          <div class="step-content">
-            <label data-i18n="step2_label">Selecione o Tipo de Documentação</label>
-            <div id="doctype-select-container" class="custom-select-container"></div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-number">3</div>
-          <div class="step-content">
-            <label data-i18n="step3_label">Selecione o Compartimento</label>
-            <div id="compartment-select-container" class="custom-select-container"></div>
-          </div>
-        </div>
-
-        <div class="step" id="instance-step">
-          <div class="step-number">4</div>
-          <div class="step-content">
-            <label data-i18n="step4_label">Selecione a(s) Instância(s)</label>
-            <div id="instance-select-container" class="custom-select-container"></div>
-          </div>
-        </div>
-
-        <button id="fetch-details-btn" class="button-primary" disabled>
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" x2="16.65" y1="21" y2="16.65"></line>
-          </svg>
-          <span data-i18n="fetch_btn_full">Buscar Dados da(s) Instância(s)</span>
-        </button>
-        
-        <div id="details-container" class="hidden">
-          <hr class="fieldset-divider">
-          <div id="fetched-data-summary">
-            </div>
-
-          <hr class="fieldset-divider">
-
-          <fieldset>
-            <legend>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-              <span data-i18n="document_info_legend">Informações do Documento</span>
-            </legend>
-            <div class="info-group full-width">
-              <label for="responsible-name-input" style="color: var(--text-primary); font-weight: 600;" data-i18n="responsible_label">Nome do Responsável (Obrigatório)</label>
-              <input type="text" id="responsible-name-input" class="info-value" placeholder="Digite seu nome completo" required style="background-color: #3c3e4f; padding: 12px 16px; font-size: 16px; border-radius: var(--border-radius); border: 1px solid var(--border-color); color: var(--text-primary);" data-i18n-placeholder="responsible_placeholder">
-            </div>
-          </fieldset>
-          
-          <hr class="fieldset-divider">
-
-          <fieldset>
-            <legend>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-              <span data-i18n="attachments_legend">Anexos Manuais</span>
-            </legend>
-            <div class="attachments-grid">
-              <div class="file-upload-group" id="architecture-upload-group" tabindex="0">
-                <label for="architecture-upload" class="file-upload-label">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
-                  <span data-i18n="attachments_arch_label">Adicionar Desenho(s) da Arquitetura</span>
-                </label>
-                <input type="file" id="architecture-upload" accept="image/png, image/jpeg, image/gif" multiple>
-                <p class="upload-note" data-i18n="attachments_arch_note">Clique para selecionar ou cole uma imagem aqui (Ctrl+V).</p>
-                <div id="architecture-file-list" class="file-list-container"></div>
-              </div>
-
-              <div class="file-upload-group" id="antivirus-upload-group" tabindex="0">
-                <label for="antivirus-upload" class="file-upload-label">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
-                  <span data-i18n="attachments_av_label">Adicionar Print(s) do Antivírus</span>
-                </label>
-                <input type="file" id="antivirus-upload" accept="image/png, image/jpeg, image/gif" multiple>
-                <p class="upload-note" data-i18n="attachments_av_note">Clique para selecionar ou cole uma imagem aqui (Ctrl+V).</p>
-                <div id="antivirus-file-list" class="file-list-container"></div>
-              </div>
-            </div>
-          </fieldset>
-
-          <button id="generate-doc-btn" type="button" class="button-primary generate-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" x2="12" y1="15" y2="3"></line>
+      <!-- Login form -->
+      <div class="auth-form" id="auth-form-login">
+        <div class="auth-field">
+          <label class="auth-label">Usuário</label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
             </svg>
-            <span data-i18n="generate_btn">Gerar Documento (.docx)</span>
+            <input type="text" id="login-username" placeholder="seu_usuario" autocomplete="username">
+          </div>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Senha</label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+          </div>
+        </div>
+        <p id="login-error" class="auth-error hidden"></p>
+        <button id="login-submit-btn" class="button-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+            <polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>
+          </svg>
+          Entrar
+        </button>
+      </div>
+
+      <!-- Register form -->
+      <div class="auth-form hidden" id="auth-form-register">
+        <div class="auth-field">
+          <label class="auth-label">Usuário</label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            <input type="text" id="register-username" placeholder="min. 3 caracteres" autocomplete="username">
+          </div>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Senha</label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input type="password" id="register-password" placeholder="min. 6 caracteres" autocomplete="new-password">
+          </div>
+        </div>
+        <p id="register-error" class="auth-error hidden"></p>
+        <button id="register-submit-btn" class="button-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/>
+          </svg>
+          Criar conta
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       App Shell
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="app-shell">
+
+    <!-- ── Sidebar ── -->
+    <aside id="app-sidebar">
+      <div class="sidebar-top">
+
+        <div class="sidebar-brand">
+          <div class="sidebar-brand-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="9" y1="13" x2="15" y2="13"/>
+              <line x1="9" y1="17" x2="15" y2="17"/>
+            </svg>
+          </div>
+          <div>
+            <div class="sidebar-brand-name">OCI DocGen</div>
+            <div class="sidebar-brand-sub">by Pedro Teixeira</div>
+          </div>
+          <span class="sidebar-brand-badge">BETA</span>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="sidebar-nav">
+          <a href="#" class="sidebar-nav-item active" id="nav-generator">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span>Gerar Documento</span>
+          </a>
+          <a href="#" class="sidebar-nav-item" id="nav-metrics">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" x2="18" y1="20" y2="10"/>
+              <line x1="12" x2="12" y1="20" y2="4"/>
+              <line x1="6"  x2="6"  y1="20" y2="14"/>
+            </svg>
+            <span>Métricas</span>
+          </a>
+        </nav>
+
+        <div class="sidebar-divider"></div>
+
+        <!-- History (visible always) -->
+        <div class="sidebar-section-label">Histórico Recente</div>
+        <div id="sidebar-history" class="sidebar-history">
+          <p class="sidebar-empty">Nenhum documento gerado ainda.</p>
+        </div>
+
+      </div>
+
+      <!-- Sidebar footer -->
+      <div class="sidebar-footer">
+
+        <!-- Logged-out state -->
+        <div id="sidebar-guest" class="sidebar-guest">
+          <p class="sidebar-guest-text">Faça login para ver suas métricas pessoais.</p>
+          <button id="sidebar-login-btn" class="sidebar-login-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>
+            </svg>
+            Entrar / Criar conta
           </button>
         </div>
-      </main>
-    </div>
-  </div>
-  
+
+        <!-- Logged-in state -->
+        <div id="sidebar-user" class="sidebar-user hidden">
+          <div class="sidebar-user-row">
+            <div class="sidebar-user-avatar" id="sidebar-user-avatar">P</div>
+            <div class="sidebar-user-info">
+              <span class="sidebar-user-name" id="sidebar-user-name">Pedro</span>
+              <span class="sidebar-user-role">Logado</span>
+            </div>
+            <button class="sidebar-logout-btn" id="sidebar-logout-btn" title="Sair">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Theme + Language -->
+        <div class="sidebar-controls">
+          <button id="theme-toggle-btn" class="sidebar-theme-btn" title="Alternar tema">
+            <svg id="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+            <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+            <span id="theme-btn-label">Modo Claro</span>
+          </button>
+
+          <div class="language-selector-container">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>
+            </svg>
+            <select id="language-selector">
+              <option value="pt">Português</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div id="app-main">
+
+      <!-- ── GENERATOR VIEW ── -->
+      <div id="view-generator" class="app-content">
+
+        <div class="page-intro">
+          <p class="section-eyebrow">Gerador de Documentação</p>
+          <h2 class="page-title">Configure e gere sua documentação OCI</h2>
+        </div>
+
+        <main class="content-card wizard-card">
+
+          <div class="step wizard-step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <label data-i18n="step1_label">Selecione a Região</label>
+              <div id="region-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <div class="step wizard-step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <label data-i18n="step2_label">Selecione o Tipo de Documentação</label>
+              <div id="doctype-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <div class="step wizard-step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <label data-i18n="step3_label">Selecione o Compartimento</label>
+              <div id="compartment-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <div class="step wizard-step" id="instance-step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <label data-i18n="step4_label">Selecione a(s) Instância(s)</label>
+              <div id="instance-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <div class="wizard-action">
+            <button id="fetch-details-btn" class="button-primary" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+                <circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/>
+              </svg>
+              <span data-i18n="fetch_btn_full">Buscar Dados da Infraestrutura</span>
+            </button>
+          </div>
+
+          <div id="details-container" class="hidden">
+            <hr class="fieldset-divider">
+            <div id="fetched-data-summary"></div>
+            <hr class="fieldset-divider">
+
+            <fieldset>
+              <legend>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span data-i18n="document_info_legend">Informações do Documento</span>
+              </legend>
+              <div class="info-group full-width">
+                <label for="responsible-name-input" data-i18n="responsible_label">Nome do Responsável</label>
+                <input type="text" id="responsible-name-input" class="info-value" placeholder="Digite seu nome completo" required>
+              </div>
+            </fieldset>
+
+            <hr class="fieldset-divider">
+
+            <fieldset>
+              <legend>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <span data-i18n="attachments_legend">Anexos de Imagem</span>
+              </legend>
+              <div id="image-sections-list"></div>
+              <button id="add-image-section-btn" class="add-section-btn" type="button">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+                </svg>
+                <span data-i18n="attachments_add_section">Adicionar Seção de Imagem</span>
+              </button>
+            </fieldset>
+
+            <hr class="fieldset-divider">
+
+            <div class="wizard-action wizard-action-final">
+              <button id="doc-preview-btn" type="button" class="button-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
+                </svg>
+                <span data-i18n="preview_btn">Visualizar Preview do Documento</span>
+              </button>
+              <button id="generate-doc-btn" type="button" class="button-primary generate-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
+                </svg>
+                <span data-i18n="generate_btn">Gerar Documento (.docx)</span>
+              </button>
+            </div>
+          </div>
+
+        </main>
+      </div>
+
+      <!-- ── METRICS VIEW ── -->
+      <div id="view-metrics" class="app-content hidden">
+
+        <div class="page-intro">
+          <p class="section-eyebrow">Painel de Dados</p>
+          <h2 class="page-title" id="metrics-title">Métricas de Geração</h2>
+        </div>
+
+        <!-- KPI cards -->
+        <div class="metrics-kpi-row">
+          <div class="metrics-kpi-card">
+            <div class="metrics-kpi-icon metrics-kpi-icon--blue">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <div class="metrics-kpi-body">
+              <span class="metrics-kpi-label">Total Gerado</span>
+              <span class="metrics-kpi-value" id="kpi-total">—</span>
+            </div>
+          </div>
+          <div class="metrics-kpi-card">
+            <div class="metrics-kpi-icon metrics-kpi-icon--green">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div class="metrics-kpi-body">
+              <span class="metrics-kpi-label">Este Mês</span>
+              <span class="metrics-kpi-value" id="kpi-month">—</span>
+            </div>
+          </div>
+          <div class="metrics-kpi-card" id="kpi-top-type-card">
+            <div class="metrics-kpi-icon metrics-kpi-icon--purple">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+            </div>
+            <div class="metrics-kpi-body">
+              <span class="metrics-kpi-label">Tipo Mais Usado</span>
+              <span class="metrics-kpi-value" id="kpi-top-type">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- By type -->
+        <div class="metrics-section-grid">
+          <div class="content-card metrics-card">
+            <div class="metrics-card-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" x2="18" y1="20" y2="10"/>
+                <line x1="12" x2="12" y1="20" y2="4"/>
+                <line x1="6"  x2="6"  y1="20" y2="14"/>
+              </svg>
+              <span>Por Tipo de Documento</span>
+            </div>
+            <div id="metrics-by-type" class="metrics-by-type"></div>
+          </div>
+
+          <div class="content-card metrics-card">
+            <div class="metrics-card-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>Gerações Recentes</span>
+            </div>
+            <div id="metrics-recent" class="metrics-recent-list"></div>
+          </div>
+        </div>
+
+        <!-- Guest notice (shown when not logged in) -->
+        <div id="metrics-guest-notice" class="metrics-guest-notice hidden">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div>
+            <strong>Visão global</strong> — você está vendo métricas agregadas de todos os usuários.
+            <a href="#" id="metrics-login-cta">Faça login</a> para ver apenas as suas.
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- /#app-main -->
+  </div><!-- /#app-shell -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Success Screen
+  ═══════════════════════════════════════════════════════════ -->
   <div id="success-screen" class="hidden">
     <div class="success-modal">
       <div class="success-icon">
@@ -150,12 +443,45 @@
         </svg>
       </div>
       <h2 data-i18n="success_title">Sucesso!</h2>
-      <p data-i18n="success_message">Operação realizada com sucesso.</p>
+      <p data-i18n="success_message">Documento gerado com sucesso.</p>
       <button id="new-doc-btn" class="button-primary" data-i18n="success_btn">OK</button>
     </div>
   </div>
 
   <div id="toast-container"></div>
+
+  <!-- Lightbox -->
+  <div id="lightbox-overlay">
+    <button id="lightbox-close" aria-label="Fechar">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+    <img id="lightbox-img" src="" alt="">
+  </div>
+
+  <!-- Document Preview Overlay -->
+  <div id="preview-overlay">
+    <div id="preview-modal">
+      <div class="preview-modal-header">
+        <h3>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
+          </svg>
+          <span data-i18n="preview_title">Preview do Documento</span>
+        </h3>
+        <button id="preview-modal-close" aria-label="Fechar">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="preview-modal-body"></div>
+    </div>
+  </div>
+
   <script src="js/app.js"></script>
 </body>
 </html>
