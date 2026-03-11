@@ -1,7 +1,7 @@
 # ==============================================================================
-# OCI (Oracle Cloud Infrastructure) data collection module.
-#     Responsible for authentication, client initialization, and collecting
-#     all infrastructure data needed for documentation generation.
+# oci_connector.py — OCI data collection module for OCI DocGen.
+#     Handles authentication, client initialisation, and all OCI SDK calls
+#     required for documentation generation.
 # ==============================================================================
 
 import logging
@@ -19,6 +19,7 @@ from schemas import (
     BackendSetData,
     BgpSessionInfo,
     BlockVolume,
+    StandaloneVolumeData,
     CpeData,
     DrgAttachmentData,
     DrgData,
@@ -87,12 +88,9 @@ retry_strategy = oci.retry.RetryStrategyBuilder(
 
 def get_auth_provider() -> Dict[str, Any]:
     """
-    PT-BR: Determina o método de autenticação com base na variável de ambiente
-           OCI_AUTH_METHOD. Suporta 'INSTANCE_PRINCIPAL' (para workloads rodando
-           dentro da OCI) e 'API_KEY' (padrão, usando ~/.oci/config).
-    EN: Determines the authentication method based on the OCI_AUTH_METHOD
-        environment variable. Supports 'INSTANCE_PRINCIPAL' (for workloads
-        running inside OCI) and 'API_KEY' (default, using ~/.oci/config).
+    Determines the authentication method based on the OCI_AUTH_METHOD environment
+    variable. Supports 'INSTANCE_PRINCIPAL' (for workloads running inside OCI)
+    and 'API_KEY' (default, using ~/.oci/config).
     """
     auth_method = os.environ.get("OCI_AUTH_METHOD", "API_KEY").upper()
     if auth_method == "INSTANCE_PRINCIPAL":
@@ -139,10 +137,8 @@ if tenancy_id:
 
 def get_client(client_class, region: str):
     """
-    PT-BR: Factory de clientes OCI com suporte a API Key e Instance Principal.
-           Injeta a estratégia de retry automaticamente em todos os clientes.
-    EN: OCI client factory with support for API Key and Instance Principal auth.
-        Automatically injects the retry strategy into all clients.
+    OCI client factory with support for API Key and Instance Principal auth.
+    Automatically injects the retry strategy into all clients.
     """
     client_kwargs = {"retry_strategy": retry_strategy}
     try:
@@ -161,10 +157,8 @@ def get_client(client_class, region: str):
 
 def _safe_api_call(func, *args, **kwargs):
     """
-    PT-BR: Wrapper para chamadas à API OCI com tratamento de erros consistente.
-           Suprime erros 404 (recurso não encontrado) e loga os demais.
-    EN: Wrapper for OCI API calls with consistent error handling.
-        Suppresses 404 errors (resource not found) and logs the rest.
+    Wrapper for OCI API calls with consistent error handling.
+    Suppresses 404 errors (resource not found) and logs the rest.
     """
     try:
         return func(*args, **kwargs).data
@@ -177,18 +171,13 @@ def _safe_api_call(func, *args, **kwargs):
         return None
 
 def _translate_protocol(protocol_code: str) -> str:
-    """
-    PT-BR: Converte código numérico de protocolo IANA para nome legível.
-    EN: Converts IANA numeric protocol code to a human-readable name.
-    """
+    """Converts IANA numeric protocol code to a human-readable name."""
     return IANA_PROTOCOL_MAP.get(str(protocol_code), str(protocol_code))
 
 def _format_rule_ports(rule: Any) -> str:
     """
-    PT-BR: Extrai o intervalo de portas de uma regra de segurança OCI.
-           Retorna string vazia se a regra não especificar portas.
-    EN: Extracts the port range from an OCI security rule.
-        Returns an empty string if the rule does not specify ports.
+    Extracts the port range from an OCI security rule.
+    Returns an empty string if the rule does not specify ports.
     """
     options = None
     if hasattr(rule, "tcp_options") and rule.tcp_options:
@@ -204,10 +193,8 @@ def _format_rule_ports(rule: Any) -> str:
 
 def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
     """
-    PT-BR: Resolve o nome legível de um recurso de rede a partir do seu OCID.
-           Suporta Internet Gateway, NAT Gateway, Service Gateway, LPG, DRG e IPs.
-    EN: Resolves the human-readable name of a network resource from its OCID.
-        Supports Internet Gateway, NAT Gateway, Service Gateway, LPG, DRG, and IPs.
+    Resolves the human-readable name of a network resource from its OCID.
+    Supports Internet Gateway, NAT Gateway, Service Gateway, LPG, DRG, and IPs.
     """
     if not entity_id:
         return "N/A"
@@ -238,10 +225,7 @@ def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
     return entity_id
 
 def _get_drg_route_table_name(virtual_network_client, drg_route_table_id: str) -> str:
-    """
-    PT-BR: Resolve o nome de uma DRG Route Table a partir do seu OCID.
-    EN: Resolves the name of a DRG Route Table from its OCID.
-    """
+    """Resolves the name of a DRG Route Table from its OCID."""
     if not drg_route_table_id:
         return "N/A"
     route_table = _safe_api_call(virtual_network_client.get_drg_route_table, drg_route_table_id)
@@ -249,10 +233,8 @@ def _get_drg_route_table_name(virtual_network_client, drg_route_table_id: str) -
 
 def _get_source_dest_name(virtual_network_client, source_dest: str) -> str:
     """
-    PT-BR: Resolve o nome de um NSG a partir do seu OCID (usado em regras de NSG).
-           Retorna o valor original se não for um OCID de NSG.
-    EN: Resolves the name of an NSG from its OCID (used in NSG rules).
-        Returns the original value if it is not an NSG OCID.
+    Resolves the name of an NSG from its OCID (used in NSG rules).
+    Returns the original value if it is not an NSG OCID.
     """
     if not source_dest or not source_dest.startswith("ocid1.networksecuritygroup"):
         return source_dest
@@ -260,10 +242,7 @@ def _get_source_dest_name(virtual_network_client, source_dest: str) -> str:
     return nsg.display_name if nsg else source_dest
 
 def get_compartment_name(compartment_id: str) -> str:
-    """
-    PT-BR: Retorna o nome de um compartimento pelo seu OCID.
-    EN: Returns the name of a compartment by its OCID.
-    """
+    """Returns the name of a compartment by its OCID."""
     if not identity_client_for_compartment:
         return "N/A"
     if compartment_id == tenancy_id:
@@ -275,12 +254,9 @@ def _validate_ipsec_parameters(
     tunnel: oci.core.models.IPSecConnectionTunnel,
 ) -> Tuple[str, Optional[str]]:
     """
-    PT-BR: Valida os parâmetros de criptografia de um túnel IPSec contra as
-           recomendações oficiais da Oracle. Retorna o status de conformidade
-           e um link para a documentação quando fora do padrão.
-    EN: Validates the encryption parameters of an IPSec tunnel against
-        Oracle's official recommendations. Returns the compliance status
-        and a documentation link when out of spec.
+    Validates the encryption parameters of an IPSec tunnel against Oracle's
+    official recommendations. Returns the compliance status and a documentation
+    link when out of spec.
     """
     p1, p2 = tunnel.phase_one_details, tunnel.phase_two_details
     if not p1 or not p2:
@@ -308,10 +284,7 @@ def _validate_ipsec_parameters(
 # Public API Functions — Resource Listing
 # ==============================================================================
 def list_regions() -> List[Dict[str, str]]:
-    """
-    PT-BR: Retorna todas as regiões OCI subscritas e ativas para o tenancy.
-    EN: Returns all subscribed and active OCI regions for the tenancy.
-    """
+    """Returns all subscribed and active OCI regions for the tenancy."""
     if not tenancy_id:
         raise ConnectionError("Tenancy ID not found in OCI configuration.")
     if signer:
@@ -324,10 +297,7 @@ def list_regions() -> List[Dict[str, str]]:
     return [{"key": r.region_key, "name": r.region_name} for r in regions if r.status == "READY"]
 
 def list_compartments(region: str) -> List[Dict[str, Any]]:
-    """
-    PT-BR: Retorna todos os compartimentos ativos do tenancy em estrutura hierárquica.
-    EN: Returns all active compartments in the tenancy as a hierarchical structure.
-    """
+    """Returns all active compartments in the tenancy as a hierarchical structure."""
     identity_client = get_client(oci.identity.IdentityClient, region)
     if not identity_client:
         raise ConnectionError("OCI Identity Client could not be initialized.")
@@ -363,10 +333,7 @@ def list_compartments(region: str) -> List[Dict[str, Any]]:
     return hierarchical_list
 
 def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict[str, str]]:
-    """
-    PT-BR: Retorna instâncias RUNNING ou STOPPED de um compartimento.
-    EN: Returns RUNNING or STOPPED instances from a compartment.
-    """
+    """Returns RUNNING or STOPPED instances from a compartment."""
     compute_client = get_client(oci.core.ComputeClient, region)
     if not compute_client:
         raise ConnectionError("OCI Compute Client could not be initialized.")
@@ -541,15 +508,62 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
         lifecycle_state=instance.lifecycle_state,
     )
 
+def _get_standalone_block_volumes(
+    block_storage_client,
+    compartment_id: str,
+    attached_volume_ids: set,
+) -> list:
+    """
+    Returns block volumes in the compartment NOT attached to any instance.
+    Uses the set of volume IDs already collected from instances for exclusion.
+    """
+    results = []
+    try:
+        all_vols_sdk = oci.pagination.list_call_get_all_results(
+            block_storage_client.list_volumes,
+            compartment_id=compartment_id,
+            retry_strategy=retry_strategy,
+        ).data
+        for vol in all_vols_sdk:
+            if vol.id in attached_volume_ids:
+                continue
+            policy_name = "Nenhuma política associada"
+            try:
+                assignments = oci.pagination.list_call_get_all_results(
+                    block_storage_client.get_volume_backup_policy_asset_assignment,
+                    asset_id=vol.id,
+                    retry_strategy=retry_strategy,
+                ).data
+                if assignments:
+                    policy = _safe_api_call(
+                        block_storage_client.get_volume_backup_policy,
+                        assignments[0].policy_id,
+                    )
+                    if policy:
+                        policy_name = policy.display_name
+            except Exception:
+                pass
+            results.append(
+                StandaloneVolumeData(
+                    id=vol.id,
+                    display_name=vol.display_name,
+                    size_in_gbs=float(vol.size_in_gbs),
+                    lifecycle_state=vol.lifecycle_state,
+                    backup_policy_name=policy_name,
+                    availability_domain=vol.availability_domain,
+                )
+            )
+    except Exception as exc:
+        logging.warning(f"Could not list standalone block volumes: {exc}")
+    return results
+
+
 def _get_volume_groups(
     block_storage_client: oci.core.BlockstorageClient,
     compartment_id: str,
     all_volumes_map: Dict[str, str],
 ) -> List[VolumeGroupData]:
-    """
-    PT-BR: Coleta Volume Groups do compartimento com política de backup e replicação cross-region.
-    EN: Collects Volume Groups from the compartment with backup policy and cross-region replication data.
-    """
+    """Collects Volume Groups from the compartment with backup policy and cross-region replication data."""
     volume_groups_data = []
     all_vgs_sdk = oci.pagination.list_call_get_all_results(
         block_storage_client.list_volume_groups,
@@ -600,10 +614,7 @@ def _get_oke_clusters(
     compartment_id: str,
     vcn_map: Dict[str, Any],
 ) -> List[OkeClusterData]:
-    """
-    PT-BR: Coleta clusters OKE ativos com seus Node Pools e informações de rede.
-    EN: Collects active OKE clusters with their Node Pools and network information.
-    """
+    """Collects active OKE clusters with their Node Pools and network information."""
     oke_clusters_data = []
     all_clusters_summary_sdk = oci.pagination.list_call_get_all_results(
         ce_client.list_clusters, compartment_id=compartment_id, retry_strategy=retry_strategy
@@ -700,24 +711,18 @@ def _infer_resource_type_from_ocid(ocid: str) -> str:
 
 def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> list:
     """
-    PT-BR: Coleta certificados do OCI Certificates Service e suas associações.
-           Usa getattr() em vez de to_dict() pois a SDK pode retornar objetos sem
-           esse método dependendo da versão instalada. Preserva apenas ACTIVE e
-           PENDING_DELETION; outros estados são descartados silenciosamente.
+    Collects OCI Certificates Service certificates and their associations.
 
-    EN: Collects OCI Certificates Service certificates and their associations.
-        Uses getattr() instead of to_dict() since some SDK versions return
-        objects that do not support that method. Only ACTIVE and PENDING_DELETION
-        states are preserved; others are discarded silently.
+    IMPORTANT — getattr() is used instead of to_dict() throughout this function
+    because some SDK versions return objects that do not implement to_dict().
+    Only ACTIVE and PENDING_DELETION lifecycle states are preserved.
 
-    FIELD ACCESS STRATEGY (based on tested OCI SDK behavior):
-      - Top-level fields: getattr(obj, "snake_case_attr") — always works on SDK objects
-      - Nested objects (subject, current_version_summary, validity):
-        the nested SDK objects also expose attributes via getattr().
-        For the version dict, list_certificates uses .current_version_summary
-        and get_certificate uses .current_version (different attribute name!).
-      - to_dict() is intentionally NOT used for the outer object because some
-        SDK/platform combinations return an empty dict or an object without to_dict().
+    FIELD ACCESS STRATEGY (OCI SDK behavior):
+      - Top-level fields: getattr(obj, "snake_case_attr") — always works on SDK objects.
+      - Nested objects: also expose attributes via getattr().
+      - list_certificates exposes .current_version_summary; get_certificate exposes
+        .current_version — these are DIFFERENT attribute names on the same concept.
+      - to_dict() is intentionally NOT used on the outer object for SDK compatibility.
     """
 
     def _ga(obj, attr, default=None):
@@ -976,17 +981,15 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
 # Main Orchestrator Functions — Entry points for Celery tasks
 # ==============================================================================
 def get_infrastructure_details(
-    task, region: str, compartment_id: str, doc_type: str
+    task, region: str, compartment_id: str, doc_type: str,
+    include_standalone: bool = True,
 ) -> InfrastructureData:
     """
-    PT-BR: Orquestrador principal da coleta de infraestrutura completa.
-           Paraleliza a coleta de instâncias usando ThreadPoolExecutor para
-           reduzir o tempo total em compartimentos com muitas instâncias.
-           Progresso é reportado incrementalmente via Celery task states.
-    EN: Main orchestrator for full infrastructure data collection.
-        Parallelizes instance collection using ThreadPoolExecutor to
-        reduce total time in compartments with many instances.
-        Progress is reported incrementally via Celery task states.
+    Main orchestrator for full infrastructure data collection.
+    Parallelises instance collection using ThreadPoolExecutor to reduce total
+    time in compartments with many instances. Progress is reported incrementally
+    via Celery task states.
+    Adjust MAX_WORKERS_FOR_DETAILS if OCI API throttling (HTTP 429) is observed.
     """
     is_k8s_flow = doc_type == "kubernetes"
 
@@ -1046,6 +1049,10 @@ def get_infrastructure_details(
     all_volumes_map = {i.boot_volume_id: f"Boot Volume ({i.host_name})" for i in instances if i.boot_volume_id}
     all_volumes_map.update({bv.id: f"Block Volume ({bv.display_name})" for i in instances for bv in i.block_volumes})
     volume_groups = _get_volume_groups(block_storage_client, compartment_id, all_volumes_map)
+
+    # Skip standalone volume collection if include_standalone=False (avoids a potentially slow API call).
+    attached_ids = {bv.id for i in instances for bv in i.block_volumes}
+    standalone_volumes = _get_standalone_block_volumes(block_storage_client, compartment_id, attached_ids) if include_standalone else []
 
     step_key = "progress.checking_network_connectivity" if is_k8s_flow else "progress.collecting_connectivity"
     task.update_state(state="PROGRESS", meta={"current": 60, "total": 100, "step_key": step_key, "context": {}})
@@ -1333,8 +1340,7 @@ def get_infrastructure_details(
             )
         )
 
-    # Collects WAF policies from the compartment for inclusion in the full
-    #     infrastructure document, mirroring the same approach used for OKE.
+    # Collect WAF policies from the compartment for inclusion in the full infrastructure document.
     task.update_state(
         state="PROGRESS",
         meta={"current": 94, "total": 100, "step_key": "progress.collecting_waf_infra", "context": {}},
@@ -1344,9 +1350,9 @@ def get_infrastructure_details(
         try:
             waf_policies = _get_waf_policies(waf_client, compartment_id, region, compartment_name="")
 
-            # Enriches each policy with integration data (Firewall + LB).
-            #     Reuses already-collected load_balancers: each LB has waf_policy_id
-            #     populated during collection, allowing direct matching without extra calls.
+            # Enrich each policy with integration data (Firewall + LB).
+            # Reuses already-collected load_balancers: each LB has waf_policy_id
+            # populated, enabling direct matching without extra API calls.
             firewalls_sdk = oci.pagination.list_call_get_all_results(
                 waf_client.list_web_app_firewalls,
                 compartment_id=compartment_id,
@@ -1415,9 +1421,8 @@ def get_infrastructure_details(
         except Exception as e:
             logging.warning("WAF collection skipped in infrastructure flow: %s", e)
 
-    # ── OCI Certificates Service ─────────────────────────────────────────────
-    # Collects OCI Certificates Service certificates for display in the
-    #     web summary and full infrastructure document.
+    # Collect OCI Certificates Service certificates for display in the
+    # web summary and full infrastructure document.
     task.update_state(
         state="PROGRESS",
         meta={"current": 97, "total": 100, "step_key": "progress.collecting_certificates", "context": {}},
@@ -1445,6 +1450,7 @@ def get_infrastructure_details(
         kubernetes_clusters=kubernetes_clusters,
         waf_policies=waf_policies,
         certificates=all_certificates,
+        standalone_volumes=standalone_volumes,
     )
 
 def get_new_host_details(
@@ -1452,10 +1458,8 @@ def get_new_host_details(
     instance_ids: List[str], doc_type: str,
 ) -> InfrastructureData:
     """
-    PT-BR: Orquestrador da coleta para o fluxo de Novo Host.
-           Coleta apenas as instâncias indicadas por OCID e seus recursos de rede.
-    EN: Data collection orchestrator for the New Host flow.
-        Collects only the instances identified by their OCIDs and their network resources.
+    Data collection orchestrator for the New Host flow.
+    Collects only the instances identified by their OCIDs and their network resources.
     """
     instances = []
     total_instances = len(instance_ids)
@@ -1562,10 +1566,8 @@ def _get_waf_policies(
 
 def _get_vcn_details(virtual_network_client, compartment_id: str) -> list:
     """
-    PT-BR: Coleta VCNs e todos os recursos de rede aninhados (subnets, security lists,
-           route tables, NSGs, LPGs). Resolve nomes de gateways nas route rules.
-    EN: Collects VCNs and all nested network resources (subnets, security lists,
-        route tables, NSGs, LPGs). Resolves gateway names in route rules.
+    Collects VCNs and all nested network resources (subnets, security lists,
+    route tables, NSGs, LPGs). Resolves gateway names in route rules.
     """
     vcns_data = []
     try:
@@ -1658,12 +1660,9 @@ def get_waf_report_details(
     task, region: str, compartment_id: str, compartment_name: str
 ) -> InfrastructureData:
     """
-    PT-BR: Orquestrador da coleta de dados para o relatório de WAF.
-           Coleta políticas ativas, firewalls, Load Balancers integrados,
-           VCNs relevantes e certificados do compartimento.
-    EN: Data collection orchestrator for the WAF report.
-        Collects active policies, firewalls, integrated Load Balancers,
-        relevant VCNs, and compartment certificates.
+    Data collection orchestrator for the WAF report.
+    Collects active policies, firewalls, integrated Load Balancers,
+    relevant VCNs, and compartment certificates.
     """
     task.update_state(
         state="PROGRESS",

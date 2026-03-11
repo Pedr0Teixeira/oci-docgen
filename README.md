@@ -1,14 +1,14 @@
-# OCI DocGen: Oracle Cloud Documentation Automation
+# OCI DocGen
 
 <p align="center">
-  <strong>Generate complete, professional technical documentation of your OCI infrastructure in minutes, not days.</strong>
+  <strong>Automated technical documentation for Oracle Cloud Infrastructure.</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Oracle%20Cloud-Automation-F80000?style=for-the-badge&logo=oracle" alt="OCI Automation">
+  <img src="https://img.shields.io/badge/Oracle%20Cloud-Automation-F80000?style=for-the-badge&logo=oracle" alt="OCI">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/FastAPI-Web%20Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
-  <img src="https://img.shields.io/badge/Celery-Task%20Queue-37814A?style=for-the-badge&logo=celery&logoColor=white" alt="Celery">
+  <img src="https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/Celery-Queue-37814A?style=for-the-badge&logo=celery&logoColor=white" alt="Celery">
   <img src="https://img.shields.io/badge/Redis-Broker-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis">
   <img src="https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" alt="JavaScript">
   <img src="https://img.shields.io/badge/License-MIT-lightgrey?style=for-the-badge" alt="License">
@@ -16,158 +16,120 @@
 
 ---
 
-**OCI DocGen** is an open-source, full-stack tool that automates the creation of technical infrastructure documentation on Oracle Cloud Infrastructure (OCI). It performs a deep scan of a compartment, collects detailed data across compute, networking, storage, security, and application services, and assembles it into a structured, formatted `.docx` document — ready for delivery.
+**OCI DocGen** is a full-stack web application that automates the creation of technical infrastructure documentation for Oracle Cloud Infrastructure. It performs a full compartment scan, collects data across compute, networking, storage, security, and connectivity resources, and produces a formatted `.docx` document ready for delivery.
 
 ---
 
 ## Table of Contents
 
-- [Key Features](#key-features)
-- [OCI Resources Covered](#oci-resources-covered)
+- [Features](#features)
 - [Documentation Modes](#documentation-modes)
+- [OCI Resources Covered](#oci-resources-covered)
 - [Architecture](#architecture)
-- [Technologies Used](#technologies-used)
 - [Project Structure](#project-structure)
-- [Getting Started (Local Development)](#getting-started-local-development)
-- [Production Deployment (Ubuntu VM)](#production-deployment-ubuntu-vm)
+- [Local Setup](#local-setup)
+- [Production Deployment](#production-deployment)
+  - [Docker](#docker)
+  - [Bare VM](#bare-vm)
 - [OCI IAM Permissions](#oci-iam-permissions)
-- [Load Balancer SSL/TLS Configuration](#load-balancer-ssltls-configuration)
+- [SSL/TLS Reference](#ssltls-reference)
 - [Contributing](#contributing)
-- [Author](#author)
 
 ---
 
-## Key Features
+## Features
 
-- **Four Documentation Modes**: Tailored document types for **New Hosts**, complete **Compartment Infrastructure**, **Kubernetes (OKE)** clusters, and **WAF / Security** reports.
-- **Comprehensive Automatic Discovery**: Maps regions, compartments, and all provisioned resources hierarchically from the tenancy root.
-- **WAF & Certificate Coverage**: Fully documents Web Application Firewall policies, firewall instances, Load Balancer integrations, Access Control rules, Rate Limiting, Protection Rules, and OCI Certificates Service (TLS/SSL lifecycle, SANs, associations).
-- **Asynchronous Architecture**: Celery + Redis handle long-running collections in the background, preventing browser timeouts and providing smooth, non-blocking UX.
-- **Real-Time Progress Feedback**: The frontend polls the backend and renders a live progress bar and step-by-step status during data collection.
-- **Interactive Infrastructure Summary**: Before generating the document, the full collected dataset is rendered in an interactive, collapsible summary in the browser — allowing review and validation.
-- **Multi-Language Support (i18n)**: The interface, progress messages, and the generated `.docx` document are fully bilingual (Portuguese / English), with instant language switching.
-- **Manual Attachments**: Supports uploading architecture diagrams and visual evidence (e.g., antivirus screenshots) to be embedded in the generated document.
-- **Professional Document Output**: Generates a formatted `.docx` with a clickable Table of Contents, structured headings, styled tables, and a responsible party signature section.
-- **Dual Authentication**: Supports both `API Key` (local dev via `~/.oci/config`) and `Instance Principal` (production on OCI VMs) with zero code changes.
-
----
-
-## OCI Resources Covered
-
-| Category | Service | Details Collected |
-| :--- | :--- | :--- |
-| **Compute** | Instances | Shape, OCPUs, Memory, OS image, Lifecycle state, Private/Public IPs |
-| **Storage** | Boot Volumes | Size (GB), Backup policy |
-| | Block Volumes | Size (GB), Backup policy, Attachment type |
-| | Volume Groups | Member volumes, Backup policy validation, Cross-region replication target |
-| **Networking** | VCNs | Display name, CIDR block |
-| | Subnets | Name, CIDR block |
-| | Security Lists | All Ingress/Egress rules with protocol, ports, source/destination, description |
-| | Network Security Groups (NSGs) | All rules with full detail, NSG name resolution |
-| | Route Tables | All rules with target entity name resolution (IGW, NAT, SGW, LPG, DRG) |
-| | Local Peering Gateways (LPGs) | Peering status, advertised CIDRs, cross-tenancy flag |
-| **Load Balancing** | Load Balancers (LBaaS) | Shape, IPs (public/private), Listeners, Backend Sets, Health Checkers, backends |
-| | Virtual Hostnames | All configured virtual hostnames |
-| **Security** | OCI Certificates Service | Full certificate lifecycle: Common Name, SANs, key/signature algorithms, validity dates, stages, version, serial number, deletion schedule, resource associations |
-| | WAF Policies | Actions, Access Control rules, Rate Limiting rules, Protection Rules with capabilities |
-| | Web App Firewalls | Firewall instance, backend type, Load Balancer binding |
-| **Connectivity** | Dynamic Routing Gateways (DRGs) | Attachments, route table bindings, RPCs with peering status |
-| | Customer-Premises Equipment (CPEs) | IP address, vendor |
-| | IPSec VPN Connections | Phase 1 (IKE) & Phase 2 encryption details, Oracle compliance validation, tunnel status, BGP session info |
-| **Containers** | OKE Clusters | Kubernetes version, VCN, public/private API endpoints, LB subnet |
-| | Node Pools | Shape, OCPU/Memory, OS image, node count, boot volume size, subnet |
+- **Four document modes** — New Host, Full Infrastructure, Kubernetes (OKE), and WAF Report, each with a specific resource scope.
+- **Asynchronous collection** — Celery and Redis execute OCI API calls in the background, with real-time progress feedback in the browser via polling.
+- **Interactive summary** — Before generating, the collected dataset is rendered in a collapsible panel for user review and validation.
+- **Visual state indicators** — Lifecycle states (TERMINATED, STOPPED, PENDING_DELETION) are highlighted with color in both the interface and the generated document.
+- **VPN tunnel status** — DOWN tunnels flagged in amber; UP tunnels in soft green. Subtle enough to remain clean in documents with many tunnels.
+- **Full DRG and VPN coverage** — Dynamic Routing Gateways with VCN name resolution on attachments, RPCs, CPEs, and IPSec tunnels with Phase 1/2, IKE, BGP, and Oracle compliance validation.
+- **WAF and Certificates** — Full WAF policies: actions, access control, rate limiting, protection rules, firewall bindings, and complete TLS certificate lifecycle (SANs, validity, stages, associations).
+- **Bilingual (PT-BR / EN)** — Interface, progress messages, and generated document are fully bilingual with instant switching.
+- **Image attachments** — Upload diagrams or screenshots to embed in the document before or after the infrastructure section.
+- **User management** — Multi-user authentication with role-based access control (admin / regular), groups with per-document-type permissions, per-user generation history, and a metrics dashboard.
+- **Metrics dashboard** — Time-series chart (spline/bar/pie) of generation volume by type, KPIs, and per-user breakdown.
 
 ---
 
 ## Documentation Modes
 
-OCI DocGen generates four types of documents, each scoped to include only the relevant resources:
+| Mode                    | `doc_type`   | Scope                                                                                            |
+| :---------------------- | :----------- | :----------------------------------------------------------------------------------------------- |
+| **New Host**            | `new_host`   | Specific instances: shape, volumes, OS, network rules.                                           |
+| **Full Infrastructure** | `full_infra` | Complete report: instances, volumes, VCN, load balancers, certificates, WAF, DRG, VPN, OKE.      |
+| **Kubernetes (OKE)**    | `kubernetes` | OKE clusters, node pools, networking, and API endpoints.                                         |
+| **WAF Report**          | `waf_report` | WAF policies, firewalls, LB binding, certificates (full lifecycle), and associated VCN topology. |
 
-| Mode | `doc_type` | Description |
-| :--- | :--- | :--- |
-| **New Host** | `new_host` | Focuses on one or more specific compute instances: shape, volumes, OS, network rules. Ideal for onboarding documentation. |
-| **Full Infrastructure** | `infrastructure` | Complete compartment report: VCN topology, IPSec, DRGs, Load Balancers, OKE clusters, volume groups, and all instances. |
-| **Kubernetes (OKE)** | `kubernetes` | Dedicated OKE report: cluster details, node pools, networking, and API endpoints. |
-| **WAF Report** | `waf_report` | Security-focused report: WAF policies, firewalls, Load Balancer integration, TLS/SSL certificates with full lifecycle detail, and the associated VCN topology. |
+---
+
+## OCI Resources Covered
+
+| Category           | Resource          | Collected Details                                              |
+| :----------------- | :---------------- | :------------------------------------------------------------- |
+| **Compute**        | Instances         | Shape, OCPUs, memory, OS, lifecycle state, private/public IPs  |
+| **Storage**        | Boot Volumes      | Size, backup policy                                            |
+|                    | Block Volumes     | Size, backup policy, attachment status                         |
+|                    | Volume Groups     | Members, policy validation, replication target                 |
+| **Networking**     | VCNs              | CIDR, subnets, security lists, route tables, NSGs, LPGs        |
+|                    | Security Lists    | Ingress/egress rules with protocol, ports, source/destination  |
+|                    | NSGs              | Rules with name resolution                                     |
+|                    | Route Tables      | Rules with target entity resolution (IGW, NAT, SGW, LPG, DRG)  |
+|                    | LPGs              | Peering status, advertised CIDR, cross-tenancy flag            |
+| **Load Balancing** | Load Balancers    | Shape, IPs, listeners, backend sets, health checkers, backends |
+| **Security**       | WAF Policies      | Actions, access control, rate limiting, protection rules       |
+|                    | Web App Firewalls | Instance, LB binding, enforcement point                        |
+|                    | OCI Certificates  | Common name, SANs, algorithms, validity, stages, associations  |
+| **Connectivity**   | DRGs              | Attachments (with resolved VCN name), route tables, RPCs       |
+|                    | CPEs              | IP address, vendor                                             |
+|                    | IPSec VPN         | Tunnels, Phase 1/2, IKE, BGP, Oracle compliance validation     |
+| **Containers**     | OKE Clusters      | Kubernetes version, VCN, endpoint visibility, LB subnet        |
+|                    | Node Pools        | Shape, OCPU/memory, OS, node count, boot volume, subnet        |
 
 ---
 
 ## Architecture
 
-### Request & Data Flow
-
 ```mermaid
-graph TD
-    subgraph "Browser / User"
-        A[Select Region, Type & Compartment] --> B[Click 'Fetch Data']
-        G[Review Summary] --> H[Click 'Generate Document']
-    end
+flowchart TD
+    Browser["Browser\n(index.html + app.js)"]
+    FastAPI["FastAPI\n(main.py)"]
+    Auth["Auth Module\n(auth.py)"]
+    SQLite[("SQLite\n(oci_docgen.db)")]
+    Redis[("Redis\nBroker + Result Backend")]
+    Celery["Celery Worker\n(celery_worker.py)"]
+    Schemas["Pydantic Schemas\n(schemas.py)"]
+    OCI["OCI Connector\n(oci_connector.py)"]
+    DocGen["Doc Generator\n(doc_generator.py)"]
+    OCI_API[("Oracle Cloud\nInfrastructure API")]
+    DOCX["Generated .docx"]
 
-    subgraph "Frontend — app.js"
-        B --> C(POST /api/start-collection)
-        C --> D(Receive task_id)
-        D --> E[Poll GET /api/collection-status/:id]
-        E -->|PENDING / PROGRESS| E
-        E -->|SUCCESS| F[Render Interactive Summary]
-        F --> G
-        H --> I(POST /api/generate-document with JSON + images)
-        I --> J[Download .docx]
-    end
-
-    subgraph "Backend — FastAPI + Celery"
-        K[main.py — API Server]
-        L[celery_worker.py — Background Worker]
-        M[(Redis — Broker & Result Backend)]
-        N[oci_connector.py — OCI Data Collector]
-        O[doc_generator.py — .docx Builder]
-
-        C --> K
-        K -->|Enqueue Task| M
-        M -->|Dispatch| L
-        L -->|Execute Collection| N
-        N -->|Update Progress States| M
-        L -->|Store Result| M
-        E --> K
-        K -->|Read Status & Result| M
-        I --> K
-        K --> O
-    end
-
-    O --> J
+    Browser -->|"POST /api/start-collection"| FastAPI
+    FastAPI -->|"dispatch task"| Redis
+    Redis -->|"consume"| Celery
+    Celery -->|"validate / serialize"| Schemas
+    Celery -->|"OCI SDK calls"| OCI
+    OCI <-->|"REST"| OCI_API
+    Celery -->|"store result"| Redis
+    Browser -->|"GET /api/collection-status/:id (polling)"| FastAPI
+    FastAPI -->|"read result"| Redis
+    Browser -->|"POST /api/generate-document"| FastAPI
+    FastAPI -->|"render"| DocGen
+    DocGen --> DOCX
+    DOCX -->|"stream response"| Browser
+    FastAPI <-->|"auth / metrics / logs"| Auth
+    Auth <-->|"CRUD"| SQLite
 ```
 
-### Key Design Decisions
+**Maintenance notes:**
 
-- **Celery for async collection**: OCI API calls across a large compartment can take 30–120+ seconds. Running them synchronously in FastAPI would cause browser timeouts and poor UX. Celery offloads this entirely to background workers.
-- **Redis as both broker and result backend**: Simplifies infrastructure — a single Redis instance handles task queuing and result storage, with no external database dependency.
-- **Parallel instance collection**: `ThreadPoolExecutor` is used inside the collection worker to fetch multiple instance details concurrently, reducing total time proportionally to instance count.
-- **`getattr()` over `to_dict()` for OCI SDK objects**: Some OCI SDK versions return model objects that do not implement `to_dict()`. Using `getattr()` throughout the certificate collection pipeline ensures compatibility across SDK versions.
-- **Certificates stored as `dict`**: OCI certificate structure varies by type (`IMPORTED`, `MANAGED_INTERNALLY`, `ISSUED_BY_INTERNAL_CA`). Storing as raw dicts in `InfrastructureData` preserves all fields without forcing a rigid Pydantic schema onto a variable structure.
-
----
-
-## Technologies Used
-
-### Backend
-
-| Technology | Role |
-| :--- | :--- |
-| **Python 3.10+** | Core language |
-| **FastAPI** | High-performance ASGI REST API |
-| **Celery** | Distributed asynchronous task queue |
-| **Redis** | Message broker and Celery result backend |
-| **OCI Python SDK** | Oracle Cloud Infrastructure API client |
-| **Pydantic v2** | Data validation, serialization, and schema definition |
-| **python-docx** | Programmatic `.docx` file generation |
-| **Uvicorn / Gunicorn** | ASGI server (dev / production) |
-
-### Frontend
-
-| Technology | Role |
-| :--- | :--- |
-| **HTML5 / CSS3** | Structure and styling |
-| **Vanilla JavaScript (ES6+)** | Application logic, API communication, DOM rendering |
-| **JSON i18n** | File-based internationalization for PT-BR and EN |
+- **Parallel collection**: `ThreadPoolExecutor` in `oci_connector.py` fetches instance details concurrently. Tune `MAX_WORKERS_FOR_DETAILS` if OCI API throttling occurs (HTTP 429).
+- **`getattr()` instead of `to_dict()`**: OCI SDK certificate objects do not always implement `to_dict()`. The entire certificate pipeline uses `getattr()` for cross-version SDK compatibility.
+- **Certificates as `dict`**: Structure varies by certificate type (`IMPORTED`, `MANAGED_INTERNALLY`, `ISSUED_BY_INTERNAL_CA`). Stored as raw dicts to avoid a rigid Pydantic schema.
+- **Certificate version attribute naming**: `list_certificates` exposes `.current_version_summary`; `get_certificate` exposes `.current_version` — different names for the same concept. Handled in `_get_compartment_certificates`.
+- **Redis as broker and result backend**: A single Redis instance manages both the task queue and task results. No external database is involved in the collection pipeline.
+- **WAF backward compatibility**: `WafPolicyData.integration` holds the first firewall integration; `WafPolicyData.integrations` holds the full list. Both fields are maintained to avoid breaking existing flows.
 
 ---
 
@@ -176,112 +138,266 @@ graph TD
 ```
 oci-docgen/
 ├── backend/
-│   ├── main.py                  # FastAPI application — REST endpoints
-│   ├── celery_worker.py         # Celery task definitions
-│   ├── oci_connector.py         # OCI SDK integration and data collection
-│   ├── doc_generator.py         # .docx generation engine (i18n-aware)
-│   ├── schemas.py               # Pydantic data models (full type contract)
-│   ├── requirements.txt         # Python dependencies
-│   └── generated_docs/          # Runtime output directory (gitignored)
+│   ├── main.py              # FastAPI — all REST endpoints
+│   ├── celery_worker.py     # Celery task definitions
+│   ├── oci_connector.py     # OCI SDK integration and data collection
+│   ├── doc_generator.py     # .docx generation engine (i18n-aware)
+│   ├── auth.py              # Authentication, sessions, metrics, groups
+│   ├── schemas.py           # Pydantic models (data contract)
+│   ├── requirements.txt     # Python dependencies
+│   └── generated_docs/      # Runtime output directory (gitignored)
 └── frontend/
-    ├── index.html               # Single-page application shell
-    ├── css/
-    │   └── style.css            # Complete design system
-    ├── js/
-    │   └── app.js               # Frontend logic, rendering, API calls
+    ├── index.html           # SPA shell
+    ├── css/style.css        # Design system
+    ├── js/app.js            # Frontend logic — rendering, API calls, UI state
     └── locales/
-        ├── pt.json              # Portuguese (PT-BR) translations
-        └── en.json              # English translations
+        ├── pt.json          # PT-BR translations
+        └── en.json          # EN translations
 ```
 
 ---
 
-## Getting Started (Local Development)
+## Local Setup
 
 ### Prerequisites
 
-- **Python 3.10+**
-- **Redis** installed and running locally
-- An **OCI tenancy** with read permissions and a configured `~/.oci/config` file
+- Python 3.10+
+- Redis running locally
+- OCI tenancy with read permissions and `~/.oci/config` configured
 
 ### OCI Authentication
 
-**API Key (default — for local development):**
+**API Key** (default — local development):
+
 ```bash
-# Ensure ~/.oci/config is configured with your credentials
-# Reference: https://docs.oracle.com/en-us/iaas/Content/API/Concepts/sdkconfig.htm
 oci setup config
+# https://docs.oracle.com/en-us/iaas/Content/API/Concepts/sdkconfig.htm
 ```
 
-**Instance Principal (recommended for production on OCI VMs):**
+**Instance Principal** (production on OCI VMs):
+
 ```bash
 export OCI_AUTH_METHOD=INSTANCE_PRINCIPAL
 ```
 
-### Running Locally
+### Running
 
-You need **three terminal windows** open from the project root.
+Three terminals are required from the project root.
 
 **Terminal 1 — Redis**
+
 ```bash
 redis-server
 ```
 
-**Terminal 2 — FastAPI Backend**
+**Terminal 2 — FastAPI**
+
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate        # macOS / Linux
-# venv\Scripts\activate         # Windows
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
-API available at: `http://127.0.0.1:8000`
-Interactive API docs: `http://127.0.0.1:8000/docs`
 
 **Terminal 3 — Celery Worker**
+
 ```bash
 cd backend
-source venv/bin/activate
+source .venv/bin/activate
 celery -A celery_worker.celery_app worker --loglevel=info
 ```
 
-**Access the Frontend**
+**Frontend**
 
-Open `frontend/index.html` directly in your browser, or serve it with any static server:
+Open `frontend/index.html` directly in the browser, or serve it with:
+
 ```bash
-cd frontend
-python3 -m http.server 5500
-# Then open: http://localhost:5500
+python -m http.server 3000 --directory frontend
 ```
 
 ---
 
-## Production Deployment (Ubuntu VM)
+## Production Deployment
 
-### 1. System Preparation
+Two deployment strategies are documented: **Docker** (recommended for portability and quick setup) and **Bare VM** (for environments where container runtimes are not available or not desired).
 
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install python3-pip python3-venv nginx git redis-server -y
-sudo systemctl enable --now redis-server
+---
+
+## Docker
+
+### Prerequisites
+
+- Docker 24+ and Docker Compose v2+
+- OCI credentials available on the host (`~/.oci/config` for API Key, or Instance Principal if running on an OCI VM)
+
+### 1. Project files
+
+Create the following files at the project root.
+
+**`Dockerfile`** — builds the backend image:
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libffi-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+COPY backend/ .
+
+RUN mkdir -p generated_docs
+
+EXPOSE 8000
+
+CMD ["gunicorn", \
+     "--workers", "4", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--bind", "0.0.0.0:8000", \
+     "--timeout", "300", \
+     "main:app"]
 ```
 
-### 2. Application Setup
+**`docker-compose.yml`**:
+
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OCI_AUTH_METHOD=API_KEY # or INSTANCE_PRINCIPAL
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ~/.oci:/root/.oci:ro # remove if using Instance Principal
+      - app_data:/app/generated_docs
+      - db_data:/app
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command:
+      [
+        "celery",
+        "-A",
+        "celery_worker.celery_app",
+        "worker",
+        "--loglevel=INFO",
+        "--concurrency=4",
+      ]
+    environment:
+      - OCI_AUTH_METHOD=API_KEY # or INSTANCE_PRINCIPAL
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ~/.oci:/root/.oci:ro # remove if using Instance Principal
+      - app_data:/app/generated_docs
+      - db_data:/app
+    depends_on:
+      - redis
+
+  frontend:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+
+volumes:
+  redis_data:
+  app_data:
+  db_data:
+```
+
+**`nginx.conf`**:
+
+```nginx
+server {
+    listen 80;
+
+    location / {
+        root /usr/share/nginx/html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://api:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_connect_timeout 75s;
+        proxy_buffer_size 128k;
+        proxy_buffers 4 256k;
+    }
+}
+```
+
+### 2. Build and start
 
 ```bash
-# Create a dedicated system user with no login shell for security isolation
-sudo useradd --system --shell /usr/sbin/nologin --no-create-home docgen_user
+docker compose up -d --build
+docker compose logs -f          # follow logs across all services
+```
 
-# Clone the repository
-sudo git clone https://github.com/Pedr0Teixeira/oci-docgen.git /var/www/oci-docgen
+### 3. Verify
+
+```bash
+docker compose ps                         # all services should show "running"
+curl http://localhost:8000/health         # API health check
+```
+
+### 4. Useful commands
+
+```bash
+# Restart only the worker after a code change
+docker compose up -d --build worker
+
+# Open a shell inside the API container
+docker compose exec api bash
+
+# Stop and remove all containers (data volumes are preserved)
+docker compose down
+
+# Stop and remove containers AND volumes (full reset)
+docker compose down -v
+```
+
+> **Instance Principal on OCI VM**: Remove the `~/.oci:/root/.oci:ro` volume mounts and set `OCI_AUTH_METHOD=INSTANCE_PRINCIPAL`. The containers will automatically use the VM's instance principal credentials.
+
+---
+
+## Bare VM
+
+### 1. System user and directories
+
+```bash
+sudo useradd --system --shell /usr/sbin/nologin --home /var/www/oci-docgen docgen_user
+sudo mkdir -p /var/www/oci-docgen
 sudo chown -R docgen_user:docgen_user /var/www/oci-docgen
-
-# Create the runtime output directory
-sudo -u docgen_user mkdir -p /var/www/oci-docgen/backend/generated_docs
 ```
 
-### 3. Python Environment
+### 2. Application setup
 
 ```bash
 sudo -u docgen_user python3 -m venv /var/www/oci-docgen/backend/venv
@@ -289,13 +405,13 @@ sudo -u docgen_user /var/www/oci-docgen/backend/venv/bin/pip install -r /var/www
 sudo -u docgen_user /var/www/oci-docgen/backend/venv/bin/pip install gunicorn
 ```
 
-### 4. systemd Service — Gunicorn API
+### 3. systemd — API
 
-Create `/etc/systemd/system/ocidocgen-api.service`:
+`/etc/systemd/system/ocidocgen-api.service`:
 
 ```ini
 [Unit]
-Description=OCI DocGen — Gunicorn API Service
+Description=OCI DocGen - API
 After=network.target redis-server.service
 
 [Service]
@@ -316,13 +432,13 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-### 5. systemd Service — Celery Worker
+### 4. systemd — Celery Worker
 
-Create `/etc/systemd/system/ocidocgen-worker.service`:
+`/etc/systemd/system/ocidocgen-worker.service`:
 
 ```ini
 [Unit]
-Description=OCI DocGen — Celery Worker
+Description=OCI DocGen - Celery Worker
 After=network.target redis-server.service
 
 [Service]
@@ -341,34 +457,26 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
-### 6. Enable Services
-
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now ocidocgen-api
-sudo systemctl enable --now ocidocgen-worker
-
-# Verify services are running
-sudo systemctl status ocidocgen-api
-sudo systemctl status ocidocgen-worker
+sudo systemctl enable --now ocidocgen-api ocidocgen-worker
+sudo systemctl status ocidocgen-api ocidocgen-worker
 ```
 
-### 7. Nginx Configuration
+### 5. Nginx
 
-Create `/etc/nginx/sites-available/ocidocgen`:
+`/etc/nginx/sites-available/ocidocgen`:
 
 ```nginx
 server {
     listen 80;
     server_name your_domain_or_ip;
 
-    # Frontend — static files
     location / {
         root /var/www/oci-docgen/frontend;
         try_files $uri $uri/ /index.html;
     }
 
-    # Backend API — proxy to Gunicorn
     location /api {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
@@ -377,7 +485,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 120s;
         proxy_connect_timeout 75s;
-        # Required for large .docx downloads
         proxy_buffer_size 128k;
         proxy_buffers 4 256k;
     }
@@ -389,102 +496,38 @@ sudo ln -s /etc/nginx/sites-available/ocidocgen /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl restart nginx
 ```
 
-> **HTTPS**: For production use, it is strongly recommended to configure TLS via [Let's Encrypt / Certbot](https://certbot.eff.org/) using the `--nginx` plugin:
+> **HTTPS** with Let's Encrypt:
+>
 > ```bash
 > sudo apt install certbot python3-certbot-nginx -y
 > sudo certbot --nginx -d your_domain.com
-> sudo systemctl reload nginx
 > ```
-
----
-
-## Load Balancer SSL/TLS Configuration
-
-When the infrastructure being documented includes Load Balancers with HTTPS listeners, understanding the three SSL/TLS termination modes is essential for correctly interpreting the documentation output.
-
-OCI Load Balancer supports three distinct SSL traffic handling patterns. The WAF Report and Infrastructure documentation modes collect and display the listener protocol, SSL configuration, and bound certificates precisely because each mode has different security implications.
-
-### SSL Termination
-
-```
-Client ──[HTTPS/TLS]──► Load Balancer ──[HTTP]──► Backend
-```
-
-The SSL connection terminates at the Load Balancer. Traffic between the Load Balancer and the backend servers is **unencrypted**. The Load Balancer holds the TLS certificate and private key.
-
-- **Use case**: Backends are internal services not requiring encryption; the Load Balancer handles all certificate management.
-- **Listener config**: Protocol `HTTPS`, port `443`, with a certificate bundle attached.
-- **Backend Set config**: Protocol `HTTP`, port `80`, SSL **disabled**.
-- **In OCI DocGen output**: The Listeners table will show `HTTPS` with a certificate name in the **Certificado TLS** column. Backend Sets will show `HTTP:80`.
-
-### SSL Tunneling
-
-```
-Client ──[HTTPS/TLS]──────────────────────────────► Backend
-                    Load Balancer (TCP passthrough)
-```
-
-The Load Balancer operates at the TCP level and forwards the encrypted stream without inspection. The SSL connection is established **end-to-end between the client and the backend**.
-
-- **Use case**: End-to-end encryption where the Load Balancer must not see request contents. HTTP-level features (session persistence, header manipulation) are unavailable.
-- **Listener config**: Protocol `TCP`, port `443`, SSL **disabled** on the listener.
-- **Backend Set config**: Port `443`, SSL **disabled** on the backend set.
-- **In OCI DocGen output**: The Listeners table will show `TCP` on port `443`, with no certificate listed — which is expected and correct for this mode.
-
-### End-to-End SSL
-
-```
-Client ──[HTTPS/TLS]──► Load Balancer ──[HTTPS/TLS]──► Backend
-```
-
-SSL terminates at the Load Balancer, which then initiates a **new** SSL connection to the backend. This allows the Load Balancer to inspect and manipulate HTTP headers while keeping backend traffic encrypted.
-
-- **Use case**: Environments requiring backend traffic encryption (compliance) while still needing Load Balancer-level HTTP header processing or WAF inspection.
-- **Listener config**: Protocol `HTTPS`, port `443`, certificate on the listener.
-- **Backend Set config**: SSL **enabled** on the backend set, pointing to the backend certificate.
-- **In OCI DocGen output**: Both the Listeners table and Backend Set configuration will reflect SSL usage, and the WAF Report will show the certificate association.
-
-### OCI Certificates Service Integration
-
-For production environments, OCI recommends managing TLS certificates through the **OCI Certificates Service** rather than uploading raw PEM bundles directly to the Load Balancer. This provides:
-
-- Centralized lifecycle management (automatic renewal for managed certificates)
-- Certificate versioning and stage tracking (`CURRENT`, `PENDING`, `FAILED`, `DEPRECATED`, `DELETED`)
-- Audit trail of rotations and associations
-- Cross-resource association visibility
-
-OCI DocGen's WAF Report captures this full lifecycle, including certificate stages, validity window, scheduled deletion date, and every resource the certificate is bound to. This makes it straightforward to identify expiring certificates and their blast radius across the infrastructure.
-
-> **Reference**: For a detailed technical walkthrough of all three SSL modes on OCI Load Balancer, see the official Oracle A-Team article:
-> [Load Balancing SSL Traffic in OCI — Oracle A-Team Chronicles](https://www.ateam-oracle.com/load-balancing-ssl-traffic-in-oci)
 
 ---
 
 ## OCI IAM Permissions
 
-The application requires **read-only** permissions across OCI services. For production VMs, the recommended approach is **Instance Principal** authentication, which eliminates the need to store API keys on disk.
+The application requires **read-only** access. In production, use **Instance Principal**.
 
-### Step 1 — Create a Dynamic Group
+### Dynamic Group
 
-Navigate to: **Identity & Security → Dynamic Groups → Create Dynamic Group**
+**Identity & Security > Dynamic Groups > Create Dynamic Group**
 
-Name: `oci-docgen-dg`
-
-Matching rule (replace with your VM's OCID):
 ```
-All {instance.id = 'ocid1.instance.oc1..[YOUR_VM_OCID]'}
+All {instance.id = 'ocid1.instance.oc1..[INSTANCE_OCID]'}
 ```
 
-Or to grant all instances in a compartment:
+Or for all instances in a compartment:
+
 ```
-All {instance.compartment.id = 'ocid1.compartment.oc1..[YOUR_COMPARTMENT_OCID]'}
+All {instance.compartment.id = 'ocid1.compartment.oc1..[COMPARTMENT_OCID]'}
 ```
 
-### Step 2 — Create IAM Policies
+### IAM Policies
 
-Navigate to: **Identity & Security → Policies → Create Policy**
+**Identity & Security > Policies > Create Policy**
 
-```text
+```
 allow dynamic-group 'oci-docgen-dg' to read compartments in tenancy
 allow dynamic-group 'oci-docgen-dg' to read instance-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read volume-family in tenancy
@@ -502,35 +545,41 @@ allow dynamic-group 'oci-docgen-dg' to use network-security-groups in tenancy wh
 }
 ```
 
-> **Principle of Least Privilege**: All permissions above use `read` or restricted `use` verbs. The application never creates, modifies, or deletes any OCI resource.
+> All verbs are `read` or restricted `use`. The application never creates, modifies, or deletes OCI resources.
 
-### IAM Policy Reference
+Reference: [OCI IAM Policy Reference](https://docs.oracle.com/en-us/iaas/Content/Identity/Reference/policyreference.htm)
 
-For full documentation on OCI IAM policy verbs and resource types:
-[Oracle Cloud Infrastructure IAM Policy Reference](https://docs.oracle.com/en-us/iaas/Content/Identity/Reference/policyreference.htm)
+---
+
+## SSL/TLS Reference
+
+OCI Load Balancer supports three SSL modes. Understanding which is in use is necessary to correctly interpret the generated documentation.
+
+| Mode                | Client to LB            | LB to Backend | LB holds certificate |
+| :------------------ | :---------------------- | :------------ | :------------------- |
+| **SSL Termination** | HTTPS                   | HTTP          | Yes                  |
+| **SSL Tunneling**   | HTTPS (TCP passthrough) | HTTPS         | No                   |
+| **End-to-End SSL**  | HTTPS                   | HTTPS         | Yes (both sides)     |
+
+**How to identify in the generated document:**
+
+- **Listeners** table: protocol and associated TLS certificate.
+- **Backend Sets** table: indicates whether SSL is active on the backend.
+- In SSL Tunneling, the listener appears as `TCP:443` with no certificate — this is expected and correct behavior.
+
+> Reference: [Load Balancing SSL Traffic in OCI — Oracle A-Team](https://www.ateam-oracle.com/load-balancing-ssl-traffic-in-oci)
 
 ---
 
 ## Contributing
 
-Contributions, bug reports, and feature requests are welcome.
-
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature-name`
-3. Commit your changes: `git commit -m 'feat: add some feature'`
-4. Push to your branch: `git push origin feature/your-feature-name`
-5. Open a Pull Request
-
-Please ensure your code follows the existing structure and includes bilingual comments (PT-BR + EN) for any new logic, consistent with the project's documentation standard.
+2. Create a branch: `git checkout -b feature/feature-name`
+3. Commit: `git commit -m 'feat: description'`
+4. Push and open a Pull Request
 
 ---
 
-## Author
+Developed by **Pedro Teixeira** · [github.com/Pedr0Teixeira/oci-docgen](https://github.com/Pedr0Teixeira/oci-docgen)
 
-Developed by **Pedro Teixeira**
-
----
-
-<p align="center">
-  <sub>OCI DocGen is an independent open-source project and is not affiliated with or endorsed by Oracle Corporation.</sub>
-</p>
+<sub>OCI DocGen is an independent open-source project, not affiliated with or endorsed by Oracle Corporation.</sub>
