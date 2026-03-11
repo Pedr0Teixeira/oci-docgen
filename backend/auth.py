@@ -6,12 +6,13 @@
 
 import hashlib
 import logging
+import os
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
-DB_PATH = "oci_docgen.db"
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oci_docgen.db")
 
 
 # ==============================================================================
@@ -21,6 +22,8 @@ DB_PATH = "oci_docgen.db"
 def init_db() -> None:
     """Create tables and run migrations. Called once at FastAPI startup."""
     conn = _conn()
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
 
     # --- Table creation (idempotent) ---
     create_stmts = [
@@ -95,13 +98,15 @@ def init_db() -> None:
         except Exception:
             pass  # Column already exists — safe to ignore
 
-    conn.commit()
-    conn.close()
+    try:
+        conn.commit()
+    finally:
+        conn.close()
     logging.info("OCI DocGen DB initialised at %s", DB_PATH)
 
 
 def _conn() -> sqlite3.Connection:
-    c = sqlite3.connect(DB_PATH)
+    c = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     c.row_factory = sqlite3.Row
     return c
 
@@ -124,7 +129,7 @@ def create_user(username: str, password: str) -> Optional[dict]:
         conn = _conn()
         conn.execute(
             "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-            (username.strip(), _hash(password), datetime.utcnow().isoformat()),
+            (username.strip(), _hash(password), datetime.utcnow().isoformat() + "Z"),
         )
         conn.commit()
         row = conn.execute(
@@ -155,12 +160,14 @@ def create_session(user_id: int) -> str:
     """Creates and persists a new session token, returning it."""
     token = str(uuid.uuid4())
     conn = _conn()
-    conn.execute(
-        "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
-        (token, user_id, datetime.utcnow().isoformat()),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
+            (token, user_id, datetime.utcnow().isoformat() + "Z"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
     return token
 
 
@@ -188,9 +195,11 @@ def get_session_user(token: str) -> Optional[dict]:
 
 def delete_session(token: str) -> None:
     conn = _conn()
-    conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ==============================================================================
@@ -254,14 +263,16 @@ def log_generation(
 ) -> None:
     """Record every document generation — anonymous or authenticated."""
     conn = _conn()
-    conn.execute(
-        """INSERT INTO doc_generations (user_id, doc_type, compartment, region, generated_at)
-           VALUES (?, ?, ?, ?, ?)""",
-        (user_id, doc_type, compartment or "N/A", region or "N/A",
-         datetime.utcnow().isoformat()),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            """INSERT INTO doc_generations (user_id, doc_type, compartment, region, generated_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (user_id, doc_type, compartment or "N/A", region or "N/A",
+             datetime.utcnow().isoformat() + "Z"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_metrics(user_id: Optional[int] = None) -> dict:
@@ -475,21 +486,31 @@ def list_groups() -> list:
     return [dict(r) for r in rows]
 
 
-def create_group(name: str) -> Optional[dict]:
+def create_group(name: str) -> tuple[Optional[dict], Optional[str]]:
+    """
+    Returns (group_dict, None) on success.
+    Returns (None, "duplicate") if the name already exists.
+    Returns (None, "error") for any other failure.
+    """
+    conn = _conn()
+    result: tuple[Optional[dict], Optional[str]] = (None, "error")
     try:
-        conn = _conn()
         conn.execute(
-            "INSERT INTO groups (name, allowed_doc_types) VALUES (?, ?)",
-            (name.strip(), ""),
+            "INSERT INTO groups (name, allowed_doc_types, created_at) VALUES (?, ?, ?)",
+            (name.strip(), "", datetime.utcnow().isoformat() + "Z"),
         )
         conn.commit()
         row = conn.execute(
             "SELECT * FROM groups WHERE name = ?", (name.strip(),)
         ).fetchone()
-        conn.close()
-        return dict(row) if row else None
+        result = (dict(row) if row else None), None
+    except sqlite3.IntegrityError:
+        result = None, "duplicate"
     except Exception:
-        return None
+        result = None, "error"
+    finally:
+        conn.close()
+    return result
 
 
 def delete_group(group_id: int) -> bool:
@@ -560,7 +581,7 @@ def get_user_allowed_doc_types(user_id: int) -> Optional[list]:
     allowed = set()
     for g in groups:
         types_str = g.get("allowed_doc_types") or ""
-        for t in types_str.split(","):
+        for t in str(types_str).split(","):
             t = t.strip()
             if t:
                 allowed.add(t)
@@ -619,7 +640,7 @@ def add_feedback(user_id: Optional[int], category: str, message: str) -> dict:
     cursor = conn.execute(
         """INSERT INTO feedback (user_id, category, message, status, created_at)
            VALUES (?, ?, ?, 'open', ?)""",
-        (user_id, category, message, datetime.utcnow().isoformat()),
+        (user_id, category, message, datetime.utcnow().isoformat() + "Z"),
     )
     feedback_id = cursor.lastrowid
     conn.commit()

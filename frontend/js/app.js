@@ -4247,7 +4247,12 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ name }),
         });
-        if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+        if (!r.ok) {
+          const d = await r.json();
+          showToast(d.detail || 'Erro ao criar grupo.', 'error');
+          loadAdminGroups();
+          return;
+        }
         if (input) input.value = '';
         showToast(`Grupo "${name}" criado.`, 'success');
         loadAdminGroups();
