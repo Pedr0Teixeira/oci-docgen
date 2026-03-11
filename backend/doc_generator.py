@@ -1,15 +1,20 @@
 # ==============================================================================
-# .docx document generation module for OCI DocGen.
+# PT-BR: Módulo de geração de documentos .docx para o OCI DocGen.
+#        Converte dados de infraestrutura coletados em documentos Word formatados,
+#        com suporte a múltiplos tipos de documentação e idiomas (PT-BR / EN).
+# EN: .docx document generation module for OCI DocGen.
 #     Converts collected infrastructure data into formatted Word documents,
 #     with support for multiple documentation types and languages (PT-BR / EN).
 # ==============================================================================
 
+# Standard Library Imports
 import os
 import re
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
+# Third-Party Imports
 import docx
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
@@ -21,14 +26,17 @@ from docx.oxml.shared import OxmlElement, qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
+# Local Application Imports
 from schemas import InfrastructureData, InstanceData, LoadBalancerData
 
 # ==============================================================================
-# Internationalization (i18n) Service — PT-BR and EN Translations
+# PT-BR: Serviço de Internacionalização (i18n) — Traduções PT-BR e EN
+# EN: Internationalization (i18n) Service — PT-BR and EN Translations
 # ==============================================================================
 
 DOC_STRINGS = {
     "pt": {
+        # --- Common Terms ---
         "doc.common.client": "Cliente",
         "doc.common.generation_date": "Data de Geração",
         "doc.common.toc": "Sumário",
@@ -59,6 +67,7 @@ DOC_STRINGS = {
         "doc.common.lifetime": "Lifetime (s)",
         "doc.common.disk_gb": "DISCO (GB)",
         "doc.common.memory_gb": "MEMÓRIA (GB)",
+        # --- Headers ---
         "doc.headers.direction": "Direção",
         "doc.headers.protocol": "Protocolo",
         "doc.headers.ports": "Portas",
@@ -134,6 +143,7 @@ DOC_STRINGS = {
         "doc.headers.vpn_p2_lifetime": "Lifetime (s)",
         "doc.headers.responsible": "RESPONSÁVEL",
         "doc.headers.date": "DATA",
+        # --- Headings ---
         "doc.headings.architecture": "Arquitetura e Escopo",
         "doc.headings.architecture_drawing": "Desenho da Arquitetura",
         "doc.headings.infra_config": "Configuração de Infraestrutura",
@@ -202,9 +212,11 @@ DOC_STRINGS = {
         "doc.headers.action": "Ação",
         "doc.headers.condition": "Condição",
         "doc.headers.certificates": "Certificados",
+        # --- Firewall / LB binding table ---
         "doc.headers.firewall_name": "Nome do Firewall",
         "doc.headers.lb_name":       "Load Balancer",
         "doc.headers.lb_ip":         "Endereços IP",
+        # --- Certificate detail fields ---
         "doc.headers.cert_org":           "Organização",
         "doc.headers.cert_key_algo":      "Algoritmo da Chave",
         "doc.headers.cert_sign_algo":     "Algoritmo de Assinatura",
@@ -223,6 +235,7 @@ DOC_STRINGS = {
         "doc.messages.no_certificates_found": "Nenhum certificado configurado.",
         "doc.headings.responsible_desc": "Responsável pelo preenchimento da documentação:",
         "doc.headings.instance_connectivity": "Conectividade de Rede da(s) Instância(s)",
+        # --- Descriptions ---
         "doc.descriptions.instance_table": "A tabela a seguir detalha as configurações das instâncias computacionais no escopo.",
         "doc.descriptions.block_volume_table": "A tabela abaixo detalha os Block Volumes anexados às instâncias.",
         "doc.descriptions.backup_policy_table": "A tabela a seguir consolida as políticas de backup para todos os volumes (Boot e Block) das instâncias.",
@@ -232,6 +245,7 @@ DOC_STRINGS = {
         "doc.descriptions.backup_policy_details_4": "Essa política garante que, em caso de falhas, seja possível recuperar o volume rapidamente.",
         "doc.descriptions.volume_groups": "Volume Groups são conjuntos de volumes (Boot e Block) que podem ser gerenciados como uma única unidade, especialmente para backups consistentes e replicação entre regiões.",
         "doc.descriptions.vpn_config_warning": "Os parâmetros de criptografia customizados para este túnel divergem das recomendações padrão da Oracle.",
+        # --- Messages ---
         "doc.messages.no_rules_for": "Nenhuma regra configurada para este",
         "doc.messages.resource_not_provisioned": "Este recurso não está provisionado neste ambiente.",
         "doc.messages.no_vg_members": "Este Volume Group não possui membros.",
@@ -267,6 +281,7 @@ DOC_STRINGS = {
         "doc.headers.valid_to": "VÁLIDO ATÉ",
         "doc.headers.associated_listener": "ASSOCIADO AO LISTENER",
         "doc.common.none": "Nenhum",
+        # --- Document Types ---
         "doc.type.full_infra": "Documentação de Infraestrutura",        "doc.type.new_host": "Documentação de Novo Host",
         "doc.type.kubernetes": "Documentação de Kubernetes (OKE)",
         "doc.type.default": "Documentação Técnica",
@@ -276,6 +291,7 @@ DOC_STRINGS = {
         "doc.identifier.default": "Geral",
     },
     "en": {
+        # --- Common Terms ---
         "doc.common.client": "Client",
         "doc.common.generation_date": "Generation Date",
         "doc.common.toc": "Table of Contents",
@@ -306,6 +322,7 @@ DOC_STRINGS = {
         "doc.common.lifetime": "Lifetime (s)",
         "doc.common.disk_gb": "DISK (GB)",
         "doc.common.memory_gb": "MEMORY (GB)",
+        # --- Headers ---
         "doc.headers.direction": "Direction",
         "doc.headers.protocol": "Protocol",
         "doc.headers.ports": "Ports",
@@ -381,6 +398,7 @@ DOC_STRINGS = {
         "doc.headers.vpn_p2_lifetime": "Lifetime (s)",
         "doc.headers.responsible": "RESPONSIBLE",
         "doc.headers.date": "DATE",
+        # --- Headings ---
         "doc.headings.architecture": "Architecture and Scope",
         "doc.headings.architecture_drawing": "Architecture Drawing",
         "doc.headings.infra_config": "Infrastructure Configuration",
@@ -449,9 +467,11 @@ DOC_STRINGS = {
         "doc.headers.action": "Action",
         "doc.headers.condition": "Condition",
         "doc.headers.certificates": "Certificates",
+        # --- Firewall / LB binding table ---
         "doc.headers.firewall_name": "Firewall Name",
         "doc.headers.lb_name":       "Load Balancer",
         "doc.headers.lb_ip":         "IP Addresses",
+        # --- Certificate detail fields ---
         "doc.headers.cert_org":           "Organization",
         "doc.headers.cert_key_algo":      "Key Algorithm",
         "doc.headers.cert_sign_algo":     "Signature Algorithm",
@@ -470,6 +490,7 @@ DOC_STRINGS = {
         "doc.messages.no_certificates_found": "No certificates configured.",
         "doc.headings.responsible_desc": "Responsible for filling out the documentation:",
         "doc.headings.instance_connectivity": "Instance Network Connectivity",
+        # --- Descriptions ---
         "doc.descriptions.instance_table": "The following table details the configurations of the compute instances in scope.",
         "doc.descriptions.block_volume_table": "The table below details the Block Volumes attached to the instances.",
         "doc.descriptions.backup_policy_table": "The following table consolidates the backup policies for all volumes (Boot and Block) of the instances.",
@@ -479,6 +500,7 @@ DOC_STRINGS = {
         "doc.descriptions.backup_policy_details_4": "This policy ensures that in case of failures, the volume can be recovered quickly.",
         "doc.descriptions.volume_groups": "Volume Groups are sets of volumes (Boot and Block) that can be managed as a single unit, especially for consistent backups and cross-region replication.",
         "doc.descriptions.vpn_config_warning": "The custom encryption parameters for this tunnel differ from Oracle's standard recommendations.",
+        # --- Messages ---
         "doc.messages.no_rules_for": "No rules configured for this",
         "doc.messages.resource_not_provisioned": "This resource is not provisioned in this environment.",
         "doc.messages.no_vg_members": "This Volume Group has no members.",
@@ -514,6 +536,7 @@ DOC_STRINGS = {
         "doc.headers.valid_to": "VALID TO",
         "doc.headers.associated_listener": "ASSOCIATED LISTENER",
         "doc.common.none": "None",
+        # --- Document Types ---
         "doc.type.full_infra": "Infrastructure Documentation",
         "doc.type.new_host": "New Host Documentation",
         "doc.type.kubernetes": "Kubernetes (OKE) Documentation",
@@ -528,15 +551,19 @@ DOC_STRINGS = {
 
 def t(key: str, lang: str) -> str:
     """Fetches a translation string based on the key and language."""
+    # Default to 'pt' if the language is not supported
     lang_to_use = lang if lang in DOC_STRINGS else "pt"
     
+    # Get the translations for the chosen language
     strings = DOC_STRINGS.get(lang_to_use, {})
     
+    # Get the string, or fall back to 'pt' translation, or finally to the key itself
     return strings.get(key, DOC_STRINGS.get("pt", {}).get(key, key))
 
 
 # ==============================================================================
-# Table of Contents and Hyperlink Helpers
+# PT-BR: Auxiliares de Sumário e Hyperlinks
+# EN: Table of Contents and Hyperlink Helpers
 # ==============================================================================
 def _define_toc_styles(document: Document):
     """Creates and configures 'TOC 1-3' styles with correct indentation if they don't exist."""
@@ -645,7 +672,8 @@ def _add_and_bookmark_heading(
 
 
 # ==============================================================================
-# Table Styling Helpers
+# PT-BR: Auxiliares de Estilo de Tabelas
+# EN: Table Styling Helpers
 # ==============================================================================
 def _shade_cell(cell, color="4472C4"):
     """Applies a background color shading to a table cell."""
@@ -654,7 +682,12 @@ def _shade_cell(cell, color="4472C4"):
     cell._tc.get_or_add_tcPr().append(shading_elm)
 
 
-# State-to-row-background-color mapping (hex without '#').
+# PT-BR: Mapeamento de estado para cor de fundo de linha (hex sem '#').
+#        TERMINATED → vermelho claro (alerta crítico: recurso excluído).
+#        STOPPED/PARADO  → laranja claro (alerta: recurso parado).
+#        PENDING_DELETION → amarelo claro (alerta: remoção agendada).
+#        Outros estados ativos → sem cor (fundo padrão branco).
+# EN: State-to-row-background-color mapping (hex without '#').
 #     TERMINATED  → light red    (critical alert: resource deleted).
 #     STOPPED     → light orange (warning: resource stopped).
 #     PENDING_DELETION → light yellow (warning: scheduled for removal).
@@ -694,16 +727,22 @@ def _style_row_by_state(row, state_raw: str) -> None:
         return  # Active resources — no styling needed
 
     for cell in row.cells:
+        # PT-BR: Aplica fundo colorido na célula.
+        # EN: Apply colored background to the cell.
         if bg_color:
             _shade_cell(cell, bg_color)
 
+        # PT-BR: Aplica cor de texto e strikethrough em cada run da célula.
+        # EN: Apply text color and strikethrough to every run in the cell.
         for para in cell.paragraphs:
             for run in para.runs:
                 if text_color:
                     run.font.color.rgb = RGBColor.from_string(text_color)
                 if is_terminated:
                     run.font.strike = True
-            # If the paragraph has text but no runs (text set directly on cell),
+            # PT-BR: Se o parágrafo tem texto mas não tem runs (texto direto na cell),
+            #        limpa e re-adiciona com a formatação correta.
+            # EN: If the paragraph has text but no runs (text set directly on cell),
             #     clear and re-add with correct formatting.
             if para.text and not para.runs:
                 text = para.text
@@ -789,7 +828,8 @@ def _create_titled_key_value_table(
 
 
 # ==============================================================================
-# Content Formatting Helpers
+# PT-BR: Auxiliares de Formatação de Conteúdo
+# EN: Content Formatting Helpers
 # ==============================================================================
 def _add_network_resource_details(
     document: Document,
@@ -863,12 +903,15 @@ def _add_network_resource_details(
 
 
 # ==============================================================================
-# Document Section Generators
+# PT-BR: Geradores de Seções do Documento
+# EN: Document Section Generators
 # ==============================================================================
 def _add_instances_table(document: Document, instances: List[InstanceData], lang: str):
     """Adds the main summary table of compute instances to the document."""
     if not instances:
         return
+    # PT-BR: Rótulos de estado para instâncias no documento (normaliza TERMINATED).
+    # EN: State labels for instances in the document (normalizes TERMINATED).
     state_label_map = {
         "RUNNING":    "Ativo"         if lang == "pt" else "Running",
         "STOPPED":    "Parado"        if lang == "pt" else "Stopped",
@@ -902,6 +945,8 @@ def _add_instances_table(document: Document, instances: List[InstanceData], lang
         cells[6].text = data.os_name
         cells[7].text = data.private_ip
         cells[8].text = data.public_ip or "N/A"
+        # PT-BR: Aplica cor de alerta na linha com base no estado da instância.
+        # EN: Apply alert color to the row based on instance lifecycle state.
         _style_row_by_state(table.rows[-1], state_raw)
     document.add_paragraph()
 
@@ -958,6 +1003,8 @@ def _add_volume_and_backup_section(
     )
     document.add_paragraph(t("doc.descriptions.backup_policy_table", lang))
 
+    # PT-BR: Mapa de estado → label legível para as instâncias na tabela de backup.
+    # EN: State → readable label map for instances in the backup table.
     state_label_map = {
         "RUNNING":    "Ativo"    if lang == "pt" else "Running",
         "STOPPED":    "Parado"   if lang == "pt" else "Stopped",
@@ -986,6 +1033,8 @@ def _add_volume_and_backup_section(
             )
         else:
             boot_cells[3].text = instance.backup_policy_name
+        # PT-BR: Destaca linha se a instância estiver excluída ou parada.
+        # EN: Highlight row if the instance is terminated or stopped.
         _style_row_by_state(table.rows[-1], state_raw)
 
         for vol in instance.block_volumes:
@@ -1530,7 +1579,8 @@ def _add_responsible_section(
 
 
 # ==============================================================================
-# Main Orchestrator Function — Entry point for document generation
+# PT-BR: Função Orquestradora Principal — Ponto de entrada da geração de documentos
+# EN: Main Orchestrator Function — Entry point for document generation
 # ==============================================================================
 def _add_network_resource_details(
     document: Document,
@@ -1603,15 +1653,58 @@ def _add_network_resource_details(
     document.add_paragraph()
 
 
+def _insert_image_sections(
+    document,
+    sections: list,
+    position: str,
+    toc_list: list,
+    counters: dict,
+    lang: str,
+) -> None:
+    """Insert user-defined image sections into the document.
+
+    Each section: level-1 heading → optional text_above → images → optional text_below.
+    Only sections whose position matches the given argument are inserted.
+    """
+    for sec in sections:
+        if sec.get("position") != position:
+            continue
+        images = sec.get("images") or []
+        if not images:
+            continue
+        section_name = sec.get("name", "Anexo")
+        _add_and_bookmark_heading(document, section_name, 1, toc_list, counters)
+
+        text_above = (sec.get("text_above") or "").strip()
+        if text_above:
+            p = document.add_paragraph(text_above)
+            p.style.font.italic = True
+
+        for image_bytes in images:
+            try:
+                document.add_picture(BytesIO(image_bytes), width=Inches(6.0))
+                document.add_paragraph()
+            except Exception as e:
+                document.add_paragraph(f"{t('doc.messages.insert_image_error', lang)}: {e}")
+
+        text_below = (sec.get("text_below") or "").strip()
+        if text_below:
+            p = document.add_paragraph(text_below)
+            p.style.font.italic = True
+
+
+
 def generate_documentation(
     doc_type: str,
     infra_data: InfrastructureData,
     responsible_name: str,
-    architecture_image_bytes_list: Optional[List[bytes]] = None,
-    antivirus_image_bytes_list: Optional[List[bytes]] = None,
+    image_sections: Optional[List[dict]] = None,
     lang: str = "pt",
 ) -> str:
-    """Main function to generate a .docx file based on infrastructure data."""
+    """Main function to generate a .docx file.
+
+    image_sections: list of dicts {name, position ("start"|"end"), images: List[bytes]}
+    """
     document = Document()
     style = document.styles["Normal"]
     font = style.font
@@ -1654,15 +1747,8 @@ def generate_documentation(
     toc_placeholder = document.add_paragraph(t("doc.common.toc", lang), style="Heading 1")
     document.add_page_break()
 
-    if architecture_image_bytes_list:
-        _add_and_bookmark_heading(document, t("doc.headings.architecture", lang), 1, headings_for_toc, numbering_counters)
-        _add_and_bookmark_heading(document, t("doc.headings.architecture_drawing", lang), 2, headings_for_toc, numbering_counters)
-        for image_bytes in architecture_image_bytes_list:
-            try:
-                document.add_picture(BytesIO(image_bytes), width=Inches(6.0))
-                document.add_paragraph()
-            except Exception as e:
-                document.add_paragraph(f"{t('doc.messages.insert_image_error', lang)}: {e}")
+    # Insert "start" image sections before infra content
+    _insert_image_sections(document, image_sections or [], "start", headings_for_toc, numbering_counters, lang)
 
     if doc_type == "kubernetes":
         cluster_vcn_ids = {cluster.vcn_id for cluster in infra_data.kubernetes_clusters}
@@ -1679,6 +1765,7 @@ def generate_documentation(
         _add_vcn_details_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
 
     elif doc_type == "waf_report":
+        # 1. Filtra apenas Políticas Ativas
         active_waf_policies = []
         if hasattr(infra_data, "waf_policies") and infra_data.waf_policies:
             active_waf_policies = [p for p in infra_data.waf_policies if getattr(p, "lifecycle_state", "").upper() == "ACTIVE"]
@@ -1689,7 +1776,9 @@ def generate_documentation(
         target_vcn_names = set()
         target_lbs = []
 
-        # Iterate over ALL policy integrations (support for multiple LBs per policy).
+        # 2. Extrai LBs e referências de rede atreladas aos Firewalls
+        # PT-BR: Itera sobre TODAS as integrações da política (suporte a múltiplos LBs por política).
+        # EN: Iterate over ALL policy integrations (support for multiple LBs per policy).
         for policy in active_waf_policies:
             all_integrations = getattr(policy, "integrations", []) or []
             if not all_integrations and getattr(policy, "integration", None):
@@ -1713,6 +1802,7 @@ def generate_documentation(
                 if getattr(net, "vcn_name", "N/A") != "N/A":
                     target_vcn_names.add(net.vcn_name)
 
+        # 3. Filtra as VCNs rigorosamente
         filtered_vcns = []
         if target_subnet_ids or target_subnet_names or target_vcn_names:
             for vcn in getattr(infra_data, "vcns", []):
@@ -1749,6 +1839,7 @@ def generate_documentation(
                     filtered_vcn.lpgs = []
                     filtered_vcns.append(filtered_vcn)
 
+        # 4. Payload estritamente isolado para a numeração sair perfeita
         filtered_infra_data = infra_data.copy(deep=True)
         filtered_infra_data.instances = []
         filtered_infra_data.drgs = []
@@ -1759,11 +1850,14 @@ def generate_documentation(
         filtered_infra_data.load_balancers = target_lbs
         filtered_infra_data.vcns = filtered_vcns
         filtered_infra_data.waf_policies = active_waf_policies
-        # Preserve certificates in the filtered payload — the deep copy already
+        # PT-BR: Preserva os certificados no payload filtrado — o deep copy já os
+        #        carrega de infra_data, então apenas garantimos que não foram zerados.
+        # EN: Preserve certificates in the filtered payload — the deep copy already
         #     carries them from infra_data, so we just ensure they weren't cleared.
         if not getattr(filtered_infra_data, "certificates", None):
             filtered_infra_data.certificates = getattr(infra_data, "certificates", []) or []
 
+        # 5. MÁGICA DA ORDENAÇÃO NATIVA (Sem recriar layouts)
         if target_lbs or filtered_vcns:
             _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
             if filtered_vcns:
@@ -1776,8 +1870,14 @@ def generate_documentation(
             else:
                 document.add_paragraph(t("doc.messages.no_lb_association", lang))
 
+        # PT-BR: Seção WAF
+        # EN: WAF section
         _add_waf_report_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
 
+        # PT-BR: Seção de Certificados — exibe ACTIVE e PENDING_DELETION,
+        #        idêntico ao fluxo full_infra.
+        # EN: Certificates section — shows ACTIVE and PENDING_DELETION,
+        #     identical to the full_infra flow.
         waf_active_certs = [
             c for c in (getattr(filtered_infra_data, "certificates", []) or [])
             if isinstance(c, dict)
@@ -1839,6 +1939,10 @@ def generate_documentation(
             _add_load_balancers_section(document, infra_data, headings_for_toc, numbering_counters, lang)
         _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters, lang)
 
+        # PT-BR: Adiciona seção WAF + Certificados na documentação de infraestrutura
+        #        completa quando esses recursos existirem no compartimento coletado.
+        # EN: Adds the WAF + Certificates section to the full infrastructure document
+        #     when those resources exist in the collected compartment.
         _add_waf_report_section(
             document, infra_data, headings_for_toc, numbering_counters, lang
         )
@@ -1857,18 +1961,12 @@ def generate_documentation(
                 document, infra_data, headings_for_toc, numbering_counters, lang
             )
 
-    if antivirus_image_bytes_list:
-        _add_and_bookmark_heading(document, t("doc.headings.additional_configs", lang), 1, headings_for_toc, numbering_counters)
-        _add_and_bookmark_heading(document, t("doc.headings.antivirus_config", lang), 2, headings_for_toc, numbering_counters)
-        for image_bytes in antivirus_image_bytes_list:
-            try:
-                document.add_picture(BytesIO(image_bytes), width=Inches(6.0))
-                document.add_paragraph()
-            except Exception as e:
-                document.add_paragraph(f"{t('doc.messages.insert_image_error', lang)}: {e}")
+    # Insert "end" image sections after infra content, before responsible
+    _insert_image_sections(document, image_sections or [], "end", headings_for_toc, numbering_counters, lang)
 
     _add_responsible_section(document, headings_for_toc, numbering_counters, responsible_name, lang)
 
+    # --- Finalize Document (Generate TOC and Save) ---
     for text, bookmark, level in reversed(headings_for_toc):
         style_name = f"TOC {level}" if f"TOC {level}" in document.styles else "TOC 1"
         p = document.add_paragraph(style=style_name)
@@ -1907,6 +2005,7 @@ def _add_waf_report_section(
             2, toc_list, counters,
         )
 
+        # ── 1. Visão Geral ────────────────────────────────────────────────────
         _add_and_bookmark_heading(document, t("doc.headings.overview", lang), 3, toc_list, counters)
         _create_titled_key_value_table(document, t("doc.headings.general_info", lang), {
             t("doc.common.name",        lang): policy.display_name,
@@ -1918,7 +2017,10 @@ def _add_waf_report_section(
         })
 
         # ── 2. Firewalls e Load Balancers Vinculados (tabela única) ─────────────
-        # A single table consolidates the Firewall and its bound LB — each row
+        # PT-BR: Uma única tabela consolida o Firewall e o LB vinculado — cada linha
+        #        representa um binding completo (Firewall → LB), eliminando a
+        #        duplicação que existia entre as antigas seções 2.1.2 e 2.1.3.
+        # EN: A single table consolidates the Firewall and its bound LB — each row
         #     represents a complete binding (Firewall → LB), removing the duplication
         #     that existed between the former sections 2.1.2 and 2.1.3.
         _add_and_bookmark_heading(document, t("doc.headings.waf_firewall", lang), 3, toc_list, counters)
@@ -1931,7 +2033,10 @@ def _add_waf_report_section(
             document.add_paragraph("Esta política WAF não possui Web Application Firewall associado.")
             continue
 
-        # Binding table without OCIDs — already documented in sections
+        # PT-BR: Tabela de binding sem OCIDs — eles já estão documentados nas seções
+        #        1.2.x (Informações Gerais do LB) e 2.1.1 (Visão Geral da política).
+        #        Colunas: Firewall | LB Vinculado | IPs | Estado | Enforcement
+        # EN:  Binding table without OCIDs — already documented in sections
         #      1.2.x (LB General Info) and 2.1.1 (Policy Overview).
         #      Columns: Firewall | Bound LB | IPs | State | Enforcement
         binding_headers = [
@@ -1974,8 +2079,10 @@ def _add_waf_report_section(
 
         document.add_paragraph()
 
+        # ── 4. Proteção WAF ───────────────────────────────────────────────────
         _add_and_bookmark_heading(document, t("doc.headings.waf_protection_config", lang), 3, toc_list, counters)
 
+        # Actions
         _add_and_bookmark_heading(document, t("doc.headings.waf_actions", lang), 4, toc_list, counters)
         if policy.actions:
             headers = [t("doc.common.name", lang), t("doc.common.type", lang), t("doc.common.code", lang)]
@@ -1990,6 +2097,7 @@ def _add_waf_report_section(
         else:
             document.add_paragraph(t("doc.messages.no_config_found", lang))
 
+        # Access Control
         _add_and_bookmark_heading(document, t("doc.headings.waf_access_control", lang), 4, toc_list, counters)
         if policy.access_control_rules:
             headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.condition", lang)]
@@ -2004,6 +2112,7 @@ def _add_waf_report_section(
         else:
             document.add_paragraph(t("doc.messages.no_config_found", lang))
 
+        # Rate Limiting
         _add_and_bookmark_heading(document, t("doc.headings.waf_rate_limiting", lang), 4, toc_list, counters)
         if policy.rate_limiting_rules:
             headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.condition", lang)]
@@ -2018,6 +2127,7 @@ def _add_waf_report_section(
         else:
             document.add_paragraph(t("doc.messages.no_config_found", lang))
 
+        # Protection Rules
         _add_and_bookmark_heading(document, t("doc.headings.waf_protection_rules", lang), 4, toc_list, counters)
         if policy.protection_rules:
             headers = [t("doc.common.name", lang), t("doc.headers.action", lang), t("doc.headers.capabilities", lang)]
@@ -2045,6 +2155,7 @@ def _render_single_load_balancer(
 ):
     """Renders the standard details of a Load Balancer."""
 
+    # ── General info ──────────────────────────────────────────────────────────
     ip_strings = [
         f"{ip.ip_address} ({t('doc.common.public', lang) if ip.is_public else t('doc.common.private', lang)})"
         for ip in lb.ip_addresses
@@ -2057,6 +2168,7 @@ def _render_single_load_balancer(
     }
     _create_titled_key_value_table(document, t("doc.headings.lb_general_info", lang), lb_info)
 
+    # ── WAF Integration (if present) ──────────────────────────────────────────
     if getattr(lb, "waf_firewall_name", None) and getattr(lb, "waf_policy_name", None):
         waf_info = {
             t("doc.headings.waf_firewall",     lang): lb.waf_firewall_name,
@@ -2066,6 +2178,7 @@ def _render_single_load_balancer(
         }
         _create_titled_key_value_table(document, t("doc.headings.waf_integration", lang), waf_info)
 
+    # ── Hostnames virtuais ────────────────────────────────────────────────────
     if getattr(lb, "hostnames", None):
         _add_and_bookmark_heading(
             document, "Hostnames Virtuais", base_level + 1, toc_list, counters
@@ -2080,10 +2193,12 @@ def _render_single_load_balancer(
         else:
             document.add_paragraph(t("doc.messages.no_resources_found", lang))
 
+    # ── Listeners ─────────────────────────────────────────────────────────────
     _add_and_bookmark_heading(
         document, t("doc.headings.lb_listeners", lang), base_level + 1, toc_list, counters
     )
     if lb.listeners:
+        # Build cert OCID → name map from infra_data
         certs_list   = list(getattr(infra_data, "certificates", []) or [])
         cert_id_map  = {c.get("id"): c.get("name") for c in certs_list if isinstance(c, dict) and c.get("id")}
         has_ssl      = any(
@@ -2117,6 +2232,7 @@ def _render_single_load_balancer(
         document.add_paragraph(t("doc.messages.no_listener_found", lang))
     document.add_paragraph()
 
+    # ── Backend Sets ─────────────────────────────────────────────────────────
     _add_and_bookmark_heading(
         document, t("doc.headings.lb_backend_sets", lang), base_level + 1, toc_list, counters
     )
@@ -2177,7 +2293,10 @@ def _add_compartment_certificates_section(
         document.add_paragraph(t("doc.messages.no_certificates_found", lang))
         return
 
-    # Build OCID → display_name index from all LBs in the compartment
+    # PT-BR: Monta índice OCID → display_name de todos os Load Balancers do compartimento
+    #        para resolver o nome do recurso vinculado ao certificado.
+    #        Usa lb.id diretamente — campo agora presente em LoadBalancerData.
+    # EN: Build OCID → display_name index from all LBs in the compartment
     #     to resolve the name of the resource associated with the certificate.
     #     Uses lb.id directly — field now present in LoadBalancerData.
     lb_ocid_to_name = {
@@ -2210,8 +2329,12 @@ def _add_compartment_certificates_section(
 
         _create_titled_key_value_table(document, t("doc.headings.general_info", lang), cert_info)
 
+        # PT-BR: Colore as linhas da tabela KV com base no estado do certificado.
+        # EN: Color the KV table rows based on certificate state.
         _style_cert_kv_table_by_state(document, state)
 
+        # PT-BR: SANs — tabela separada; aplica cor diretamente no objeto da tabela.
+        # EN: SANs — separate table; apply color directly on the table object.
         sans = cert.get("subject_alternative_names", []) or []
         if sans:
             headers_san = ["SAN Type", "Value"]
@@ -2222,10 +2345,15 @@ def _add_compartment_certificates_section(
                     cells = table_san.add_row().cells
                     cells[0].text = san.get("san_type", san.get("type", "N/A"))
                     cells[1].text = san.get("value", "N/A")
+                    # PT-BR: Aplica cor em cada linha da tabela SAN.
+                    # EN: Apply color to each SAN row.
                     _style_row_by_state(table_san.rows[-1], state)
             document.add_paragraph()
 
-        # Certificate associations with other resources.
+        # PT-BR: Associações do certificado com outros recursos.
+        #        O campo display_name da associação é o nome da associação (ex: "certificate-loadbalancer-xxx"),
+        #        não o nome do recurso vinculado. Por isso, o lookup no índice de LBs é a fonte primária.
+        # EN: Certificate associations with other resources.
         #     The display_name field of the association is the association name (e.g. "certificate-loadbalancer-xxx"),
         #     not the name of the bound resource. The LB index lookup is therefore the primary source.
         if assoc:
@@ -2239,7 +2367,11 @@ def _add_compartment_certificates_section(
             _style_table_headers(table_a, headers_a)
             for a in assoc:
                 if isinstance(a, dict):
-                    # Name resolution order for the bound resource:
+                    # PT-BR: Ordem de resolução do nome do recurso vinculado:
+                    #        1. Lookup pelo OCID do recurso no índice de LBs (fonte mais confiável)
+                    #        2. Fallback para display_name (nome da associação, menos legível)
+                    #        3. Último recurso: últimos 12 chars do OCID
+                    # EN: Name resolution order for the bound resource:
                     #     1. Lookup by resource OCID in the LB index (most reliable source)
                     #     2. Fallback to display_name (association name, less readable)
                     #     3. Last resort: last 12 chars of the OCID

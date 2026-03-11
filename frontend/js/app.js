@@ -1,5 +1,9 @@
 // =============================================================================
-// OCI DocGen frontend application.
+// PT-BR: Aplicação frontend do OCI DocGen.
+//        Gerencia o fluxo completo da interface: seleção de região/compartimento,
+//        inicio de coletas assíncronas, exibição do resumo de infraestrutura
+//        e geração/download de documentos .docx.
+// EN: OCI DocGen frontend application.
 //     Manages the complete UI flow: region/compartment selection,
 //     async collection start, infrastructure summary display,
 //     and .docx document generation/download.
@@ -8,11 +12,17 @@
 document.addEventListener('DOMContentLoaded', () => {
 
   // ===========================================================================
+  // PT-BR: Configurações e Constantes
+  // EN: Settings and Constants
+  // ===========================================================================
   const API_BASE_URL = 'http://127.0.0.1:8000'; // Uncomment for local development
   //const API_BASE_URL = ''; // Uncomment for production
 
   // ===========================================================================
-  const mainAppContainer = document.getElementById('main-app-container');
+  // PT-BR: Seletores de Elementos do DOM
+  // EN: DOM Element Selectors
+  // ===========================================================================
+  const mainAppContainer = document.getElementById('app-shell');
   const regionContainer = document.getElementById('region-select-container');
   const docTypeContainer = document.getElementById('doctype-select-container');
   const compartmentContainer = document.getElementById('compartment-select-container');
@@ -26,12 +36,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressTimer = document.getElementById('progress-timer');
   const progressBarContainer = document.querySelector('.progress-bar-container');
   const responsibleNameInput = document.getElementById('responsible-name-input');
-  const architectureUpload = document.getElementById('architecture-upload');
-  const antivirusUpload = document.getElementById('antivirus-upload');
-  const architectureFileList = document.getElementById('architecture-file-list');
-  const antivirusFileList = document.getElementById('antivirus-file-list');
-  const architectureUploadGroup = document.getElementById('architecture-upload-group');
-  const antivirusUploadGroup = document.getElementById('antivirus-upload-group');
+  const imageSectionsList = document.getElementById('image-sections-list');
+  const addImageSectionBtn = document.getElementById('add-image-section-btn');
+  const docPreviewBtn = document.getElementById('doc-preview-btn');
+  const previewOverlay = document.getElementById('preview-overlay');
+  const previewModalBody = document.getElementById('preview-modal-body');
+  const previewModalClose = document.getElementById('preview-modal-close');
+  const lightboxOverlay = document.getElementById('lightbox-overlay');
+  const lightboxImg = document.getElementById('lightbox-img');
+  const lightboxClose = document.getElementById('lightbox-close');
   const toastContainer = document.getElementById('toast-container');
   const progressText = document.getElementById('progress-text');
   const progressBar = document.getElementById('progress-bar');
@@ -40,23 +53,59 @@ document.addEventListener('DOMContentLoaded', () => {
   const newDocBtn = document.getElementById('new-doc-btn');
   const languageSelector = document.getElementById('language-selector');
 
+  // Auth + navigation elements
+  const appShell           = document.getElementById('app-shell');
+  const sidebarHistory     = document.getElementById('sidebar-history');
+  const authModal          = document.getElementById('auth-modal');
+  const authModalCloseBtn  = document.getElementById('auth-modal-close-btn');
+  const authTabs           = document.querySelectorAll('.auth-tab');
+  const authFormLogin      = document.getElementById('auth-form-login');
+  const authFormRegister   = document.getElementById('auth-form-register');
+  const loginUsernameInput = document.getElementById('login-username');
+  const loginPasswordInput = document.getElementById('login-password');
+  const loginSubmitBtn     = document.getElementById('login-submit-btn');
+  const loginError         = document.getElementById('login-error');
+  const registerUsernameInput = document.getElementById('register-username');
+  const registerPasswordInput = document.getElementById('register-password');
+  const registerSubmitBtn  = document.getElementById('register-submit-btn');
+  const registerError      = document.getElementById('register-error');
+  const sidebarGuest       = document.getElementById('sidebar-guest');
+  const sidebarUser        = document.getElementById('sidebar-user');
+  const sidebarLoginBtn    = document.getElementById('sidebar-login-btn');
+  const sidebarLogoutBtn   = document.getElementById('sidebar-logout-btn');
+  const sidebarUserName    = document.getElementById('sidebar-user-name');
+  const sidebarUserAvatar  = document.getElementById('sidebar-user-avatar');
+  const navGenerator       = document.getElementById('nav-generator');
+  const navMetrics         = document.getElementById('nav-metrics');
+  const viewGenerator      = document.getElementById('view-generator');
+  const viewMetrics        = document.getElementById('view-metrics');
+  const metricsTitle       = document.getElementById('metrics-title');
+  const metricsGuestNotice = document.getElementById('metrics-guest-notice');
+  const metricsLoginCta    = document.getElementById('metrics-login-cta');
+
+  // ===========================================================================
+  // PT-BR: Definições de Ícones SVG inline
+  // EN: Inline SVG Icon Definitions
   // ===========================================================================
   const ICONS = {
-    WAF: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg>`,
-    INSTANCES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`,
-    INSTANCE_DATA: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>`,
-    BLOCK_VOLUMES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>`,
-    CONNECTIVITY: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>`,
-    VOLUME_GROUPS: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line><path d="M5 22v-5"></path><path d="M19 22v-5"></path></svg>`,
-    VCNS: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>`,
-    OKE: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle><line x1="12" y1="2" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="22"></line><line x1="22" y1="12" x2="19" y2="12"></line><line x1="5" y1="12" x2="2" y2="12"></line><line x1="19.07" y1="4.93" x2="16.24" y2="7.76"></line><line x1="7.76" y1="16.24" x2="4.93" y2="19.07"></line><line x1="19.07" y1="19.07" x2="16.24" y2="16.24"></line><line x1="7.76" y1="7.76" x2="4.93" y2="4.93"></line></svg>`,
-    LB: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 21a9 9 0 0 0 9-9 9 9 0 0 0-9-9 9 9 0 0 0-9 9 9 9 0 0 0 9 9Z"></path><path d="M8 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M15 12a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1Z"></path><path d="M12 2v2"></path><path d="M12 8v2"></path></svg>`,
-    ROUTING: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M2 12h20M7 7l5 5-5 5M17 7l-5 5 5 5"></path></svg>`,
-    VPN: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`,
+    WAF:          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>`,
+    INSTANCES:    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
+    INSTANCE_DATA:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>`,
+    BLOCK_VOLUMES:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>`,
+    VOLUME_GROUPS:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
+    VCNS:         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="9" width="4" height="4" rx="1"/><rect x="18" y="9" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="10" y="18" width="4" height="4" rx="1"/><line x1="6" y1="11" x2="10" y2="11"/><line x1="14" y1="11" x2="18" y2="11"/><line x1="12" y1="6" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="18"/></svg>`,
+    OKE:          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="7.05" y2="7.05"/><line x1="16.95" y1="16.95" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="7.05" y2="16.95"/><line x1="16.95" y1="7.05" x2="19.78" y2="4.22"/></svg>`,
+    LB:           `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><line x1="7" y1="6" x2="10" y2="6"/><line x1="14" y1="6" x2="17" y2="6"/><line x1="5" y1="8" x2="12" y2="16"/><line x1="19" y1="8" x2="12" y2="16"/></svg>`,
+    CONNECTIVITY: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>`,
+    ROUTING:      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>`,
+    VPN:          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>`,
     CERTIFICATES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="12" cy="8" r="6"/><path d="m9 8 2 2 4-4"/><path d="M6.5 14.5 5 20l7-2 7 2-1.5-5.5"/></svg>`,
   };
 
 
+  // ===========================================================================
+  // PT-BR: Helper para normalizar labels de estado de ciclo de vida
+  // EN: Helper to normalize lifecycle state display labels
   // ===========================================================================
   function getStateLabel(state) {
     const s = (state || '').toUpperCase();
@@ -73,14 +122,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
+  // PT-BR: Estado Global da Aplicação
+  // EN: Global Application State
+  // ===========================================================================
   let selectedRegion = null;
   let selectedDocType = null;
   let selectedCompartmentId = null;
   let selectedCompartmentName = null;
   let selectedInstances = {};
   let allInfrastructureData = {};
-  let architectureImageFiles = [];
-  let antivirusImageFiles = [];
+  // imageSections: [{id, name, position, files:[File]}]
+  let imageSections = [];
+  let sectionIdCounter = 0;
   let collectionStartTime = 0;
   let progressTimerInterval = null;
   let pollingIntervalId = null;
@@ -91,7 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let allInstancesData = [];
 
   // ===========================================================================
-  // Internationalization (i18n) Functions
+  // PT-BR: Funções de Internacionalização (i18n)
+  // EN: Internationalization (i18n) Functions
   // ===========================================================================
 
   const loadTranslations = async (lang) => {
@@ -163,8 +217,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     populateDocTypes();
     if (selectedDocType) {
-        const docTypeKey = `doc_type_${selectedDocType.replace('_', '-')}`;
-        const docTypeName = t(docTypeKey);
+        const docTypeNameMap = {
+          full_infra: t('doc_type_full'),
+          new_host:   t('doc_type_new'),
+          kubernetes: t('doc_type_k8s'),
+          waf_report: t('doc_type_waf'),
+        };
+        const docTypeName = docTypeNameMap[selectedDocType] || selectedDocType;
         const selectedContent = docTypeContainer.querySelector('.selected-item-display');
         selectedContent.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg><span class="item-text">${docTypeName}</span>`;
         selectedContent.classList.remove('placeholder');
@@ -221,7 +280,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // User Interface Functions
+  // PT-BR: Funções de Interface do Usuário
+  // EN: User Interface Functions
   // ===========================================================================
 
   function showToast(message, type = 'success') {
@@ -298,13 +358,12 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedCompartmentName = null;
     selectedInstances = {};
     allInfrastructureData = {};
-    architectureImageFiles = [];
-    antivirusImageFiles = [];
+    imageSections = [];
+    sectionIdCounter = 0;
 
     detailsContainer.classList.add('hidden');
     summaryContainer.innerHTML = '';
-    architectureFileList.innerHTML = '';
-    antivirusFileList.innerHTML = '';
+    imageSectionsList.innerHTML = '';
     responsibleNameInput.value = '';
 
     initializeApp();
@@ -519,7 +578,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
-  // Backend API Call Functions
+  // PT-BR: Funções de Chamadas à API Backend
+  // EN: Backend API Call Functions
   // ===========================================================================
 
   /**
@@ -681,7 +741,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // Asynchronous Flow and Data Collection
+  // PT-BR: Fluxo Assíncrono e Coleta de Dados
+  // EN: Asynchronous Flow and Data Collection
   // ===========================================================================
 
   /**
@@ -804,6 +865,7 @@ document.addEventListener('DOMContentLoaded', () => {
           allInfrastructureData = data.result;
           summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
           detailsContainer.classList.remove('hidden');
+          addToHistory(selectedDocType || 'doc', selectedCompartmentName, selectedRegion);
           setTimeout(hideProgress, 1200);
 
         } else if (data.status === 'FAILURE') {
@@ -824,7 +886,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // Infrastructure Summary and Document Generation
+  // PT-BR: Geração de Resumo de Infraestrutura e Documentos
+  // EN: Infrastructure Summary and Document Generation
   // ===========================================================================
 
   /**
@@ -833,7 +896,9 @@ document.addEventListener('DOMContentLoaded', () => {
    * @returns {string} The generated HTML string.
    */
   // ===========================================================================
-  // Builds WAF policy HTML for the full infrastructure summary.
+  // PT-BR: Constrói o HTML das políticas WAF para o resumo de infraestrutura completa.
+  //        Separado para evitar backticks aninhados em template literals.
+  // EN: Builds WAF policy HTML for the full infrastructure summary.
   //     Extracted to avoid nested backtick issues inside template literals.
   // ===========================================================================
   function buildWafInfraSectionHtml(policies, createTable) {
@@ -845,6 +910,8 @@ document.addEventListener('DOMContentLoaded', () => {
       let wafCardContent   = '';
 
       if (!isDeleted) {
+        // PT-BR: Itera sobre todos os firewalls vinculados (integrations) com fallback para integration singular.
+        // EN: Iterate over all bound firewalls (integrations) with fallback to singular integration.
         const integrations = (policy.integrations && policy.integrations.length > 0)
           ? policy.integrations
           : (policy.integration ? [policy.integration] : []);
@@ -862,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         var fwHtml = fwRows.length > 0
-          ? '<h5 class="waf-sub-title">Firewall</h5>' + createTable(['Nome do Firewall', 'Backend', 'Load Balancer', 'Estado'], fwRows)
+          ? '<h5 class="waf-sub-title">Firewall</h5>' + createTable([t('waf.table.firewall_name'), 'Backend', 'Load Balancer', t('waf.table.attach_state')], fwRows)
           : '';
 
         const aclCount   = (policy.access_control_rules  || []).length;
@@ -911,10 +978,13 @@ document.addEventListener('DOMContentLoaded', () => {
       } = data;
 
       if (isWafFlow && waf_policies?.length > 0) {
+        // Filter out DELETED policies before any processing
         const activePolicies = waf_policies.filter(p =>
             p.lifecycle_state?.toUpperCase() !== 'DELETED'
         );
         activePolicies.forEach(policy => {
+            // PT-BR: Itera sobre todos os firewalls da política para popular todos os LBs.
+            // EN: Iterate over all policy firewalls to populate all LBs.
             const integrations = (policy.integrations && policy.integrations.length > 0)
                 ? policy.integrations
                 : (policy.integration ? [policy.integration] : []);
@@ -925,6 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         });
+        // Replace in-place so downstream rendering uses filtered list
         waf_policies.length = 0;
         activePolicies.forEach(p => waf_policies.push(p));
       }
@@ -1031,7 +1102,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="info-group full-width">
                 <label>${t('summary.lb.ip_addresses')}</label>
                 <div class="info-value">
-                  <ul class="clean-list">${lb.ip_addresses?.map(ip => `<li>${ip.ip_address} (${ip.is_public ? t('summary.public') : t('summary.private')})</li>`).join('') || '<li>N/A</li>'}</ul>
+                  <ul class="clean-list">${lb.ip_addresses?.filter(ip => ip && ip.ip_address).map(ip => `<li>${ip.ip_address} (${ip.is_public ? t('summary.public') : t('summary.private')})</li>`).join('') || '<li>N/A</li>'}</ul>
                 </div>
               </div>
               <div class="info-group full-width">
@@ -1046,7 +1117,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <h5 class="subheader">Listeners</h5>
             ${(() => {
               const hasSSL = lb.listeners?.some(l => l.protocol === 'HTTPS' && (l.ssl_certificate_ids || []).length > 0);
-              const headers = [t('summary.name'), t('summary.protocol'), t('summary.port'), t('summary.lb.default_backend_set'), ...(hasSSL ? ['Certificado TLS'] : [])];
+              const headers = [t('summary.name'), t('summary.protocol'), t('summary.port'), t('summary.lb.default_backend_set'), ...(hasSSL ? [t('lb.header.tls_cert')] : [])];
               const rows = lb.listeners?.map(l => {
                 const certNames = (l.ssl_certificate_ids || []).map(ocid => {
                   const match = (certificates || []).find(c => c.id === ocid);
@@ -1211,7 +1282,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isDeleted) {
             wafCardContent = `<p class="no-data-message">${t('doc.messages.resource_deleted_info') || 'Recurso deletado.'}</p>`;
         } else {
-            // Use `integrations` (all firewalls) with fallback to singular `integration`.
+            // PT-BR: Usa `integrations` (todos os firewalls) com fallback para `integration` singular.
+            // EN: Use `integrations` (all firewalls) with fallback to singular `integration`.
             const integrations = (policy.integrations && policy.integrations.length > 0)
                 ? policy.integrations
                 : (policy.integration ? [policy.integration] : []);
@@ -1228,18 +1300,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             const firewallTable = firewallRows.length > 0
-                ? createTable(['Nome do Firewall', 'Attachment State', 'Enforcement Point', 'Enforcement Point Name'], firewallRows)
+                ? createTable([t('waf.table.firewall_name'), t('waf.table.attach_state'), t('waf.table.enforce_point'), t('waf.table.enforce_name')], firewallRows)
                 : `<p class="no-data-message">Nenhum Web Application Firewall associado.</p>`;
 
             wafCardContent = `
                 <div class="content-block">
-                    <h5 class="subheader">Web Application Firewall Attachments</h5>
+                    <h5 class="subheader">${t('waf.label.attach_title')}</h5>
                     ${firewallTable}
                 </div>
                 <div class="grid-container">
-                    <div class="info-group"><label>Regras de Proteção</label><div class="info-value">${policy.protection_rules?.length || 0}</div></div>
-                    <div class="info-group"><label>Controle de Acesso</label><div class="info-value">${policy.access_control_rules?.length || 0}</div></div>
-                    <div class="info-group"><label>Rate Limiting</label><div class="info-value">${policy.rate_limiting_rules?.length > 0 ? t('summary.yes') : t('summary.no')}</div></div>
+                    <div class="info-group"><label>${t('waf.label.protection')}</label><div class="info-value">${policy.protection_rules?.length || 0}</div></div>
+                    <div class="info-group"><label>${t('waf.label.access_ctrl')}</label><div class="info-value">${policy.access_control_rules?.length || 0}</div></div>
+                    <div class="info-group"><label>${t('waf.label.rate_limit')}</label><div class="info-value">${policy.rate_limiting_rules?.length > 0 ? t('summary.yes') : t('summary.no')}</div></div>
                 </div>`;
         }
 
@@ -1267,6 +1339,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     let title = t(titleKey, { name: selectedCompartmentName });
     
+    // ── Certificate Cards: full visual redesign ────────────────────────────
     const renderCertificates = (certs) => {
       if (!certs || certs.length === 0) {
         return `<p class="no-data-message">Nenhum certificado encontrado no compartimento.</p>`;
@@ -1278,6 +1351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPending = state === 'PENDING_DELETION';
         const isDeleted = state === 'DELETED';
 
+        // ── Validity period from nested current_version_summary ──────────
         const cv = cert.current_version_summary || {};
         const validFrom  = cv.valid_not_before || 'N/A';
         const validUntil = cv.valid_not_after  || cert.valid_not_after || 'N/A';
@@ -1287,31 +1361,33 @@ document.addEventListener('DOMContentLoaded', () => {
           daysUntilExpiry = Math.ceil((new Date(validUntil) - todayMs) / 86_400_000);
         }
 
+        // ── Status chip ──────────────────────────────────────────────────
         let statusChip = '';
         if (isActive) {
           if (daysUntilExpiry !== null && daysUntilExpiry <= 30) {
             statusChip = `<span class="cert-status-chip cert-expiring">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              Expirando em ${daysUntilExpiry}d
+              ${t('cert.status.expiring', {days: daysUntilExpiry})}
             </span>`;
           } else {
             statusChip = `<span class="cert-status-chip cert-active">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              Ativo
+              ${t('cert.status.active')}
             </span>`;
           }
         } else if (isPending) {
           statusChip = `<span class="cert-status-chip cert-pending">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            Pendente Exclusão
+            ${t('cert.status.pending')}
           </span>`;
         } else if (isDeleted) {
           statusChip = `<span class="cert-status-chip cert-deleted">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-            Deletado
+            ${t('cert.status.deleted')}
           </span>`;
         }
 
+        // ── Expiry bar ───────────────────────────────────────────────────
         let expiryBarHtml = '';
         if (validFrom !== 'N/A' && validUntil !== 'N/A') {
           const totalMs  = new Date(validUntil) - new Date(validFrom);
@@ -1323,10 +1399,11 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="cert-expiry-bar-track">
                 <div class="cert-expiry-bar-fill" style="width:${pct.toFixed(1)}%;background:${barColor};"></div>
               </div>
-              <span class="cert-expiry-bar-label">${validFrom} → ${validUntil}${daysUntilExpiry !== null ? ` (${daysUntilExpiry > 0 ? daysUntilExpiry + 'd restantes' : 'EXPIRADO'})` : ''}</span>
+              <span class="cert-expiry-bar-label">${validFrom} → ${validUntil}${daysUntilExpiry !== null ? ` (${daysUntilExpiry > 0 ? t('cert.expiry.remaining', {days: daysUntilExpiry}) : t('cert.status.expired')})` : ''}</span>
             </div>`;
         }
 
+        // ── Subject ──────────────────────────────────────────────────────
         const subject = cert.subject || cert.subject_info || {};
         const cn   = subject.common_name            || 'N/A';
         const org  = subject.organization           || 'N/A';
@@ -1334,6 +1411,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const st   = subject.state_or_province_name || subject.state    || 'N/A';
         const ctry = subject.country                || 'N/A';
 
+        // Subtitle under cert name: Common Name → first SAN → expiry date → ''
         const rawSansForSubtitle = cert.subject_alternative_names || [];
         const firstSan = Array.isArray(rawSansForSubtitle) && rawSansForSubtitle.length > 0
           ? (rawSansForSubtitle[0].value || rawSansForSubtitle[0])
@@ -1343,6 +1421,7 @@ document.addEventListener('DOMContentLoaded', () => {
           : (validUntil !== 'N/A') ? `Expira: ${validUntil}`
           : '';
 
+        // ── SANs ─────────────────────────────────────────────────────────
         let sansHtml = '';
         const rawSans = cert.subject_alternative_names;
         if (Array.isArray(rawSans) && rawSans.length > 0) {
@@ -1358,11 +1437,13 @@ document.addEventListener('DOMContentLoaded', () => {
           ).join('');
         }
 
+        // ── Version details ──────────────────────────────────────────────
         const cvStages = Array.isArray(cv.stages) ? cv.stages : (cv.stages ? [cv.stages] : []);
         const stagePills = cvStages.map(s => `<span class="cert-stage-pill">${s}</span>`).join('');
         const serialNum = cv.serial_number   || 'N/A';
         const versionNo = cv.version_number  != null ? cv.version_number : 'N/A';
 
+        // ── Associations ─────────────────────────────────────────────────
         const assocs = cert.associations || [];
         let assocsHtml = '';
         if (assocs.length > 0) {
@@ -1376,21 +1457,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return `
               <div class="cert-assoc-card">
                 <div class="cert-assoc-header">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cert-assoc-icon"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cert-assoc-icon"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                   <span class="cert-assoc-name">${aName}</span>
                   <span class="status-badge status-${aStatusClass}">${aState}</span>
                 </div>
                 <div class="cert-assoc-meta">
                   <span class="cert-assoc-type-badge">${aType}</span>
-                  <span class="cert-assoc-date">Criado: ${aCreated}</span>
+                  <span class="cert-assoc-date">${t('cert.label.created_short')} ${aCreated}</span>
                 </div>
                 <div class="cert-assoc-id"><span class="code-text">${aResId}</span></div>
               </div>`;
           }).join('');
         } else {
-          assocsHtml = `<p class="no-data-message" style="margin:0;padding:8px 0;">Nenhuma associação encontrada.</p>`;
+          assocsHtml = `<p class="no-data-message" style="margin:0;padding:8px 0;">${t('cert.label.no_assocs')}</p>`;
         }
 
+        // ── Card border color based on state ─────────────────────────────
         const cardBorderColor = isActive
           ? (daysUntilExpiry !== null && daysUntilExpiry <= 30 ? '#f97316' : '#22c55e')
           : isPending ? '#f59e0b'
@@ -1423,30 +1505,30 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="cert-grid">
                 <div class="cert-section">
                   <h5 class="cert-section-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-                    Identidade do Certificado
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+                    ${t('cert.label.identity')}
                   </h5>
                   <div class="cert-kv-list">
                     <div class="cert-kv-row"><span class="cert-kv-label">Common Name</span><span class="cert-kv-value text-highlight">${cn}</span></div>
-                    <div class="cert-kv-row"><span class="cert-kv-label">Organização</span><span class="cert-kv-value">${org}</span></div>
-                    <div class="cert-kv-row"><span class="cert-kv-label">Localidade</span><span class="cert-kv-value">${loc}</span></div>
-                    <div class="cert-kv-row"><span class="cert-kv-label">Estado/Prov.</span><span class="cert-kv-value">${st}</span></div>
-                    <div class="cert-kv-row"><span class="cert-kv-label">País</span><span class="cert-kv-value">${ctry}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.org')}</span><span class="cert-kv-value">${org}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.locality')}</span><span class="cert-kv-value">${loc}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.state')}</span><span class="cert-kv-value">${st}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.country')}</span><span class="cert-kv-value">${ctry}</span></div>
                   </div>
                 </div>
 
                 <div class="cert-section">
                   <h5 class="cert-section-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                    Detalhes Técnicos
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    ${t('cert.label.technical')}
                   </h5>
                   <div class="cert-kv-list">
-                    <div class="cert-kv-row"><span class="cert-kv-label">Algoritmo Chave</span><span class="cert-kv-value">${cert.key_algorithm || 'N/A'}</span></div>
-                    <div class="cert-kv-row"><span class="cert-kv-label">Algoritmo Assin.</span><span class="cert-kv-value">${cert.signature_algorithm || 'N/A'}</span></div>
-                    <div class="cert-kv-row"><span class="cert-kv-label">Versão</span><span class="cert-kv-value">${versionNo}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.key_algo')}</span><span class="cert-kv-value">${cert.key_algorithm || 'N/A'}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.sign_algo')}</span><span class="cert-kv-value">${cert.signature_algorithm || 'N/A'}</span></div>
+                    <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.version')}</span><span class="cert-kv-value">${versionNo}</span></div>
                     <div class="cert-kv-row"><span class="cert-kv-label">Stages</span><span class="cert-kv-value">${stagePills || 'N/A'}</span></div>
-                    <div class="cert-kv-row"><span class="cert-kv-label">Criado em</span><span class="cert-kv-value">${cert.time_created || 'N/A'}</span></div>
-                    ${isPending ? `<div class="cert-kv-row cert-deletion-row"><span class="cert-kv-label">⚠ Deleção agendada</span><span class="cert-kv-value" style="color:#f59e0b;font-weight:600;">${cert.time_of_deletion || 'N/A'}</span></div>` : ''}
+                    <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.created')}</span><span class="cert-kv-value">${cert.time_created || 'N/A'}</span></div>
+                    ${isPending ? `<div class="cert-kv-row cert-deletion-row"><span class="cert-kv-label">${t('cert.label.deletion')}</span><span class="cert-kv-value" style="color:#f59e0b;font-weight:600;">${cert.time_of_deletion || 'N/A'}</span></div>` : ''}
                   </div>
                 </div>
               </div>
@@ -1454,11 +1536,11 @@ document.addEventListener('DOMContentLoaded', () => {
               <!-- Serial number full-width -->
               <div class="cert-section cert-section-full">
                 <h5 class="cert-section-title">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                  Identificadores
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                  ${t('cert.label.identifiers')}
                 </h5>
                 <div class="cert-kv-list">
-                  <div class="cert-kv-row"><span class="cert-kv-label">Número de Série</span><span class="cert-kv-value"><span class="code-text">${serialNum}</span></span></div>
+                  <div class="cert-kv-row"><span class="cert-kv-label">${t('cert.label.serial')}</span><span class="cert-kv-value"><span class="code-text">${serialNum}</span></span></div>
                   <div class="cert-kv-row"><span class="cert-kv-label">OCID</span><span class="cert-kv-value"><span class="code-text">${cert.id}</span></span></div>
                 </div>
               </div>
@@ -1466,19 +1548,19 @@ document.addEventListener('DOMContentLoaded', () => {
               <!-- SANs -->
               <div class="cert-section cert-section-full">
                 <h5 class="cert-section-title">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-                  Nomes Alternativos (SANs)
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+                  ${t('cert.label.sans')}
                 </h5>
                 <div class="cert-sans-wrap">
-                  ${sansHtml || '<span style="color:var(--text-secondary);font-size:13px">Nenhum SAN configurado.</span>'}
+                  ${sansHtml || `<span style="color:var(--text-secondary);font-size:13px">${t('cert.label.no_sans')}</span>`}
                 </div>
               </div>
 
               <!-- Associations -->
               <div class="cert-section cert-section-full">
                 <h5 class="cert-section-title">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                  Associações de Recursos (${assocs.length})
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  ${t('cert.label.associations')} (${assocs.length})
                 </h5>
                 <div class="cert-assoc-list">${assocsHtml}</div>
               </div>
@@ -1512,7 +1594,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('doc.messages.no_network_found')}</p>`}</div></fieldset>
       `;
     } else { // Full Infra
-      // Active WAF: merges policies into the full infrastructure summary.
+      // PT-BR: WAF ativo: integra políticas ao resumo de infraestrutura completa.
+      // EN: Active WAF: merges policies into the full infrastructure summary.
       const activeWafPolicies = (waf_policies || []).filter(p =>
           p.lifecycle_state?.toUpperCase() !== 'DELETED'
       );
@@ -1521,7 +1604,10 @@ document.addEventListener('DOMContentLoaded', () => {
           ['ACTIVE','PENDING_DELETION'].includes((c.lifecycle_state || '').toUpperCase())
       ).length > 0;
 
-      // If WAF policies exist, inject WAF and Certificates sections.
+      // PT-BR: Se há políticas WAF no compartimento, injeta a seção de WAF e Certificados.
+      //        Reutiliza `wafHtml` — já calculado acima com o UX idêntico ao WAF Report
+      //        (tabela de Firewall com Attachment State, grid de regras, etc.).
+      // EN: If WAF policies exist, inject WAF and Certificates sections.
       //     Reuses `wafHtml` — already computed above with the same UX as the WAF Report
       //     (Firewall table with Attachment State, rules grid, etc.).
       const wafInfraSection  = hasWaf  ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.WAF + t('summary.waf_policies') + '</legend><div class="instances-container">' + wafHtml + '</div></fieldset>' : '';
@@ -1553,7 +1639,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="info-group full-width"><label>${t('summary.instance.os')}</label><div class="info-value">${data.os_name}</div></div>
           <div class="info-group"><label>${t('summary.instance.private_ip')}</label><div class="info-value">${data.private_ip}</div></div>
           <div class="info-group"><label>${t('summary.instance.public_ip')}</label><div class="info-value">${data.public_ip || 'N/A'}</div></div>
-          <div class="info-group full-width"><label>${t('summary.instance.backup_policy')}</label><div class="info-value">${data.backup_policy_name}</div></div>
+          <div class="info-group full-width"><label>${t('summary.instance.backup_policy')}</label><div class="info-value">${data.backup_policy_name === 'Nenhuma política associada' ? t('instance.no_backup_policy') : data.backup_policy_name}</div></div>
         </div>
       </fieldset>
       <hr class="fieldset-divider">
@@ -1638,13 +1724,26 @@ document.addEventListener('DOMContentLoaded', () => {
         lang: currentLanguage
       };
 
+      // Attach image section metadata to payload
+      payload.image_sections = imageSections.map(sec => ({
+        name: sec.name,
+        position: sec.position,
+        file_count: sec.files.length,
+        text_above: sec.text_above || '',
+        text_below: sec.text_below || '',
+      }));
       formData.append('json_data', JSON.stringify(payload));
-      architectureImageFiles.forEach(file => formData.append('architecture_files', file));
-      antivirusImageFiles.forEach(file => formData.append('antivirus_files', file));
+      // Flat file list — server slices by file_count per section
+      imageSections.forEach(sec =>
+        sec.files.forEach(file => formData.append('section_images', file))
+      );
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `${API_BASE_URL}/api/generate-document`, true);
       xhr.responseType = 'blob';
+      // Attach session token so backend logs generation to the right user (optional)
+      const _authHdr = getAuthHeaders();
+      if (_authHdr.Authorization) xhr.setRequestHeader('Authorization', _authHdr.Authorization);
       xhr.onloadend = () => toggleLoading(false);
       xhr.onerror = () => showToast(t('toast.network_error'), 'error');
 
@@ -1685,72 +1784,929 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  function updateFileListUI(fileArray, fileListContainer) {
-    fileListContainer.innerHTML = '';
-    if (fileArray.length === 0) return;
 
-    fileArray.forEach((file, index) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-list-item';
-        fileItem.innerHTML = `
-          <img src="${e.target.result}" alt="${file.name}" class="file-list-preview">
-          <span class="file-list-name">${file.name}</span>
-          <button class="file-list-delete-btn" data-index="${index}" title="Remover arquivo">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-          </button>`;
-        fileListContainer.appendChild(fileItem);
-      };
-      reader.readAsDataURL(file);
+  // ===========================================================================
+  // Image Section Manager
+  // ===========================================================================
+
+  function renderImageSections() {
+    imageSectionsList.innerHTML = '';
+    imageSections.forEach((sec, idx) => {
+      const card = buildSectionCard(sec, idx);
+      imageSectionsList.appendChild(card);
+    });
+    updateOrderBadges();
+  }
+
+  function updateOrderBadges() {
+    imageSectionsList.querySelectorAll('.img-section-order-badge').forEach((b, i) => {
+      b.textContent = i + 1;
     });
   }
 
-  function handleFileSelect(event, fileArray, fileListContainer) {
-    const newFiles = event.target.files;
-    if (!newFiles || newFiles.length === 0) return;
-    Array.from(newFiles).forEach(file => fileArray.push(file));
-    updateFileListUI(fileArray, fileListContainer);
-    event.target.value = '';
+  function addImageSection(name, position) {
+    const id = ++sectionIdCounter;
+    imageSections.push({
+      id,
+      name: name || t('attachments_section_default_name'),
+      position: position || 'end',
+      files: [],
+      text_above: '',
+      text_below: '',
+    });
+    renderImageSections();
+    // Focus the name input of the new card
+    const cards = imageSectionsList.querySelectorAll('.img-section-card');
+    const last = cards[cards.length - 1];
+    if (last) last.querySelector('.img-section-name-input')?.focus();
   }
 
-  async function handlePaste(event, fileArray, fileListContainer) {
-    event.preventDefault();
-    const items = event.clipboardData.items;
-    for (const item of items) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
-        const blob = item.getAsFile();
-        const timestamp = new Date().getTime();
-        const extension = blob.type.split('/')[1];
-        const fileName = `colado_${timestamp}.${extension}`;
-        const imageFile = new File([blob], fileName, {
-          type: blob.type
-        });
-        fileArray.push(imageFile);
+  function buildSectionCard(sec, idx) {
+    const card = document.createElement('div');
+    card.className = 'img-section-card';
+    card.dataset.secId = sec.id;
+
+    // ── Drag handle + name input + position toggle + remove ──
+    const header = document.createElement('div');
+    header.className = 'img-section-header';
+
+    const handle = document.createElement('div');
+    handle.className = 'img-section-drag-handle';
+    handle.title = t('attachments_drag_hint');
+    handle.draggable = false; // drag is on the card, not here
+    handle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg>`;
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'img-section-name-input';
+    nameInput.placeholder = t('attachments_section_name_placeholder');
+    nameInput.value = sec.name;
+    nameInput.addEventListener('input', () => {
+      const s = imageSections.find(x => x.id === sec.id);
+      if (s) s.name = nameInput.value;
+    });
+
+    const posToggle = document.createElement('div');
+    posToggle.className = 'img-section-position';
+    ['start', 'end'].forEach(pos => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = pos === 'start' ? t('attachments_position_start') : t('attachments_position_end');
+      btn.dataset.pos = pos;
+      if (sec.position === pos) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        const s = imageSections.find(x => x.id === sec.id);
+        if (s) s.position = pos;
+        posToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.pos === pos));
+      });
+      posToggle.appendChild(btn);
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'img-section-remove-btn';
+    removeBtn.title = t('attachments_remove_section');
+    removeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+    removeBtn.addEventListener('click', () => {
+      imageSections = imageSections.filter(x => x.id !== sec.id);
+      renderImageSections();
+    });
+
+    header.append(handle, nameInput, posToggle, removeBtn);
+
+    // ── Order badge (shows position in list) ──
+    const badge = document.createElement('div');
+    badge.className = 'img-section-order-badge';
+    badge.textContent = idx + 1;
+
+    // ── Drop / paste zone ──
+    const zone = document.createElement('div');
+    zone.className = 'img-section-dropzone';
+    zone.tabIndex = 0;
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/png,image/jpeg,image/gif,image/webp';
+    fileInput.multiple = true;
+    zone.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>`;
+    const zoneLabel = document.createElement('span');
+    zoneLabel.textContent = t('attachments_drop_label');
+    const zoneHint = document.createElement('small');
+    zoneHint.textContent = t('attachments_drop_hint');
+    zone.append(fileInput, zoneLabel, zoneHint);
+
+    // Click zone → open file picker
+    zone.addEventListener('click', (e) => { if (e.target !== fileInput) fileInput.click(); });
+
+    // File picker change
+    fileInput.addEventListener('change', () => {
+      addFilesToSection(sec.id, Array.from(fileInput.files));
+      fileInput.value = '';
+    });
+
+    // Paste — only images, show error otherwise
+    zone.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const items = Array.from(e.clipboardData?.items || []);
+      const imgItems = items.filter(i => i.kind === 'file' && i.type.startsWith('image/'));
+      if (items.some(i => i.kind === 'file') && imgItems.length === 0) {
+        showToast(t('toast.paste_not_image'), 'error');
+        return;
+      }
+      const files = imgItems.map(i => {
+        const blob = i.getAsFile();
+        return new File([blob], `colado_${Date.now()}.${blob.type.split('/')[1]}`, { type: blob.type });
+      });
+      addFilesToSection(sec.id, files);
+    });
+
+    // Drag-and-drop files INTO zone
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover-file'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover-file'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('dragover-file');
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      if (e.dataTransfer.files.length && !files.length) {
+        showToast(t('toast.paste_not_image'), 'error');
+        return;
+      }
+      addFilesToSection(sec.id, files);
+    });
+
+    // ── Text above/below fields ──
+    const textsEl = document.createElement('div');
+    textsEl.className = 'img-section-texts';
+
+    const buildTextRow = (labelKey, stateKey) => {
+      const row = document.createElement('div');
+      row.className = 'img-section-text-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'img-section-text-label';
+      lbl.textContent = t(labelKey);
+      const ta = document.createElement('textarea');
+      ta.className = 'img-section-textarea';
+      ta.placeholder = t('attachments_text_placeholder');
+      ta.value = sec[stateKey] || '';
+      ta.rows = 2;
+      ta.addEventListener('input', () => {
+        const s = imageSections.find(x => x.id === sec.id);
+        if (s) s[stateKey] = ta.value;
+      });
+      // Prevent drag-to-reorder while typing in textarea
+      ta.addEventListener('mousedown', e => e.stopPropagation());
+      row.append(lbl, ta);
+      return row;
+    };
+    textsEl.append(
+      buildTextRow('attachments_text_above_label', 'text_above'),
+      buildTextRow('attachments_text_below_label', 'text_below'),
+    );
+
+    // ── Thumbnail grid ──
+    const thumbsEl = document.createElement('div');
+    thumbsEl.className = 'img-section-thumbs';
+    sec.files.forEach((file, fi) => {
+      thumbsEl.appendChild(buildThumb(file, fi, sec.id));
+    });
+
+    // ── Drag-to-reorder card ──
+    card.draggable = true;
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(sec.id));
+      setTimeout(() => card.classList.add('dragging'), 0);
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', (e) => {
+      // Only react to card-drag events (not file-drops handled by zone)
+      if (e.dataTransfer.types.includes('text/plain')) {
+        e.preventDefault();
+        card.classList.add('drag-over');
+      }
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', (e) => {
+      if (!e.dataTransfer.types.includes('text/plain')) return;
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      const draggedId = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      if (draggedId === sec.id) return;
+      const fromIdx = imageSections.findIndex(x => x.id === draggedId);
+      const toIdx   = imageSections.findIndex(x => x.id === sec.id);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const [moved] = imageSections.splice(fromIdx, 1);
+      imageSections.splice(toIdx, 0, moved);
+      renderImageSections();
+    });
+
+    card.append(badge, header, textsEl, zone);
+    if (sec.files.length) card.appendChild(thumbsEl);
+    return card;
+  }
+
+  function buildThumb(file, fi, secId) {
+    const wrap = document.createElement('div');
+    wrap.className = 'img-thumb-wrap';
+    const img = document.createElement('img');
+    const reader = new FileReader();
+    reader.onload = e => {
+      img.src = e.target.result;
+      img.dataset.fullSrc = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    img.alt = file.name;
+    img.title = t('attachments_click_to_preview');
+    img.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openLightbox(img.dataset.fullSrc, file.name);
+    });
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'img-thumb-remove';
+    rm.title = t('attachments_remove_image');
+    rm.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+    rm.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const s = imageSections.find(x => x.id === secId);
+      if (s) { s.files.splice(fi, 1); renderImageSections(); }
+    });
+    wrap.append(img, rm);
+    return wrap;
+  }
+
+  function addFilesToSection(secId, files) {
+    if (!files.length) return;
+    const sec = imageSections.find(x => x.id === secId);
+    if (!sec) return;
+    files.forEach(f => sec.files.push(f));
+    renderImageSections();
+  }
+
+
+  // ===========================================================================
+  // Lightbox
+  // ===========================================================================
+
+  function openLightbox(src, alt) {
+    lightboxImg.src = src;
+    lightboxImg.alt = alt || '';
+    lightboxOverlay.classList.add('visible');
+    document.addEventListener('keydown', closeLightboxOnEsc);
+  }
+
+  function closeLightbox() {
+    lightboxOverlay.classList.remove('visible');
+    document.removeEventListener('keydown', closeLightboxOnEsc);
+  }
+
+  function closeLightboxOnEsc(e) {
+    if (e.key === 'Escape') closeLightbox();
+  }
+
+  // ===========================================================================
+  // Document Preview
+  // ===========================================================================
+
+  function openDocPreview() {
+    previewModalBody.innerHTML = '';
+
+    const docTypeLabels = {
+      full_infra:  t('doc_type_full'),
+      new_host:    t('doc_type_new'),
+      kubernetes:  t('doc_type_k8s'),
+      waf_report:  t('doc_type_waf'),
+    };
+    const docTitle = docTypeLabels[selectedDocType] || selectedDocType;
+    const clientName = selectedCompartmentName || 'N/A';
+    const today = new Date().toLocaleDateString('pt-BR');
+
+    const startSections = imageSections.filter(s => s.position === 'start');
+    const endSections   = imageSections.filter(s => s.position === 'end');
+
+    // ── Page 1: Cover ──────────────────────────────────────────────────────
+    const coverPage = buildPreviewPage('Capa', 1);
+    coverPage.innerHTML += `
+      <div class="preview-doc-title">${docTitle}</div>
+      <div class="preview-doc-meta">${t('doc.common.client') || 'Cliente'}: ${clientName}</div>
+      <div class="preview-doc-meta">${t('doc.common.generation_date') || 'Data'}: ${today}</div>
+    `;
+    previewModalBody.appendChild(coverPage);
+
+    // ── Page 2: TOC ─────────────────────────────────────────────────────────
+    const tocPage = buildPreviewPage('Sumário', 2);
+    const tocDiv = document.createElement('div');
+    const tocTitle = document.createElement('div');
+    tocTitle.className = 'preview-toc-title';
+    tocTitle.textContent = t('preview_toc') || 'Sumário';
+    tocDiv.appendChild(tocTitle);
+
+    const allSections = buildPreviewSectionList(startSections, endSections);
+    let pageNum = 3;
+    allSections.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'preview-toc-entry level-' + entry.level;
+      const dots = document.createElement('span');
+      dots.className = 'preview-toc-dots';
+      const pg = document.createElement('span');
+      pg.className = 'preview-toc-page';
+      pg.textContent = pageNum;
+      if (entry.level === 1) pageNum++;
+      row.innerHTML = entry.name;
+      row.append(dots, pg);
+      tocDiv.appendChild(row);
+    });
+    tocPage.appendChild(tocDiv);
+    previewModalBody.appendChild(tocPage);
+
+    // ── Content pages ────────────────────────────────────────────────────────
+    let contentPageNum = 3;
+
+    // Start image sections
+    startSections.forEach(sec => {
+      previewModalBody.appendChild(buildImageSectionPage(sec, contentPageNum++));
+    });
+
+    // Infra content
+    previewModalBody.appendChild(buildInfraPage(contentPageNum));
+    contentPageNum++;
+
+    // End image sections
+    endSections.forEach(sec => {
+      previewModalBody.appendChild(buildImageSectionPage(sec, contentPageNum++));
+    });
+
+    // Responsible
+    const respPage = buildPreviewPage(t('preview_responsible') || 'Responsável', contentPageNum);
+    const respSection = document.createElement('div');
+    respSection.className = 'preview-section';
+    const respH = document.createElement('div');
+    respH.className = 'preview-section-heading';
+    respH.innerHTML = `${t('preview_responsible') || 'Responsável'}<span class="preview-badge responsible">${t('attachments_position_end') || 'Final'}</span>`;
+    respSection.appendChild(respH);
+    const responsibleName = document.getElementById('responsible-name-input')?.value?.trim();
+    if (responsibleName) {
+      const rLine = document.createElement('div');
+      rLine.className = 'preview-subsection';
+      rLine.textContent = responsibleName;
+      respSection.appendChild(rLine);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'preview-text-line medium';
+      respSection.appendChild(placeholder);
+    }
+    respPage.appendChild(respSection);
+    previewModalBody.appendChild(respPage);
+
+    previewOverlay.classList.add('visible');
+    document.addEventListener('keydown', closePreviewOnEsc);
+  }
+
+  function closeDocPreview() {
+    previewOverlay.classList.remove('visible');
+    document.removeEventListener('keydown', closePreviewOnEsc);
+  }
+
+  function closePreviewOnEsc(e) {
+    if (e.key === 'Escape') closeDocPreview();
+  }
+
+  function buildPreviewPage(label, num) {
+    const page = document.createElement('div');
+    page.className = 'preview-page';
+    const pg = document.createElement('span');
+    pg.className = 'preview-page-label';
+    pg.textContent = `${t('preview_page') || 'Pág.'} ${num}`;
+    page.appendChild(pg);
+    return page;
+  }
+
+  function buildPreviewSectionList(startSecs, endSecs) {
+    const entries = [];
+    const push = (name, level) => entries.push({ name, level });
+
+    startSecs.forEach(s => push(s.name, 1));
+
+    // Infer infra section names from collected data
+    const data = allInfrastructureData;
+    if (data.vcns?.length)               push(t('preview_section_vcn') || 'Rede Virtual (VCN)', 1);
+    if (data.instances?.length)          push(t('preview_section_compute') || 'Instâncias Compute', 1);
+    if (data.load_balancers?.length)     push(t('preview_section_lb') || 'Load Balancers', 1);
+    if (data.kubernetes_clusters?.length) push(t('preview_section_oke') || 'Kubernetes (OKE)', 1);
+    if (data.waf_policies?.length)       push(t('preview_section_waf') || 'WAF', 1);
+    if (data.certificates?.length)       push(t('doc.headers.certificates') || 'Certificados', 1);
+
+    endSecs.forEach(s => push(s.name, 1));
+    push(t('preview_responsible') || 'Responsável', 1);
+    return entries;
+  }
+
+  function buildInfraPage(pageNum) {
+    const page = buildPreviewPage(t('preview_infra') || 'Infraestrutura', pageNum);
+    const data = allInfrastructureData;
+
+    const sections = [];
+    if (data.vcns?.length)
+      sections.push({ label: t('preview_section_vcn') || 'Redes Virtuais (VCN)', badge: 'infra', count: data.vcns.length, unit: 'VCN' });
+    if (data.instances?.length)
+      sections.push({ label: t('preview_section_compute') || 'Instâncias Compute', badge: 'infra', count: data.instances.length, unit: t('summary.compute_instances') || 'instância(s)' });
+    if (data.load_balancers?.length)
+      sections.push({ label: t('preview_section_lb') || 'Load Balancers', badge: 'infra', count: data.load_balancers.length, unit: 'LB' });
+    if (data.kubernetes_clusters?.length)
+      sections.push({ label: t('preview_section_oke') || 'Kubernetes (OKE)', badge: 'infra', count: data.kubernetes_clusters.length, unit: 'cluster(s)' });
+    if (data.waf_policies?.length)
+      sections.push({ label: t('preview_section_waf') || 'WAF', badge: 'infra', count: data.waf_policies.length, unit: 'política(s)' });
+    if (data.certificates?.length)
+      sections.push({ label: t('doc.headers.certificates') || 'Certificados', badge: 'infra', count: data.certificates.length, unit: 'cert(s)' });
+
+    if (!sections.length) {
+      const empty = document.createElement('div');
+      empty.className = 'preview-subsection';
+      empty.textContent = t('preview_no_data') || 'Nenhum dado de infraestrutura coletado.';
+      page.appendChild(empty);
+      return page;
+    }
+
+    sections.forEach(s => {
+      const sec = document.createElement('div');
+      sec.className = 'preview-section';
+      const h = document.createElement('div');
+      h.className = 'preview-section-heading';
+      h.innerHTML = `${s.label}<span class="preview-badge ${s.badge}">${s.count} ${s.unit}</span>`;
+      sec.appendChild(h);
+      for (let i = 0; i < Math.min(s.count, 3); i++) {
+        const line = document.createElement('div');
+        line.className = 'preview-text-line ' + ['full','medium','short'][i % 3];
+        sec.appendChild(line);
+      }
+      page.appendChild(sec);
+    });
+
+    return page;
+  }
+
+  function buildImageSectionPage(sec, pageNum) {
+    const page = buildPreviewPage(sec.name, pageNum);
+    const secDiv = document.createElement('div');
+    secDiv.className = 'preview-section';
+
+    const h = document.createElement('div');
+    h.className = 'preview-section-heading';
+    const badgeClass = sec.position === 'start' ? 'start' : 'end';
+    const badgeLabel = sec.position === 'start' ? t('attachments_position_start') : t('attachments_position_end');
+    const _nameSpan = document.createElement('span');
+    _nameSpan.textContent = sec.name;
+    const _badgeEl = document.createElement('span');
+    _badgeEl.className = `preview-badge ${badgeClass}`;
+    _badgeEl.textContent = badgeLabel;
+    h.append(_nameSpan, _badgeEl);
+    secDiv.appendChild(h);
+
+    if ((sec.text_above || '').trim()) {
+      const ta = document.createElement('div');
+      ta.className = 'preview-text-block';
+      ta.textContent = sec.text_above.trim();
+      secDiv.appendChild(ta);
+    }
+
+    const count = sec.files.length;
+    if (count === 0) {
+      const ph = document.createElement('div');
+      ph.className = 'preview-image-placeholder';
+      ph.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> ${t('preview_no_images') || 'Nenhuma imagem adicionada'}`;
+      secDiv.appendChild(ph);
+    } else {
+      for (let i = 0; i < count; i++) {
+        const file = sec.files[i];
+        const ph = document.createElement('div');
+        ph.className = 'preview-image-placeholder';
+        ph.style.height = '80px';
+        ph.style.position = 'relative';
+        ph.style.overflow = 'hidden';
+        ph.style.padding = '0';
+
+        // Show real thumbnail in preview
+        const thumbImg = document.createElement('img');
+        thumbImg.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;';
+        const fr = new FileReader();
+        fr.onload = e => { thumbImg.src = e.target.result; };
+        fr.readAsDataURL(file);
+        ph.appendChild(thumbImg);
+        secDiv.appendChild(ph);
       }
     }
-    updateFileListUI(fileArray, fileListContainer);
+
+    if ((sec.text_below || '').trim()) {
+      const tb = document.createElement('div');
+      tb.className = 'preview-text-block';
+      tb.textContent = sec.text_below.trim();
+      secDiv.appendChild(tb);
+    }
+
+    page.appendChild(secDiv);
+    return page;
   }
 
-  function handleFileDelete(event, fileArray, fileListContainer) {
-    const deleteButton = event.target.closest('.file-list-delete-btn');
-    if (!deleteButton) return;
 
-    const indexToRemove = parseInt(deleteButton.dataset.index, 10);
-    if (!isNaN(indexToRemove)) {
-      fileArray.splice(indexToRemove, 1);
-      updateFileListUI(fileArray, fileListContainer);
+  // ===========================================================================
+  // Auth System (login optional — app always accessible without login)
+  // ===========================================================================
+  const SESSION_KEY = 'oci-docgen-session';   // { token, username, user_id }
+  const HISTORY_KEY = 'oci-docgen-history';
+
+  let currentUser = null;  // null = anonymous, object = logged-in user
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function getAuthHeaders() {
+    const session = _loadSession();
+    if (!session) return {};
+    return { 'Authorization': `Bearer ${session.token}` };
+  }
+
+  function _loadSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch(e) { return null; }
+  }
+
+  function _saveSession(data) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+    currentUser = data;
+  }
+
+  function _clearSession() {
+    localStorage.removeItem(SESSION_KEY);
+    currentUser = null;
+  }
+
+  // ── Auth modal open / close ──────────────────────────────────────────────────
+
+  function openAuthModal(tab = 'login') {
+    if (!authModal) return;
+    authModal.classList.remove('hidden');
+    switchAuthTab(tab);
+    setTimeout(() => loginUsernameInput && loginUsernameInput.focus(), 80);
+  }
+
+  function closeAuthModal() {
+    if (!authModal) return;
+    authModal.classList.add('hidden');
+    clearAuthErrors();
+  }
+
+  function clearAuthErrors() {
+    if (loginError)    { loginError.classList.add('hidden');    loginError.textContent = ''; }
+    if (registerError) { registerError.classList.add('hidden'); registerError.textContent = ''; }
+  }
+
+  function switchAuthTab(tab) {
+    authTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    authFormLogin.classList.toggle('hidden', tab !== 'login');
+    authFormRegister.classList.toggle('hidden', tab !== 'register');
+  }
+
+  // ── Sidebar state ────────────────────────────────────────────────────────────
+
+  function updateSidebarAuthState() {
+    if (currentUser) {
+      sidebarGuest && sidebarGuest.classList.add('hidden');
+      sidebarUser  && sidebarUser.classList.remove('hidden');
+      if (sidebarUserName)   sidebarUserName.textContent   = currentUser.username;
+      if (sidebarUserAvatar) sidebarUserAvatar.textContent = currentUser.username[0].toUpperCase();
+    } else {
+      sidebarGuest && sidebarGuest.classList.remove('hidden');
+      sidebarUser  && sidebarUser.classList.add('hidden');
     }
   }
 
-  const initializeApp = async () => {
-    const savedLang = localStorage.getItem('oci-docgen-lang') || 'pt';
-    await setLanguage(savedLang);
-    fetchRegions();
+  // ── API calls ────────────────────────────────────────────────────────────────
+
+  async function apiLogin(username, password) {
+    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Erro ao fazer login.');
+    return data;
+  }
+
+  async function apiRegister(username, password) {
+    const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Erro ao criar conta.');
+    return data;
+  }
+
+  async function apiLogout() {
+    const session = _loadSession();
+    if (!session) return;
+    try {
+      await fetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.token}` },
+      });
+    } catch(e) { /* silent */ }
+  }
+
+  // ── Login submit ─────────────────────────────────────────────────────────────
+
+  if (loginSubmitBtn) {
+    loginSubmitBtn.addEventListener('click', async () => {
+      const username = loginUsernameInput.value.trim();
+      const password = loginPasswordInput.value;
+      if (!username || !password) {
+        loginError.textContent = 'Preencha usuário e senha.';
+        loginError.classList.remove('hidden');
+        return;
+      }
+      loginSubmitBtn.disabled = true;
+      loginSubmitBtn.textContent = 'Entrando…';
+      try {
+        const data = await apiLogin(username, password);
+        _saveSession(data);
+        loginPasswordInput.value = '';
+        closeAuthModal();
+        updateSidebarAuthState();
+        showToast(`Bem-vindo, ${data.username}!`, 'success');
+        // Refresh metrics if that view is open
+        if (!viewMetrics.classList.contains('hidden')) loadMetrics();
+      } catch(err) {
+        loginError.textContent = err.message;
+        loginError.classList.remove('hidden');
+      } finally {
+        loginSubmitBtn.disabled = false;
+        loginSubmitBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg> Entrar`;
+      }
+    });
+    loginPasswordInput && loginPasswordInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') loginSubmitBtn.click();
+    });
+  }
+
+  // ── Register submit ───────────────────────────────────────────────────────────
+
+  if (registerSubmitBtn) {
+    registerSubmitBtn.addEventListener('click', async () => {
+      const username = registerUsernameInput.value.trim();
+      const password = registerPasswordInput.value;
+      if (!username || !password) {
+        registerError.textContent = 'Preencha usuário e senha.';
+        registerError.classList.remove('hidden');
+        return;
+      }
+      registerSubmitBtn.disabled = true;
+      registerSubmitBtn.textContent = 'Criando…';
+      try {
+        const data = await apiRegister(username, password);
+        _saveSession(data);
+        registerPasswordInput.value = '';
+        closeAuthModal();
+        updateSidebarAuthState();
+        showToast(`Conta criada! Bem-vindo, ${data.username}!`, 'success');
+        if (!viewMetrics.classList.contains('hidden')) loadMetrics();
+      } catch(err) {
+        registerError.textContent = err.message;
+        registerError.classList.remove('hidden');
+      } finally {
+        registerSubmitBtn.disabled = false;
+        registerSubmitBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg> Criar conta`;
+      }
+    });
+    registerPasswordInput && registerPasswordInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') registerSubmitBtn.click();
+    });
+  }
+
+  // ── Logout ───────────────────────────────────────────────────────────────────
+
+  if (sidebarLogoutBtn) {
+    sidebarLogoutBtn.addEventListener('click', async () => {
+      await apiLogout();
+      _clearSession();
+      updateSidebarAuthState();
+      showToast('Sessão encerrada.', 'info');
+      if (!viewMetrics.classList.contains('hidden')) loadMetrics();
+    });
+  }
+
+  // ── Modal triggers ────────────────────────────────────────────────────────────
+
+  if (sidebarLoginBtn)   sidebarLoginBtn.addEventListener('click', () => openAuthModal('login'));
+  if (authModalCloseBtn) authModalCloseBtn.addEventListener('click', closeAuthModal);
+  if (authModal) {
+    authModal.querySelector('.auth-modal-backdrop')
+      .addEventListener('click', closeAuthModal);
+  }
+  if (authTabs) {
+    authTabs.forEach(tab => tab.addEventListener('click', () => switchAuthTab(tab.dataset.tab)));
+  }
+  if (metricsLoginCta) {
+    metricsLoginCta.addEventListener('click', (e) => { e.preventDefault(); openAuthModal('login'); });
+  }
+
+  // ── Navigation (Generator ↔ Metrics) ─────────────────────────────────────────
+
+  function showView(name) {
+    viewGenerator.classList.toggle('hidden', name !== 'generator');
+    viewMetrics.classList.toggle('hidden',   name !== 'metrics');
+    navGenerator && navGenerator.classList.toggle('active', name === 'generator');
+    navMetrics   && navMetrics.classList.toggle('active',   name === 'metrics');
+    if (name === 'metrics') loadMetrics();
+  }
+
+  if (navGenerator) navGenerator.addEventListener('click', e => { e.preventDefault(); showView('generator'); });
+  if (navMetrics)   navMetrics.addEventListener('click',   e => { e.preventDefault(); showView('metrics'); });
+
+  // ── Metrics panel ─────────────────────────────────────────────────────────────
+
+  const DOC_TYPE_LABELS = {
+    full_infra:  { pt: 'Infra Completa', en: 'Full Infra' },
+    new_host:    { pt: 'Novo Host',      en: 'New Host' },
+    kubernetes:  { pt: 'Kubernetes',     en: 'Kubernetes' },
+    waf_report:  { pt: 'Relatório WAF',  en: 'WAF Report' },
+  };
+
+  function docTypeLabel(raw) {
+    const map = DOC_TYPE_LABELS[raw];
+    if (!map) return raw;
+    return map[currentLanguage] || map.pt;
+  }
+
+  async function loadMetrics() {
+    // Show skeleton
+    document.getElementById('kpi-total').textContent  = '…';
+    document.getElementById('kpi-month').textContent  = '…';
+    document.getElementById('kpi-top-type').textContent = '…';
+    document.getElementById('metrics-by-type').innerHTML  = '<div class="metrics-skeleton" style="height:60px"></div>';
+    document.getElementById('metrics-recent').innerHTML   = '<div class="metrics-skeleton" style="height:120px"></div>';
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/metrics`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('Falha ao carregar métricas.');
+      const data = await res.json();
+      renderMetrics(data);
+    } catch(e) {
+      document.getElementById('kpi-total').textContent = '—';
+      document.getElementById('kpi-month').textContent = '—';
+      document.getElementById('kpi-top-type').textContent = '—';
+      document.getElementById('metrics-by-type').innerHTML  = `<p class="no-data-message">${e.message}</p>`;
+      document.getElementById('metrics-recent').innerHTML   = '';
+    }
+  }
+
+  function renderMetrics(data) {
+    // KPIs
+    document.getElementById('kpi-total').textContent = data.total;
+    document.getElementById('kpi-month').textContent = data.this_month;
+    document.getElementById('kpi-top-type').textContent =
+      data.by_type.length ? docTypeLabel(data.by_type[0].type) : '—';
+
+    // Title + guest notice
+    if (currentUser) {
+      if (metricsTitle) metricsTitle.textContent = `Minhas Métricas`;
+      metricsGuestNotice && metricsGuestNotice.classList.add('hidden');
+    } else {
+      if (metricsTitle) metricsTitle.textContent = 'Métricas Globais';
+      metricsGuestNotice && metricsGuestNotice.classList.remove('hidden');
+    }
+
+    // By-type bars
+    const maxCount = data.by_type.length ? data.by_type[0].count : 1;
+    const byTypeEl = document.getElementById('metrics-by-type');
+    if (!data.by_type.length) {
+      byTypeEl.innerHTML = '<p class="no-data-message">Nenhum dado disponível.</p>';
+    } else {
+      byTypeEl.innerHTML = data.by_type.map(item => {
+        const pct = Math.round((item.count / maxCount) * 100);
+        return `
+          <div class="metrics-type-row">
+            <div class="metrics-type-top">
+              <span class="metrics-type-name">${docTypeLabel(item.type)}</span>
+              <span class="metrics-type-count">${item.count}</span>
+            </div>
+            <div class="metrics-type-bar-track">
+              <div class="metrics-type-bar-fill" style="width:${pct}%"></div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Recent list
+    const recentEl = document.getElementById('metrics-recent');
+    if (!data.recent.length) {
+      recentEl.innerHTML = '<p class="no-data-message" style="padding:16px 20px">Nenhuma geração registrada.</p>';
+    } else {
+      recentEl.innerHTML = data.recent.map(item => {
+        const d = new Date(item.generated_at);
+        const dateStr = isNaN(d) ? item.generated_at : d.toLocaleDateString(
+          currentLanguage === 'pt' ? 'pt-BR' : 'en-US',
+          { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }
+        );
+        const who = item.username ? `<span style="opacity:.6">· ${item.username}</span>` : '';
+        return `
+          <div class="metrics-recent-row">
+            <div class="metrics-recent-dot"></div>
+            <div class="metrics-recent-body">
+              <div class="metrics-recent-name">${item.compartment}</div>
+              <div class="metrics-recent-meta">${dateStr} · ${item.region} ${who}</div>
+            </div>
+            <span class="metrics-recent-badge">${docTypeLabel(item.doc_type)}</span>
+          </div>`;
+      }).join('');
+    }
+  }
+
+  // ── Document History (localStorage, sidebar) ──────────────────────────────────
+
+  const addToHistory = (type, compartment, region) => {
+    let history = [];
+    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) {}
+    history.unshift({
+      type: docTypeLabel(type),
+      compartment: compartment || 'N/A',
+      region: region || 'N/A',
+      date: new Date().toLocaleDateString(currentLanguage === 'pt' ? 'pt-BR' : 'en-US'),
+    });
+    history = history.slice(0, 6);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    renderSidebarHistory();
+  };
+
+  const renderSidebarHistory = () => {
+    if (!sidebarHistory) return;
+    let history = [];
+    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) {}
+    if (!history.length) {
+      sidebarHistory.innerHTML = '<p class="sidebar-empty">Nenhum documento gerado ainda.</p>';
+      return;
+    }
+    sidebarHistory.innerHTML = history.map(item => `
+      <div class="sidebar-history-item">
+        <div class="sidebar-history-dot"></div>
+        <div class="sidebar-history-text">
+          <div class="sidebar-history-name">${item.compartment}</div>
+          <div class="sidebar-history-date">${item.date} · ${item.type}</div>
+        </div>
+      </div>`).join('');
   };
 
   // ===========================================================================
-  // Event Listener Registrations
+  // App Initialization
+  // ===========================================================================
+  const initializeApp = async () => {
+    const savedLang = localStorage.getItem('oci-docgen-lang') || 'pt';
+    await setLanguage(savedLang);
+    const savedTheme = localStorage.getItem('oci-docgen-theme') || 'dark';
+    applyTheme(savedTheme);
+
+    // Restore session if exists (no blocking gate — app is always usable)
+    const session = _loadSession();
+    if (session) {
+      currentUser = session;
+    }
+    updateSidebarAuthState();
+    renderSidebarHistory();
+    fetchRegions();
+  };
+
+
+  // Theme toggle
+  const applyTheme = (theme) => {
+    const iconDark  = document.getElementById('theme-icon-dark');
+    const iconLight = document.getElementById('theme-icon-light');
+    const themeBtnLabel = document.getElementById('theme-btn-label');
+    if (theme === 'light') {
+      document.body.classList.add('light-mode');
+      if (iconDark)  iconDark.style.display  = 'none';
+      if (iconLight) iconLight.style.display = '';
+      if (themeBtnLabel) themeBtnLabel.textContent = 'Modo Escuro';
+    } else {
+      document.body.classList.remove('light-mode');
+      if (iconDark)  iconDark.style.display  = '';
+      if (iconLight) iconLight.style.display = 'none';
+      if (themeBtnLabel) themeBtnLabel.textContent = 'Modo Claro';
+    }
+  };
+
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      const isLight = document.body.classList.contains('light-mode');
+      const next = isLight ? 'dark' : 'light';
+      localStorage.setItem('oci-docgen-theme', next);
+      applyTheme(next);
+    });
+  }
+
+  // ===========================================================================
+  // PT-BR: Registros de Event Listeners
+  // EN: Event Listener Registrations
   // ===========================================================================
   fetchBtn.addEventListener('click', fetchAllDetails);
   generateBtn.addEventListener('click', generateDocument);
@@ -1765,16 +2721,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
-  architectureUpload.addEventListener('change', (e) => handleFileSelect(e, architectureImageFiles, architectureFileList));
-  antivirusUpload.addEventListener('change', (e) => handleFileSelect(e, antivirusImageFiles, antivirusFileList));
-  architectureUploadGroup.addEventListener('paste', (e) => handlePaste(e, architectureImageFiles, architectureFileList));
-  antivirusUploadGroup.addEventListener('paste', (e) => handlePaste(e, antivirusImageFiles, antivirusFileList));
-  architectureFileList.addEventListener('click', (e) => handleFileDelete(e, architectureImageFiles, architectureFileList));
-  antivirusFileList.addEventListener('click', (e) => handleFileDelete(e, antivirusImageFiles, antivirusFileList));
+  addImageSectionBtn.addEventListener('click', () => addImageSection());
+  docPreviewBtn.addEventListener('click', openDocPreview);
+  previewModalClose.addEventListener('click', closeDocPreview);
+  previewOverlay.addEventListener('click', (e) => { if (e.target === previewOverlay) closeDocPreview(); });
+  lightboxClose.addEventListener('click', closeLightbox);
+  lightboxOverlay.addEventListener('click', (e) => { if (e.target === lightboxOverlay) closeLightbox(); });
   languageSelector.addEventListener('change', (e) => setLanguage(e.target.value));
 
   // ===========================================================================
-  // Application Initialization
+  // PT-BR: Inicialização da Aplicação
+  // EN: Application Initialization
   // ===========================================================================
   initializeApp();
 });
