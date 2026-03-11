@@ -93,16 +93,16 @@
 
 ```mermaid
 flowchart TD
-    Browser["Browser\n(index.html + app.js)"]
-    FastAPI["FastAPI\n(main.py)"]
-    Auth["Auth Module\n(auth.py)"]
-    SQLite[("SQLite\n(oci_docgen.db)")]
-    Redis[("Redis\nBroker + Result Backend")]
-    Celery["Celery Worker\n(celery_worker.py)"]
-    Schemas["Pydantic Schemas\n(schemas.py)"]
-    OCI["OCI Connector\n(oci_connector.py)"]
-    DocGen["Doc Generator\n(doc_generator.py)"]
-    OCI_API[("Oracle Cloud\nInfrastructure API")]
+    Browser["Browser<br/>(index.html + app.js)"]
+    FastAPI["FastAPI<br/>(main.py)"]
+    Auth["Auth Module<br/>(auth.py)"]
+    SQLite[("SQLite<br/>(oci_docgen.db)")]
+    Redis[("Redis<br/>Broker + Result Backend")]
+    Celery["Celery Worker<br/>(celery_worker.py)"]
+    Schemas["Pydantic Schemas<br/>(schemas.py)"]
+    OCI["OCI Connector<br/>(oci_connector.py)"]
+    DocGen["Doc Generator<br/>(doc_generator.py)"]
+    OCI_API[("Oracle Cloud<br/>Infrastructure API")]
     DOCX["Generated .docx"]
 
     Browser -->|"POST /api/start-collection"| FastAPI

@@ -204,9 +204,11 @@ async def admin_create_group(request: Request):
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(400, "Nome do grupo é obrigatório.")
-    group = auth.create_group(name)
-    if not group:
+    group, err = auth.create_group(name)
+    if err == "duplicate":
         raise HTTPException(409, "Grupo já existe.")
+    if err or not group:
+        raise HTTPException(500, "Erro ao criar grupo.")
     return group
 
 
@@ -388,11 +390,11 @@ async def create_document(
     try:
         request_data = GenerateDocRequest(**json.loads(json_data))
 
-        all_bytes = [await f.read() for f in section_images]
+        all_bytes: list[bytes] = [await f.read() for f in section_images]
         cursor = 0
         resolved_sections = []
         for meta in request_data.image_sections:
-            chunk = all_bytes[cursor: cursor + meta.file_count]
+            chunk = [all_bytes[i] for i in range(cursor, cursor + meta.file_count)]
             cursor += meta.file_count
             resolved_sections.append({
                 "name":       meta.name,
