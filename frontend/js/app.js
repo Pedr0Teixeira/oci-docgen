@@ -49,9 +49,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressText = document.getElementById('progress-text');
   const progressBar = document.getElementById('progress-bar');
   const progressSpinner = loadingOverlay.querySelector('.spinner');
+  const progressCloudIcon = document.getElementById('progress-cloud-icon');
+  const progressCheckIcon = document.getElementById('progress-check-icon');
   const successScreen = document.getElementById('success-screen');
   const newDocBtn = document.getElementById('new-doc-btn');
-  const languageSelector = document.getElementById('language-selector');
+  const languageSelector = document.getElementById('language-selector'); // may be null (replaced by flags)
 
   // Auth + navigation elements
   const appShell           = document.getElementById('app-shell');
@@ -73,12 +75,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const sidebarUser        = document.getElementById('sidebar-user');
   const sidebarLoginBtn    = document.getElementById('sidebar-login-btn');
   const sidebarLogoutBtn   = document.getElementById('sidebar-logout-btn');
+  const includeStandaloneChk = document.getElementById('include-standalone-volumes');
+  const sidebarProfileBtn  = document.getElementById('sidebar-profile-btn');
   const sidebarUserName    = document.getElementById('sidebar-user-name');
   const sidebarUserAvatar  = document.getElementById('sidebar-user-avatar');
   const navGenerator       = document.getElementById('nav-generator');
   const navMetrics         = document.getElementById('nav-metrics');
+  const navAdmin           = document.getElementById('nav-admin');
   const viewGenerator      = document.getElementById('view-generator');
   const viewMetrics        = document.getElementById('view-metrics');
+  const viewAdmin          = document.getElementById('view-admin');
   const metricsTitle       = document.getElementById('metrics-title');
   const metricsGuestNotice = document.getElementById('metrics-guest-notice');
   const metricsLoginCta    = document.getElementById('metrics-login-cta');
@@ -99,6 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
     CONNECTIVITY: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>`,
     ROUTING:      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>`,
     VPN:          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>`,
+    BOOT_VOLUME:   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
+    STORAGE:       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>`,
     CERTIFICATES: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="12" cy="8" r="6"/><path d="m9 8 2 2 4-4"/><path d="M6.5 14.5 5 20l7-2 7 2-1.5-5.5"/></svg>`,
   };
 
@@ -188,7 +196,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const setLanguage = async (lang) => {
     currentLanguage = lang;
     localStorage.setItem('oci-docgen-lang', lang);
-    languageSelector.value = lang;
+    // Update flag buttons
+    document.querySelectorAll('.lang-flag-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.lang === lang);
+    });
+    // Legacy selector (may be null)
+    if (languageSelector) languageSelector.value = lang;
 
     await loadTranslations(lang);
 
@@ -277,6 +290,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (Object.keys(allInfrastructureData).length > 0) {
       summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
     }
+
+    // Rebuild image section cards so button labels update (Início/Final, etc.)
+    if (imageSections.length > 0) {
+      renderImageSections();
+    }
+
+    // Re-render any currently visible dynamic panels so column headers/labels update
+    const adminVisible = viewAdmin && !viewAdmin.classList.contains('hidden');
+    if (adminVisible) {
+      // Re-render whichever admin tab is active
+      const activeTab = document.querySelector('.admin-tab-btn.active')?.dataset?.tab;
+      if (activeTab === 'users')    loadAdminUsers();
+      else if (activeTab === 'groups') loadAdminGroups();
+      else if (activeTab === 'feedback') loadAdminFeedback?.();
+    }
+    const metricsVisible = viewMetrics && !viewMetrics.classList.contains('hidden');
+    if (metricsVisible) loadMetrics?.();
   };
 
   // ===========================================================================
@@ -304,20 +334,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const showProgress = () => {
     loadingOverlay.classList.remove('hidden');
-
     progressSpinner.style.display = 'none';
     progressTimer.style.display = 'block';
     progressText.style.display = 'block';
     progressBarContainer.style.display = 'block';
-
     progressBar.style.width = '0%';
+    progressBar.style.background = '';
     progressText.textContent = t('progress.initializing_clients');
     progressTimer.textContent = '00:00';
+    // Reset icon state
+    if (progressCloudIcon) { progressCloudIcon.classList.remove('progress-icon-fade-out'); }
+    if (progressCheckIcon) { progressCheckIcon.classList.add('progress-check-hidden'); progressCheckIcon.classList.remove('progress-icon-check-in'); }
+    if (progressSpinner)   { progressSpinner.style.borderTopColor = ''; progressSpinner.style.animation = ''; }
   };
 
   const updateProgress = (percentage, text) => {
     progressBar.style.width = `${percentage}%`;
     progressText.textContent = text;
+    if (percentage >= 100) {
+      // Cloud → checkmark transition
+      progressSpinner.style.borderTopColor = '#3fb950';
+      progressSpinner.style.animation = 'spin 0.4s linear 2, progressFadeRing 0.5s ease 0.8s forwards';
+      progressCloudIcon && progressCloudIcon.classList.add('progress-icon-fade-out');
+      setTimeout(() => {
+        progressCheckIcon && progressCheckIcon.classList.remove('progress-check-hidden');
+        progressCheckIcon && progressCheckIcon.classList.add('progress-icon-check-in');
+        progressBar.style.background = 'linear-gradient(90deg, #2ea043, #3fb950)';
+      }, 600);
+    }
   };
 
   const hideProgress = () => {
@@ -328,7 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const toggleLoading = (show) => {
     if (show) {
-      progressSpinner.style.display = 'block';
+      if (progressSpinner) progressSpinner.style.display = 'block';
       progressText.style.display = 'block';
       progressText.textContent = t('progress_loading');
 
@@ -341,7 +385,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const showSuccessScreen = () => {
-    mainAppContainer.classList.add('hidden');
+    // Keep mainAppContainer visible — success overlay is position:fixed and
+    // sits above it. Hiding the container causes a completely black screen.
     successScreen.classList.remove('hidden');
     const icon = successScreen.querySelector('.success-icon');
     const newIcon = icon.cloneNode(true);
@@ -350,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const resetApp = () => {
     successScreen.classList.add('hidden');
-    mainAppContainer.classList.remove('hidden');
+    // mainAppContainer was never hidden — nothing to restore here
 
     selectedRegion = null;
     selectedDocType = null;
@@ -371,6 +416,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateUiForDocType() {
     const isNewHost = selectedDocType === 'new_host';
+    // Show storage option only for full infra
+    const storageOptRow = document.getElementById('storage-options-row');
+    if (storageOptRow) storageOptRow.classList.toggle('hidden', selectedDocType !== 'full_infra');
     const isKubernetes = selectedDocType === 'kubernetes';
     const isWaf = selectedDocType === 'waf_report';
     instanceStep.classList.toggle('hidden', !isNewHost);
@@ -408,6 +456,9 @@ document.addEventListener('DOMContentLoaded', () => {
     selected.classList.add('select-selected');
     if (isMultiSelect) {
       selected.innerHTML = `<div class="selected-items-container"><span class="placeholder">${placeholder}</span></div><span class="select-arrow">▼</span>`;
+      selected.style.minHeight = 'auto';
+      selected.style.flexWrap = 'wrap';
+      selected.style.gap = '4px';
     } else {
       selected.innerHTML = `<div class="selected-item-display"><span class="placeholder">${placeholder}</span></div><span class="select-arrow">▼</span>`;
     }
@@ -475,12 +526,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (isMultiSelect) {
         item.classList.add('select-item');
+        if (selectedInstances[optionValue]) {
+          item.classList.add('checked');
+        }
         iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`;
         const status = option.status || '';
         const statusClass = status.toLowerCase();
+        const isChecked = !!selectedInstances[optionValue];
         item.innerHTML = `
-          <input type="checkbox" value="${optionValue}" data-name="${optionName}" ${selectedInstances[optionValue] ? 'checked' : ''}>
-          <span class="custom-checkbox"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+          <input type="checkbox" value="${optionValue}" data-name="${optionName}" ${isChecked ? 'checked' : ''}>
+          <span class="custom-checkbox${isChecked ? ' checked' : ''}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
           <div class="instance-info">
              ${iconSvg}
              <span class="instance-status status-${statusClass}"></span>
@@ -499,7 +554,12 @@ document.addEventListener('DOMContentLoaded', () => {
           item.style.paddingLeft = `${option.level * 25}px`;
           item.innerHTML = option.level > 0 ? `<span class="item-tree-prefix"></span><span class="item-text">${optionName}</span>` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg><span class="item-text">${optionName}</span>`;
         }
-        if (iconSvg && !item.innerHTML) {
+        const lockSvg = option.lockSvg || null;
+        const isLocked = option.locked || false;
+        if (isLocked) {
+          item.classList.add('select-item-locked');
+          item.innerHTML = `${lockSvg || ''}<span class="item-text">${optionName}</span><span class="select-lock-badge">${t('perm.locked_badge') || '🔒'}</span>`;
+        } else if (iconSvg && !item.innerHTML) {
           item.innerHTML = `${iconSvg}<span class="item-text">${optionName}</span>`;
         } else if (!item.innerHTML) {
           item.innerHTML = `<span class="item-text">${optionName}</span>`;
@@ -512,14 +572,21 @@ document.addEventListener('DOMContentLoaded', () => {
           if (e.target.tagName !== 'INPUT') {
             checkbox.checked = !checkbox.checked;
           }
+          item.classList.toggle('checked', checkbox.checked);
+          const customCb = item.querySelector('.custom-checkbox');
+          if (customCb) customCb.classList.toggle('checked', checkbox.checked);
           onSelectCallback(checkbox.value, checkbox.dataset.name, checkbox.checked);
         });
       } else {
         item.addEventListener('click', () => {
+          if (option.locked) {
+            onSelectCallback(optionValue, optionName, false, option);
+            return;
+          }
           const selectedContent = selected.querySelector('.selected-item-display');
           selectedContent.innerHTML = item.innerHTML;
           selectedContent.classList.remove('placeholder');
-          onSelectCallback(optionValue, optionName);
+          onSelectCallback(optionValue, optionName, false, option);
           closeAllSelects();
         });
       }
@@ -546,6 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   function updateMultiSelectDisplay() {
     const container = instanceContainer.querySelector('.selected-items-container');
+    if (!container) return;
     container.innerHTML = '';
     const selectedIds = Object.keys(selectedInstances);
     if (selectedIds.length === 0) {
@@ -554,7 +622,10 @@ document.addEventListener('DOMContentLoaded', () => {
       selectedIds.forEach(id => {
         const tag = document.createElement('span');
         tag.className = 'selected-item-tag';
-        tag.textContent = selectedInstances[id];
+        const dot = document.createElement('span');
+        dot.className = 'selected-item-tag-dot';
+        tag.appendChild(dot);
+        tag.appendChild(document.createTextNode(selectedInstances[id]));
         container.appendChild(tag);
       });
     }
@@ -617,27 +688,49 @@ document.addEventListener('DOMContentLoaded', () => {
    * Populates the documentation type selector with predefined options.
    */
   const populateDocTypes = () => {
-    const docTypes = [{
-      id: 'new_host',
-      name: t('doc_type_new')
-    }, {
-      id: 'full_infra',
-      name: t('doc_type_full')
-    }, {
-      id: 'kubernetes',
-      name: t('doc_type_k8s')
-    }, {
-      id: 'waf_report',
-      name: t('doc_type_waf')
-    }, ];
+    const ALL_DOC_TYPES = [
+      { id: 'new_host',   name: t('doc_type_new') },
+      { id: 'full_infra', name: t('doc_type_full') },
+      { id: 'kubernetes', name: t('doc_type_k8s') },
+      { id: 'waf_report', name: t('doc_type_waf') },
+    ];
+
+    // Determine which types are allowed for the current user
+    const allowed = currentUserPermissions?.allowed || ['new_host'];
+    const isAnon  = !currentUser;
+
+    // Build enriched list — locked items are selectable to show a message
+    const docTypes = ALL_DOC_TYPES.map(dt => ({
+      ...dt,
+      locked: !allowed.includes(dt.id),
+      // Icon used by createCustomSelect
+      lockSvg: !allowed.includes(dt.id)
+        ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="item-icon lock-icon"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`
+        : null,
+    }));
+
     createCustomSelect(
       docTypeContainer,
       docTypes,
       t('step2_placeholder'),
-      (selectedValue) => {
+      (selectedValue, _name, _checked, item) => {
+        if (item?.locked) {
+          // Show locked message instead of proceeding
+          const msg = isAnon ? t('perm.anon_msg') : t('perm.locked_msg');
+          showToast(msg, 'error');
+          // Reset the select display to placeholder
+          const sel = docTypeContainer.querySelector('.selected-item-display');
+          if (sel) { sel.innerHTML = `<span class="placeholder">${t('step2_placeholder')}</span>`; sel.classList.add('placeholder'); }
+          selectedDocType = null;
+          updateUiForDocType();
+          return;
+        }
         selectedDocType = selectedValue;
         updateUiForDocType();
-      }
+      },
+      true,
+      false,
+      { showLocked: true }
     );
   };
 
@@ -785,6 +878,8 @@ document.addEventListener('DOMContentLoaded', () => {
       payload.compartment_name = selectedCompartmentName;
     } else {
       payload.compartment_id = selectedCompartmentId;
+      // Only include standalone (unattached) volumes if the user opted in
+      payload.include_standalone = includeStandaloneChk ? includeStandaloneChk.checked : true;
     }
 
     showProgress();
@@ -863,10 +958,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
           updateProgress(100, t('progress.success'));
           allInfrastructureData = data.result;
-          summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
-          detailsContainer.classList.remove('hidden');
-          addToHistory(selectedDocType || 'doc', selectedCompartmentName, selectedRegion);
-          setTimeout(hideProgress, 1200);
+          // Wrapped so rendering errors never block hideProgress
+          try {
+            summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
+            detailsContainer.classList.remove('hidden');
+            addToHistory(selectedDocType || 'doc', selectedCompartmentName, selectedRegion);
+          } catch (renderErr) {
+            console.error('Summary render error:', renderErr);
+            showToast('Erro ao renderizar o resumo: ' + renderErr.message, 'error');
+          }
+          setTimeout(hideProgress, 1200);  // always runs
 
         } else if (data.status === 'FAILURE') {
           clearInterval(pollingIntervalId);
@@ -874,12 +975,13 @@ document.addEventListener('DOMContentLoaded', () => {
           hideProgress();
         }
       } catch (error) {
-        if (progressBar.style.width !== '100%') {
-          clearInterval(pollingIntervalId);
+        clearInterval(pollingIntervalId);
+        if (progressBar.style.width === '100%') {
+          // Collection succeeded but something failed after — dismiss overlay cleanly
+          setTimeout(hideProgress, 800);
+        } else {
           showToast(t('toast.network_error'), 'error');
           hideProgress();
-        } else {
-          clearInterval(pollingIntervalId);
         }
       }
     }, 2000);
@@ -1076,20 +1178,43 @@ document.addEventListener('DOMContentLoaded', () => {
         const slTable = createTable([t('summary.name'), t('summary.rules_count')], vcn.security_lists?.map(sl => [sl.name, `${sl.rules.length}`]));
         const rtTable = createTable([t('summary.name'), t('summary.rules_count')], vcn.route_tables?.map(rt => [rt.name, `${rt.rules.length}`]));
         const nsgTable = createTable([t('summary.name'), t('summary.rules_count')], vcn.network_security_groups?.map(nsg => [nsg.name, `${nsg.rules.length}`]));
-        const lpgTable = createTable(
-          [t('summary.name'), t('summary.vcn.peering_status'), 'Route Table', t('summary.vcn.advertised_cidr'), 'Cross-Tenancy'],
-          vcn.lpgs?.map(lpg => {
-            const statusClass = lpg.peering_status?.toLowerCase() || 'unknown';
-            const statusText = lpg.peering_status_details || lpg.peering_status;
-            return [
-              `<span class="text-highlight">${lpg.display_name}</span>`,
-              `<span class="status-badge status-${statusClass}">${statusText}</span>`,
-              lpg.route_table_name, lpg.peer_advertised_cidr || 'N/A',
-              lpg.is_cross_tenancy_peering ? t('summary.yes') : t('summary.no')
-            ];
-          })
-        );
-        return `<div class="vcn-summary-card collapsible"><div class="vcn-card-header"><h4 class="card-header-title">${vcn.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${vcn.cidr_block}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="vcn-card-body"><h5 class="subheader">Subnets</h5>${subnetsTable}<h5 class="subheader">Security Lists</h5>${slTable}<h5 class="subheader">Route Tables</h5>${rtTable}<h5 class="subheader">Network Security Groups (NSGs)</h5>${nsgTable}<h5 class="subheader">Local Peering Gateways (LPGs)</h5>${lpgTable}</div></div>`;
+        // LPG cards — same pattern as storage svol-card
+        const lpgHtml = vcn.lpgs?.length > 0
+          ? `<div class="svol-grid">${vcn.lpgs.map(lpg => {
+              const statusRaw   = (lpg.peering_status || 'UNKNOWN').toUpperCase();
+              const statusText  = lpg.peering_status_details || lpg.peering_status || '—';
+              let accentClass   = 'svol-card--warn';
+              if (statusRaw === 'PEERED')       accentClass = 'svol-card--ok';
+              else if (statusRaw === 'REVOKED' ||
+                       statusRaw === 'ABANDONED') accentClass = 'svol-card--unattached';
+              return `<div class="svol-card ${accentClass}">
+                <div class="svol-card-header">
+                  <div class="svol-card-title-row">
+                    <span class="svol-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+                    <span class="svol-card-name" title="${lpg.display_name}">${lpg.display_name}</span>
+                  </div>
+                  <div class="svol-card-badges">
+                    <span class="svol-type-tag ${statusRaw === 'PEERED' ? 'boot' : 'block'}">${statusText}</span>
+                  </div>
+                </div>
+                <div class="svol-card-body">
+                  <div class="svol-row">
+                    <span class="svol-row-label">Route Table</span>
+                    <span class="svol-row-val">${lpg.route_table_name || '—'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vcn.advertised_cidr')}</span>
+                    <span class="svol-row-val" style="font-family:monospace">${lpg.peer_advertised_cidr || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">Cross-Tenancy</span>
+                    <span class="svol-row-val">${lpg.is_cross_tenancy_peering ? t('summary.yes') : t('summary.no')}</span>
+                  </div>
+                </div>
+              </div>`;
+            }).join('')}</div>`
+          : `<p class="no-data-message">${t('summary.no_resource_found')}</p>`;
+        return `<div class="vcn-summary-card collapsible"><div class="vcn-card-header"><h4 class="card-header-title">${vcn.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${vcn.cidr_block}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="vcn-card-body"><h5 class="subheader">Subnets</h5>${subnetsTable}<h5 class="subheader">Security Lists</h5>${slTable}<h5 class="subheader">Route Tables</h5>${rtTable}<h5 class="subheader">Network Security Groups (NSGs)</h5>${nsgTable}<h5 class="subheader">Local Peering Gateways (LPGs)</h5>${lpgHtml}</div></div>`;
       }).join('') :
       '';
 
@@ -1146,81 +1271,243 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const drgsHtml = drgs?.length > 0 ?
       drgs.map(drg => {
-        const attachmentsTable = createTable([t('summary.drg.attachment_name'), t('summary.type'), 'DRG Route Table'], drg.attachments?.map(a => [`<span class="text-highlight">${a.display_name}</span>`, a.network_type, a.route_table_name]));
-        const rpcsTable = createTable([t('summary.name'), t('summary.status'), t('summary.vcn.peering_status')],
-          drg.rpcs?.map(rpc => {
-            const statusClass = rpc.peering_status?.toLowerCase() || 'unknown';
-            let statusText = rpc.peering_status_details || rpc.peering_status;
-            if (rpc.peering_status === 'NEW') statusText = 'New (not peered)';
-            else if (rpc.peering_status === 'PEERED') statusText = 'Peered';
-            return [`<span class="text-highlight">${rpc.display_name}</span>`, rpc.lifecycle_state, `<span class="status-badge status-${statusClass}">${statusText}</span>`];
-          })
-        );
-        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${drg.display_name}</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body"><h5 class="subheader">${t('summary.drg.attachments')}</h5>${attachmentsTable}<h5 class="subheader">${t('summary.drg.rpcs')}</h5>${rpcsTable}</div></div>`;
+        // Attachment cards — resolve VCN name from vcns list via network_id
+        const attachCardsHtml = drg.attachments?.length > 0
+          ? `<div class="svol-grid">${drg.attachments.map(a => {
+              const typeUpper   = (a.network_type || '').toUpperCase();
+              const accentMap   = { VCN: 'svol-card--ok', IPSEC_TUNNEL: 'svol-card--ok', VIRTUAL_CIRCUIT: 'svol-card--ok' };
+              const accent      = accentMap[typeUpper] || 'svol-card--warn';
+              // Resolve human-readable network name for VCN attachments
+              const vcnMatch    = typeUpper === 'VCN' ? vcns?.find(v => v.id === a.network_id) : null;
+              const networkName = vcnMatch ? vcnMatch.display_name : (a.network_id ? a.network_id.split('.').pop().slice(0,18) : '—');
+              return `<div class="svol-card ${accent}">
+                <div class="svol-card-header">
+                  <div class="svol-card-title-row">
+                    <span class="svol-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg></span>
+                    <span class="svol-card-name" title="${a.display_name}">${a.display_name}</span>
+                  </div>
+                  <div class="svol-card-badges">
+                    <span class="svol-type-tag boot">${a.network_type}</span>
+                  </div>
+                </div>
+                <div class="svol-card-body">
+                  ${typeUpper === 'VCN' ? `<div class="svol-row">
+                    <span class="svol-row-label">VCN</span>
+                    <span class="svol-row-val" style="color:var(--accent);font-weight:600">${networkName}</span>
+                  </div>` : ''}
+                  <div class="svol-row svol-row--full">
+                    <span class="svol-row-label">DRG Route Table</span>
+                    <span class="svol-row-val" style="font-size:11px">${a.route_table_name || '—'}</span>
+                  </div>
+                </div>
+              </div>`;
+            }).join('')}</div>`
+          : `<p class="no-data-message">${t('summary.no_resource_found')}</p>`;
+
+        // RPC cards
+        const rpcCardsHtml = drg.rpcs?.length > 0
+          ? `<div class="svol-grid">${drg.rpcs.map(rpc => {
+              const peerStatusRaw = (rpc.peering_status || 'UNKNOWN').toUpperCase();
+              let peerText = rpc.peering_status_details || rpc.peering_status;
+              if (peerStatusRaw === 'NEW')    peerText = 'New (not peered)';
+              if (peerStatusRaw === 'PEERED') peerText = 'Peered';
+              const accent = peerStatusRaw === 'PEERED' ? 'svol-card--ok' : 'svol-card--unattached';
+              return `<div class="svol-card ${accent}">
+                <div class="svol-card-header">
+                  <div class="svol-card-title-row">
+                    <span class="svol-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+                    <span class="svol-card-name" title="${rpc.display_name}">${rpc.display_name}</span>
+                  </div>
+                  <div class="svol-card-badges">
+                    <span class="svol-type-tag ${peerStatusRaw === 'PEERED' ? 'boot' : 'block'}">${peerText}</span>
+                  </div>
+                </div>
+                <div class="svol-card-body">
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.status')}</span>
+                    <span class="svol-row-val">${rpc.lifecycle_state || '—'}</span>
+                  </div>
+                </div>
+              </div>`;
+            }).join('')}</div>`
+          : `<p class="no-data-message">${t('summary.no_resource_found')}</p>`;
+
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${drg.display_name}</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body"><h5 class="subheader">${t('summary.drg.attachments')}</h5>${attachCardsHtml}<h5 class="subheader">${t('summary.drg.rpcs')}</h5>${rpcCardsHtml}</div></div>`;
       }).join('') :
       '';
 
-    const cpesHtml = createTable(
-      [t('summary.vpn.cpe_name'), t('summary.lb.ip_addresses'), t('summary.vpn.vendor')],
-      cpes?.map(cpe => [`<span class="text-highlight">${cpe.display_name}</span>`, cpe.ip_address, cpe.vendor || 'N/A'])
-    );
+    // CPE cards — design system pattern
+    const cpesHtml = cpes?.length > 0
+      ? `<div class="svol-grid">${cpes.map(cpe => `
+          <div class="svol-card svol-card--ok">
+            <div class="svol-card-header">
+              <div class="svol-card-title-row">
+                <span class="svol-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+                <span class="svol-card-name" title="${cpe.display_name}">${cpe.display_name}</span>
+              </div>
+            </div>
+            <div class="svol-card-body">
+              <div class="svol-row">
+                <span class="svol-row-label">IP</span>
+                <span class="svol-row-val" style="font-family:monospace;color:var(--accent)">${cpe.ip_address}</span>
+              </div>
+              <div class="svol-row">
+                <span class="svol-row-label">${t('summary.vpn.vendor')}</span>
+                <span class="svol-row-val">${cpe.vendor || 'N/A'}</span>
+              </div>
+            </div>
+          </div>`).join('')}</div>`
+      : `<p class="no-data-message">${t('summary.no_resource_found')}</p>`;
 
     const ipsecHtml = ipsec_connections?.length > 0 ?
       ipsec_connections.map(ipsec => {
-        const cpeName = cpes.find(c => c.id === ipsec.cpe_id)?.display_name || t('summary.none');
-        const drgName = drgs.find(d => d.id === ipsec.drg_id)?.display_name || t('summary.none');
-        const tunnelsHtml = ipsec.tunnels.map(tunnel => {
-          const p1 = tunnel.phase_one_details;
-          const p2 = tunnel.phase_two_details;
-          let bgpDetailsHtml = '';
-          if (tunnel.routing_type === 'BGP' && tunnel.bgp_session_info) {
-            const bgp = tunnel.bgp_session_info;
-            bgpDetailsHtml = `
-              <div class="crypto-details-grid">
-                <div>
-                  <h6 class="tunnel-subheader">${t('summary.vpn.bgp_session')}</h6>
-                  <ul><li><strong>${t('summary.vpn.oracle_asn')}:</strong> ${bgp.oracle_bgp_asn || 'N/A'}</li><li><strong>${t('summary.vpn.customer_asn')}:</strong> ${bgp.customer_bgp_asn || 'N/A'}</li></ul>
+        const cpeName  = cpes.find(c => c.id === ipsec.cpe_id)?.display_name  || t('summary.none');
+        const drgName  = drgs.find(d => d.id === ipsec.drg_id)?.display_name  || t('summary.none');
+        const connStatusRaw = (ipsec.status || 'UNKNOWN').toUpperCase();
+        const connAccent    = connStatusRaw === 'UP'            ? 'svol-card--ok'
+                            : connStatusRaw === 'DOWN'          ? 'svol-card--unattached'
+                            : 'svol-card--warn';   // PROVISIONING etc.
+
+        const hasBgpTunnel = ipsec.tunnels.some(tn => tn.routing_type === 'BGP');
+        const staticRoutes = (ipsec.static_routes?.length > 0)
+          ? ipsec.static_routes.join(', ')
+          : t('summary.none');
+
+        // ── tunnel cards ──────────────────────────────────────────────────────
+        const tunnelCardsHtml = ipsec.tunnels?.length > 0
+          ? `<div class="vpn-tunnels-grid">${ipsec.tunnels.map(tunnel => {
+              const p1 = tunnel.phase_one_details || {};
+              const p2 = tunnel.phase_two_details || {};
+              const tStatusRaw  = (tunnel.status || 'UNKNOWN').toUpperCase();
+              const tAccent     = tStatusRaw === 'UP'   ? 'svol-card--ok'
+                                : tStatusRaw === 'DOWN' ? 'svol-card--unattached'
+                                : 'svol-card--warn';
+              const tStatusBadgeCls = tStatusRaw === 'UP'   ? 'boot'
+                                    : tStatusRaw === 'DOWN' ? 'block'
+                                    : '';
+
+              // BGP section
+              let bgpRows = '';
+              if (tunnel.routing_type === 'BGP' && tunnel.bgp_session_info) {
+                const bgp = tunnel.bgp_session_info;
+                bgpRows = `
+                  <div class="svol-row vpn-row-divider">
+                    <span class="svol-row-label" style="font-weight:700;color:var(--accent);letter-spacing:.05em">BGP</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.oracle_asn')}</span>
+                    <span class="svol-row-val" style="font-family:monospace">${bgp.oracle_bgp_asn || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.customer_asn')}</span>
+                    <span class="svol-row-val" style="font-family:monospace">${bgp.customer_bgp_asn || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.oracle_interface')}</span>
+                    <span class="svol-row-val" style="font-family:monospace">${bgp.oracle_interface_ip || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.customer_interface')}</span>
+                    <span class="svol-row-val" style="font-family:monospace">${bgp.customer_interface_ip || 'N/A'}</span>
+                  </div>`;
+              }
+
+              return `<div class="svol-card ${tAccent}">
+                <div class="svol-card-header">
+                  <div class="svol-card-title-row">
+                    <span class="svol-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+                    <span class="svol-card-name" title="${tunnel.display_name}" style="font-size:11.5px">${tunnel.display_name}</span>
+                  </div>
+                  <div class="svol-card-badges">
+                    <span class="svol-type-tag ${tStatusBadgeCls}">${tunnel.status}</span>
+                  </div>
                 </div>
-                <div>
-                  <h6 class="tunnel-subheader">${t('summary.vpn.peering_ips')}</h6>
-                  <ul><li><strong>${t('summary.vpn.oracle_interface')}:</strong> ${bgp.oracle_interface_ip || 'N/A'}</li><li><strong>${t('summary.vpn.customer_interface')}:</strong> ${bgp.customer_interface_ip || 'N/A'}</li></ul>
+                <div class="svol-card-body">
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.oracle_ip')}</span>
+                    <span class="svol-row-val" style="font-family:monospace">${tunnel.vpn_oracle_ip || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.cpe_ip')}</span>
+                    <span class="svol-row-val" style="font-family:monospace">${tunnel.cpe_ip || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.routing')}</span>
+                    <span class="svol-row-val">${tunnel.routing_type}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">IKE</span>
+                    <span class="svol-row-val">${tunnel.ike_version}</span>
+                  </div>
+                  ${bgpRows}
+                  <div class="svol-row vpn-row-divider">
+                    <span class="svol-row-label" style="font-weight:700;color:var(--text-muted);letter-spacing:.05em;font-size:10px">FASE 1 (IKE)</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.auth')}</span>
+                    <span class="svol-row-val" style="font-size:11px">${p1.authentication_algorithm || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.encryption')}</span>
+                    <span class="svol-row-val" style="font-size:11px">${p1.encryption_algorithm || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">DH Group</span>
+                    <span class="svol-row-val" style="font-size:11px">${p1.dh_group || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.lifetime')}</span>
+                    <span class="svol-row-val">${p1.lifetime_in_seconds != null ? p1.lifetime_in_seconds + 's' : 'N/A'}</span>
+                  </div>
+                  <div class="svol-row vpn-row-divider">
+                    <span class="svol-row-label" style="font-weight:700;color:var(--text-muted);letter-spacing:.05em;font-size:10px">FASE 2 (IPSEC)</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.auth')}</span>
+                    <span class="svol-row-val" style="font-size:11px">${p2.authentication_algorithm || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.vpn.encryption')}</span>
+                    <span class="svol-row-val" style="font-size:11px">${p2.encryption_algorithm || 'N/A'}</span>
+                  </div>
+                  <div class="svol-row">
+                    <span class="svol-row-label">${t('summary.lifetime')}</span>
+                    <span class="svol-row-val">${p2.lifetime_in_seconds != null ? p2.lifetime_in_seconds + 's' : 'N/A'}</span>
+                  </div>
                 </div>
-              </div><hr class="tunnel-divider">`;
-          }
-          return `
-            <div class="tunnel-details">
-              <div class="tunnel-header">
-                <strong>${t('summary.vpn.tunnel')}: <span class="text-highlight">${tunnel.display_name}</span></strong>
-                <span class="status-badge status-${tunnel.status.toLowerCase()}">${tunnel.status}</span>
+              </div>`;
+            }).join('')}</div>`
+          : `<p class="no-data-message">${t('summary.no_tunnels_found')}</p>`;
+
+        // ── ipsec connection card (collapsible) ───────────────────────────────
+        return `<div class="ipsec-summary-card collapsible">
+          <div class="ipsec-card-header">
+            <h4 class="card-header-title">${ipsec.display_name}</h4>
+            <div class="card-status-indicator">
+              <span class="status-badge status-${connStatusRaw.toLowerCase()}">${ipsec.status}</span>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="ipsec-card-body">
+            <!-- Connection meta row -->
+            <div class="vpn-conn-meta">
+              <div class="vpn-conn-meta-item">
+                <span class="svol-row-label">${t('summary.vpn.associated_cpe')}</span>
+                <span class="vpn-meta-val">${cpeName}</span>
               </div>
-              <ul class="tunnel-basic-info">
-                <li><strong>${t('summary.vpn.oracle_ip')}:</strong> ${tunnel.vpn_oracle_ip || 'N/A'}</li><li><strong>${t('summary.vpn.cpe_ip')}:</strong> ${tunnel.cpe_ip || 'N/A'}</li>
-                <li><strong>${t('summary.routing')}:</strong> ${tunnel.routing_type}</li><li><strong>IKE:</strong> ${tunnel.ike_version}</li>
-              </ul>
-              ${bgpDetailsHtml}
-              <div class="crypto-details-grid">
-                <div>
-                  <h6 class="tunnel-subheader">${t('summary.vpn.phase1')}</h6>
-                  <ul>
-                    <li><strong>${t('summary.vpn.auth')}:</strong> ${p1.authentication_algorithm}</li><li><strong>${t('summary.vpn.encryption')}:</strong> ${p1.encryption_algorithm}</li>
-                    <li><strong>DH Group:</strong> ${p1.dh_group}</li><li><strong>${t('summary.lifetime')}:</strong> ${p1.lifetime_in_seconds}s</li>
-                  </ul>
-                </div>
-                <div>
-                  <h6 class="tunnel-subheader">${t('summary.vpn.phase2')}</h6>
-                  <ul>
-                    <li><strong>${t('summary.vpn.auth')}:</strong> ${p2.authentication_algorithm || 'N/A'}</li><li><strong>${t('summary.vpn.encryption')}:</strong> ${p2.encryption_algorithm}</li>
-                    <li><strong>${t('summary.lifetime')}:</strong> ${p2.lifetime_in_seconds}s</li>
-                  </ul>
-                </div>
+              <div class="vpn-conn-meta-item">
+                <span class="svol-row-label">${t('summary.vpn.associated_drg')}</span>
+                <span class="vpn-meta-val">${drgName}</span>
               </div>
-            </div>`;
-        }).join('<hr class="tunnel-divider">');
-        const hasBgpTunnel = ipsec.tunnels.some(t => t.routing_type === 'BGP');
-        const routingDisplay = hasBgpTunnel ?
-          `<span class="full-width"><strong>${t('summary.routing')}:</strong> BGP</span>` :
-          `<span class="full-width"><strong>${t('summary.vpn.static_routes')}:</strong> ${(ipsec.static_routes && ipsec.static_routes.length > 0) ? ipsec.static_routes.join(', ') : t('summary.none')}</span>`;
-        return `<div class="ipsec-summary-card collapsible"><div class="ipsec-card-header"><h4 class="card-header-title">${ipsec.display_name}</h4><div class="card-status-indicator"><span class="status-badge status-${ipsec.status.toLowerCase()}">${ipsec.status}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="ipsec-card-body"><div class="ipsec-details"><span><strong>${t('summary.vpn.associated_cpe')}:</strong> ${cpeName}</span><span><strong>${t('summary.vpn.associated_drg')}:</strong> ${drgName}</span></div><div class="ipsec-details">${routingDisplay}</div><h5 class="subheader">${t('summary.vpn.tunnels')}</h5>${tunnelsHtml || `<p class="no-data-message">${t('summary.no_tunnels_found')}</p>`}</div></div>`;
+              <div class="vpn-conn-meta-item">
+                <span class="svol-row-label">${hasBgpTunnel ? t('summary.routing') : t('summary.vpn.static_routes')}</span>
+                <span class="vpn-meta-val" style="font-family:monospace">${hasBgpTunnel ? 'BGP' : staticRoutes}</span>
+              </div>
+            </div>
+            <h5 class="subheader">${t('summary.vpn.tunnels')}</h5>
+            ${tunnelCardsHtml}
+          </div>
+        </div>`;
       }).join('') :
       '';
 
@@ -1613,8 +1900,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const wafInfraSection  = hasWaf  ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.WAF + t('summary.waf_policies') + '</legend><div class="instances-container">' + wafHtml + '</div></fieldset>' : '';
       const certInfraSection = hasCerts ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.CERTIFICATES + (t('summary.section.certificates') || 'Certificados TLS/SSL') + '</legend><div class="instances-container">' + renderCertificates(certificates) + '</div></fieldset>' : '';
 
+      // Build dedicated storage section HTML
+      const storageSectionHtml = generateStorageSectionHtml(data);
+
       mainContentHtml = `
         <fieldset><legend>${ICONS.INSTANCES}${t('summary.compute_instances')}</legend><div class="instances-container">${instancesHtml}</div></fieldset>
+        <hr class="fieldset-divider"><fieldset><legend>${ICONS.STORAGE}${t('summary.storage') || 'Armazenamento (Volumes)'}</legend>${storageSectionHtml}</fieldset>
         ${volumeGroupsHtml ? `<hr class="fieldset-divider"><fieldset><legend>${ICONS.VOLUME_GROUPS}${t('summary.vgs')}</legend><div class="vg-container">${volumeGroupsHtml}</div></fieldset>`: ''}
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('summary.no_vcns_found')}</p>`}</div></fieldset>
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.OKE}${t('summary.oke_clusters')}</legend><div class="oke-container">${okeClustersHtml}</div></fieldset>
@@ -1627,6 +1918,165 @@ document.addEventListener('DOMContentLoaded', () => {
 
     return `<div><h3 class="infra-summary-main-title">${title}</h3>${mainContentHtml}</div>`;
   }
+
+  // ===========================================================================
+  // Storage Section — unified Boot + Block Volume panel with in-use indicator
+  // ===========================================================================
+  function generateStorageSectionHtml(data) {
+    const instances        = data.instances || [];
+    const standaloneVols   = data.standalone_volumes || [];
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+    function backupPill(policyName) {
+      const none = !policyName ||
+        policyName === 'Nenhuma política associada' ||
+        policyName === 'No backup policy assigned' ||
+        policyName === 'Nenhuma';
+      return `<span class="svol-backup-pill ${none ? 'none' : 'active'}">${none ? (t('instance.no_backup_policy') || 'Sem backup') : policyName}</span>`;
+    }
+
+    function inUseBadge(attached) {
+      return attached
+        ? `<span class="svol-usage-badge in-use"><span class="svol-usage-dot"></span>${t('storage.in_use') || 'Em uso'}</span>`
+        : `<span class="svol-usage-badge unattached"><span class="svol-usage-dot"></span>${t('storage.unattached') || 'Sem vínculo'}</span>`;
+    }
+
+    function stateBadge(state) {
+      const s = (state || '').toUpperCase();
+      const label = getStateLabel(state);
+      const cls   = getStateCssClass(state);
+      return `<span class="storage-vol-state-badge state-${cls}">${label}</span>`;
+    }
+
+    function volCard(opts) {
+      // opts: { name, sizeGb, backupPolicy, state, vmName, isBootVol, attached }
+      const { name, sizeGb, backupPolicy, state, vmName, isBootVol, attached } = opts;
+      const noPolicy = !backupPolicy ||
+        backupPolicy === 'Nenhuma política associada' ||
+        backupPolicy === 'No backup policy assigned' ||
+        backupPolicy === 'Nenhuma';
+      const stateUpper = (state || '').toUpperCase();
+
+      // Card border colour: green = in-use + backup, amber = in-use + no backup, red = unattached, dim = terminated
+      let cardAccent = '';
+      if (stateUpper === 'TERMINATED') cardAccent = 'svol-card--terminated';
+      else if (!attached)              cardAccent = 'svol-card--unattached';
+      else if (!noPolicy)              cardAccent = 'svol-card--ok';
+      else                             cardAccent = 'svol-card--warn';
+
+      const typeLabel = isBootVol
+        ? `<span class="svol-type-tag boot">${t('storage.type_boot') || 'Boot Volume'}</span>`
+        : `<span class="svol-type-tag block">${t('storage.type_block') || 'Block Volume'}</span>`;
+
+      const vmRow = vmName
+        ? `<div class="svol-row">
+             <span class="svol-row-label">${t('summary.storage.vm') || 'VM'}</span>
+             <span class="svol-row-val svol-vm-link">
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>
+               ${vmName}
+             </span>
+           </div>`
+        : '';
+
+      return `
+        <div class="svol-card ${cardAccent}">
+          <div class="svol-card-header">
+            <div class="svol-card-title-row">
+              <span class="svol-card-icon">${isBootVol ? ICONS.BOOT_VOLUME : ICONS.BLOCK_VOLUMES}</span>
+              <span class="svol-card-name" title="${name}">${name}</span>
+            </div>
+            <div class="svol-card-badges">
+              ${typeLabel}
+              ${inUseBadge(attached)}
+            </div>
+          </div>
+          <div class="svol-card-body">
+            <div class="svol-row">
+              <span class="svol-row-label">${t('summary.storage.size') || 'Tamanho'}</span>
+              <span class="svol-row-val">${sizeGb} GB</span>
+            </div>
+            <div class="svol-row">
+              <span class="svol-row-label">${t('summary.storage.state') || 'Estado'}</span>
+              <span class="svol-row-val">${stateBadge(state || 'AVAILABLE')}</span>
+            </div>
+            ${vmRow}
+            <div class="svol-row svol-row--full">
+              <span class="svol-row-label">Backup</span>
+              <span class="svol-row-val">${backupPill(backupPolicy)}</span>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // ── build card lists ──────────────────────────────────────────────────────
+    const bootCards = instances.map(inst =>
+      volCard({
+        name:         `${inst.host_name} — Boot`,
+        sizeGb:       inst.boot_volume_gb,
+        backupPolicy: inst.backup_policy_name,
+        state:        inst.lifecycle_state,
+        vmName:       inst.host_name,
+        isBootVol:    true,
+        attached:     true,
+      })
+    );
+
+    const blockAttachedCards = instances.flatMap(inst =>
+      (inst.block_volumes || []).map(vol =>
+        volCard({
+          name:         vol.display_name,
+          sizeGb:       vol.size_in_gbs,
+          backupPolicy: vol.backup_policy_name,
+          state:        inst.lifecycle_state,
+          vmName:       inst.host_name,
+          isBootVol:    false,
+          attached:     true,
+        })
+      )
+    );
+
+    const standaloneCards = standaloneVols.map(vol =>
+      volCard({
+        name:         vol.display_name,
+        sizeGb:       vol.size_in_gbs,
+        backupPolicy: vol.backup_policy_name,
+        state:        vol.lifecycle_state,
+        vmName:       null,
+        isBootVol:    false,
+        attached:     false,
+      })
+    );
+
+    const allCards = [...bootCards, ...blockAttachedCards, ...standaloneCards];
+
+    if (!allCards.length) {
+      return `<p class="no-data-message">${t('summary.storage.no_boot_volumes') || 'Nenhum volume encontrado.'}</p>`;
+    }
+
+    // Stats bar
+    const totalCount     = allCards.length;
+    const inUseCount     = bootCards.length + blockAttachedCards.length;
+    const unattachedCount= standaloneCards.length;
+    const totalGb        = [
+      ...instances.map(i => parseFloat(i.boot_volume_gb) || 0),
+      ...instances.flatMap(i => (i.block_volumes||[]).map(v => parseFloat(v.size_in_gbs)||0)),
+      ...standaloneVols.map(v => parseFloat(v.size_in_gbs)||0),
+    ].reduce((a,b) => a+b, 0);
+
+    const statsBar = `
+      <div class="svol-stats-bar">
+        <span class="svol-stat"><strong>${totalCount}</strong> ${t('storage.total_volumes') || 'volumes'}</span>
+        <span class="svol-stat-divider">·</span>
+        <span class="svol-stat svol-stat--inuse"><strong>${inUseCount}</strong> ${t('storage.in_use') || 'em uso'}</span>
+        ${unattachedCount ? `<span class="svol-stat-divider">·</span>
+        <span class="svol-stat svol-stat--unattached"><strong>${unattachedCount}</strong> ${t('storage.unattached') || 'sem vínculo'}</span>` : ''}
+        <span class="svol-stat-divider">·</span>
+        <span class="svol-stat"><strong>${totalGb.toFixed(0)} GB</strong> total</span>
+      </div>`;
+
+    return `${statsBar}<div class="svol-grid">${allCards.join('')}</div>`;
+  }
+
 
   function generateInstanceSummaryCard(data, isCollapsible = false) {
     const cardContent = `
@@ -1645,26 +2095,71 @@ document.addEventListener('DOMContentLoaded', () => {
       <hr class="fieldset-divider">
       <fieldset><legend>${ICONS.BLOCK_VOLUMES}${t('summary.instance.attached_volumes')}</legend>
         <div class="table-container">
-          ${data.block_volumes && data.block_volumes.length > 0 ? 
-            `<table class="bv-table"><thead><tr><th>${t('summary.instance.volume_name')}</th><th>${t('summary.instance.size')}</th><th>${t('summary.instance.backup_policy')}</th></tr></thead><tbody>${data.block_volumes.map(vol => `<tr><td>${vol.display_name}</td><td>${vol.size_in_gbs}</td><td>${vol.backup_policy_name}</td></tr>`).join('')}</tbody></table>` : 
+          ${data.block_volumes && data.block_volumes.length > 0 ?
+            `<div class="bv-cards-grid">${data.block_volumes.map(vol => {
+              const hasBackup = vol.backup_policy_name && vol.backup_policy_name !== 'Nenhuma política associada' && vol.backup_policy_name !== 'No backup policy assigned';
+              return `
+              <div class="bv-card">
+                <div class="bv-card-header">
+                  <span class="bv-card-icon">${ICONS.BLOCK_VOLUMES}</span>
+                  <span class="bv-card-name">${vol.display_name}</span>
+                </div>
+                <div class="bv-card-rows">
+                  <div class="bv-card-row">
+                    <span class="bv-card-row-label">${t('summary.instance.size')}</span>
+                    <span class="bv-card-row-val">${vol.size_in_gbs} GB</span>
+                  </div>
+                  <div class="bv-card-row">
+                    <span class="bv-card-row-label">Backup</span>
+                    <span class="bv-card-row-val">
+                      <span class="bv-card-badge ${hasBackup ? 'backup-active' : 'backup-none'}">${hasBackup ? vol.backup_policy_name : t('instance.no_backup_policy')}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>`;
+            }).join('')}</div>` :
             `<p class="no-data-message">${t('summary.no_block_volumes_found')}</p>`
           }
         </div>
       </fieldset>
       <hr class="fieldset-divider">
       <fieldset><legend>${ICONS.CONNECTIVITY}${t('summary.instance.network_summary')}</legend>
-        <div class="summary-grid">
-          <div class="summary-group">
-            <label>Security Lists</label>
-            <div class="summary-box">${data.security_lists && data.security_lists.length > 0 ? data.security_lists.map(sl => `<span class="summary-item">${sl.name}</span>`).join('') : `<span class="summary-item empty">${t('summary.none')}</span>`}</div>
+        <div class="net-summary-grid">
+          <div class="net-summary-card">
+            <div class="net-summary-card-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="net-summary-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+              <span class="net-summary-label">Security Lists</span>
+              <span class="net-summary-count">${data.security_lists?.length || 0}</span>
+            </div>
+            <div class="net-summary-chips">
+              ${data.security_lists?.length > 0
+                ? data.security_lists.map(sl => `<span class="net-chip net-chip-blue"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>${sl.name} <em>${sl.rules?.length ?? '?'} regras</em></span>`).join('')
+                : `<span class="net-chip net-chip-empty">${t('summary.none')}</span>`}
+            </div>
           </div>
-          <div class="summary-group">
-            <label>Network Security Groups (NSGs)</label>
-            <div class="summary-box">${data.network_security_groups && data.network_security_groups.length > 0 ? data.network_security_groups.map(nsg => `<span class="summary-item">${nsg.name}</span>`).join('') : `<span class="summary-item empty">${t('summary.none')}</span>`}</div>
+          <div class="net-summary-card">
+            <div class="net-summary-card-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="net-summary-icon"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
+              <span class="net-summary-label">NSGs</span>
+              <span class="net-summary-count">${data.network_security_groups?.length || 0}</span>
+            </div>
+            <div class="net-summary-chips">
+              ${data.network_security_groups?.length > 0
+                ? data.network_security_groups.map(nsg => `<span class="net-chip net-chip-purple"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>${nsg.name} <em>${nsg.rules?.length ?? '?'} regras</em></span>`).join('')
+                : `<span class="net-chip net-chip-empty">${t('summary.none')}</span>`}
+            </div>
           </div>
-          <div class="summary-group full-width">
-            <label>Route Table</label>
-            <div class="summary-box">${data.route_table && data.route_table.name ? `<span class="summary-item">${data.route_table.name}</span>` : `<span class="summary-item empty">${t('summary.none')}</span>`}</div>
+          <div class="net-summary-card">
+            <div class="net-summary-card-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="net-summary-icon"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+              <span class="net-summary-label">Route Table</span>
+              <span class="net-summary-count">${data.route_table ? 1 : 0}</span>
+            </div>
+            <div class="net-summary-chips">
+              ${data.route_table?.name
+                ? `<span class="net-chip net-chip-teal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>${data.route_table.name} <em>${data.route_table.rules?.length ?? '?'} rotas</em></span>`
+                : `<span class="net-chip net-chip-empty">${t('summary.none')}</span>`}
+            </div>
           </div>
         </div>
       </fieldset>`;
@@ -1721,7 +2216,9 @@ document.addEventListener('DOMContentLoaded', () => {
         doc_type: selectedDocType,
         infra_data: allInfrastructureData,
         responsible_name: responsibleName,
-        lang: currentLanguage
+        lang: currentLanguage,
+        compartment_name: selectedCompartmentName || 'N/A',
+        region: selectedRegion || 'N/A',
       };
 
       // Attach image section metadata to payload
@@ -1758,7 +2255,10 @@ document.addEventListener('DOMContentLoaded', () => {
           const a = document.createElement('a');
           a.style.display = 'none';
           a.href = url;
-          a.download = `DocGen_${Date.now()}.docx`;
+          const typeSlug = (selectedDocType || 'doc').replace('_', '-').toUpperCase();
+          const compSlug = (selectedCompartmentName || 'OCI').replace(/[^a-zA-Z0-9\-_]/g, '_').toUpperCase();
+          const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0,14);
+          a.download = `DocGen_${compSlug}_${typeSlug}_${ts}.docx`;
           document.body.appendChild(a);
           a.click();
           window.URL.revokeObjectURL(url);
@@ -1887,15 +2387,55 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.type = 'file';
     fileInput.accept = 'image/png,image/jpeg,image/gif,image/webp';
     fileInput.multiple = true;
-    zone.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>`;
-    const zoneLabel = document.createElement('span');
-    zoneLabel.textContent = t('attachments_drop_label');
-    const zoneHint = document.createElement('small');
-    zoneHint.textContent = t('attachments_drop_hint');
-    zone.append(fileInput, zoneLabel, zoneHint);
 
-    // Click zone → open file picker
-    zone.addEventListener('click', (e) => { if (e.target !== fileInput) fileInput.click(); });
+    const zoneIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    zoneIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    zoneIcon.setAttribute('viewBox', '0 0 24 24');
+    zoneIcon.setAttribute('fill', 'none');
+    zoneIcon.setAttribute('stroke', 'currentColor');
+    zoneIcon.setAttribute('stroke-width', '2');
+    zoneIcon.setAttribute('stroke-linecap', 'round');
+    zoneIcon.setAttribute('stroke-linejoin', 'round');
+    zoneIcon.innerHTML = '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line>';
+
+    const zoneLabel = document.createElement('span');
+    zoneLabel.textContent = t('attachments_drop_hint_drag') || 'Arraste imagens aqui ou:';
+
+    // Action buttons row
+    const zoneActions = document.createElement('div');
+    zoneActions.className = 'dropzone-actions';
+
+    const selectBtn = document.createElement('button');
+    selectBtn.type = 'button';
+    selectBtn.className = 'dropzone-action-btn';
+    selectBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> ${t('attachments_select_file') || 'Selecionar Arquivo'}`;
+    selectBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+
+    const pasteBtn = document.createElement('button');
+    pasteBtn.type = 'button';
+    pasteBtn.className = 'dropzone-action-btn';
+    pasteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> ${t('attachments_paste_clipboard') || 'Colar (Ctrl+V)'}`;
+    pasteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      zone.focus();
+      pasteBtn.classList.add('paste-ready');
+      const origHtml = pasteBtn.innerHTML;
+      pasteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> ${t('attachments_paste_ready') || 'Pronto — pressione Ctrl+V'}`;
+      setTimeout(() => {
+        pasteBtn.classList.remove('paste-ready');
+        pasteBtn.innerHTML = origHtml;
+      }, 4000);
+    });
+
+    zoneActions.append(selectBtn, pasteBtn);
+
+    const zoneHint = document.createElement('small');
+    zoneHint.textContent = t('upload.hint');
+
+    zone.append(fileInput, zoneIcon, zoneLabel, zoneActions, zoneHint);
 
     // File picker change
     fileInput.addEventListener('change', () => {
@@ -2186,14 +2726,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     startSecs.forEach(s => push(s.name, 1));
 
-    // Infer infra section names from collected data
+    // Infer infra section names from collected data — desired order
     const data = allInfrastructureData;
-    if (data.vcns?.length)               push(t('preview_section_vcn') || 'Rede Virtual (VCN)', 1);
-    if (data.instances?.length)          push(t('preview_section_compute') || 'Instâncias Compute', 1);
-    if (data.load_balancers?.length)     push(t('preview_section_lb') || 'Load Balancers', 1);
-    if (data.kubernetes_clusters?.length) push(t('preview_section_oke') || 'Kubernetes (OKE)', 1);
-    if (data.waf_policies?.length)       push(t('preview_section_waf') || 'WAF', 1);
-    if (data.certificates?.length)       push(t('doc.headers.certificates') || 'Certificados', 1);
+    if (data.instances?.length)           push(t('preview_section_compute')  || 'Instâncias Compute', 1);
+    if (data.instances?.length || data.standalone_volumes?.length)
+                                          push(t('preview_section_storage')  || 'Armazenamento (Volumes)', 1);
+    if (data.volume_groups?.length)       push(t('preview_section_vg')       || 'Volume Groups', 1);
+    if (data.vcns?.length)                push(t('preview_section_vcn')      || 'Redes Virtuais (VCN)', 1);
+    if (data.load_balancers?.length)      push(t('preview_section_lb')       || 'Load Balancers', 1);
+    if (data.certificates?.length)        push(t('doc.headers.certificates') || 'Certificados', 1);
+    if (data.waf_policies?.length)        push(t('preview_section_waf')      || 'WAF', 1);
+    if (data.drgs?.length)                push(t('preview_section_drg')      || 'Conectividade de Roteamento (DRG)', 1);
+    if (data.cpes?.length || data.ipsec_connections?.length)
+                                          push(t('preview_section_vpn')      || 'Conectividade VPN', 1);
+    if (data.kubernetes_clusters?.length) push(t('preview_section_oke')      || 'Kubernetes (OKE)', 1);
 
     endSecs.forEach(s => push(s.name, 1));
     push(t('preview_responsible') || 'Responsável', 1);
@@ -2205,18 +2751,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const data = allInfrastructureData;
 
     const sections = [];
-    if (data.vcns?.length)
-      sections.push({ label: t('preview_section_vcn') || 'Redes Virtuais (VCN)', badge: 'infra', count: data.vcns.length, unit: 'VCN' });
     if (data.instances?.length)
       sections.push({ label: t('preview_section_compute') || 'Instâncias Compute', badge: 'infra', count: data.instances.length, unit: t('summary.compute_instances') || 'instância(s)' });
+    const volCount = (data.instances?.reduce((a, i) => a + 1 + (i.block_volumes?.length || 0), 0) || 0)
+                   + (data.standalone_volumes?.length || 0);
+    if (volCount > 0)
+      sections.push({ label: t('preview_section_storage') || 'Armazenamento (Volumes)', badge: 'infra', count: volCount, unit: 'vol(s)' });
+    if (data.volume_groups?.length)
+      sections.push({ label: t('preview_section_vg') || 'Volume Groups', badge: 'infra', count: data.volume_groups.length, unit: 'grupo(s)' });
+    if (data.vcns?.length)
+      sections.push({ label: t('preview_section_vcn') || 'Redes Virtuais (VCN)', badge: 'infra', count: data.vcns.length, unit: 'VCN' });
     if (data.load_balancers?.length)
       sections.push({ label: t('preview_section_lb') || 'Load Balancers', badge: 'infra', count: data.load_balancers.length, unit: 'LB' });
-    if (data.kubernetes_clusters?.length)
-      sections.push({ label: t('preview_section_oke') || 'Kubernetes (OKE)', badge: 'infra', count: data.kubernetes_clusters.length, unit: 'cluster(s)' });
-    if (data.waf_policies?.length)
-      sections.push({ label: t('preview_section_waf') || 'WAF', badge: 'infra', count: data.waf_policies.length, unit: 'política(s)' });
     if (data.certificates?.length)
       sections.push({ label: t('doc.headers.certificates') || 'Certificados', badge: 'infra', count: data.certificates.length, unit: 'cert(s)' });
+    if (data.waf_policies?.length)
+      sections.push({ label: t('preview_section_waf') || 'WAF', badge: 'infra', count: data.waf_policies.length, unit: 'política(s)' });
+    if (data.drgs?.length)
+      sections.push({ label: t('preview_section_drg') || 'Conectividade de Roteamento (DRG)', badge: 'routing', count: data.drgs.length, unit: 'DRG(s)' });
+    if (data.cpes?.length || data.ipsec_connections?.length) {
+      const ipsecCount = data.ipsec_connections?.length || 0;
+      const tunnelCount = data.ipsec_connections?.reduce((acc, c) => acc + (c.tunnels?.length || 0), 0) || 0;
+      sections.push({ label: t('preview_section_vpn') || 'Conectividade VPN', badge: 'vpn',
+        count: ipsecCount, unit: `IPSec · ${tunnelCount} túnel(s)` });
+    }
+    if (data.kubernetes_clusters?.length)
+      sections.push({ label: t('preview_section_oke') || 'Kubernetes (OKE)', badge: 'infra', count: data.kubernetes_clusters.length, unit: 'cluster(s)' });
 
     if (!sections.length) {
       const empty = document.createElement('div');
@@ -2314,6 +2874,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const HISTORY_KEY = 'oci-docgen-history';
 
   let currentUser = null;  // null = anonymous, object = logged-in user
+  let currentUserPermissions = null; // null until fetchAndApplyPermissions() resolves
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2366,15 +2927,45 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Sidebar state ────────────────────────────────────────────────────────────
 
   function updateSidebarAuthState() {
+    const isAdmin = currentUser && currentUser.is_admin;
     if (currentUser) {
       sidebarGuest && sidebarGuest.classList.add('hidden');
       sidebarUser  && sidebarUser.classList.remove('hidden');
       if (sidebarUserName)   sidebarUserName.textContent   = currentUser.username;
       if (sidebarUserAvatar) sidebarUserAvatar.textContent = currentUser.username[0].toUpperCase();
+      // Show admin badge on username
+      if (sidebarUserName) {
+        sidebarUserName.innerHTML = isAdmin
+          ? `${currentUser.username} <span class="admin-badge">Admin</span>`
+          : currentUser.username;
+      }
     } else {
       sidebarGuest && sidebarGuest.classList.remove('hidden');
       sidebarUser  && sidebarUser.classList.add('hidden');
     }
+    // Metrics and Admin nav: only visible to admins
+    navMetrics && navMetrics.classList.toggle('hidden', !isAdmin);
+    navAdmin   && navAdmin.classList.toggle('hidden', !isAdmin);
+    // If non-admin is somehow on a restricted view, redirect to generator
+    if (!isAdmin) {
+      const onRestricted = viewMetrics && !viewMetrics.classList.contains('hidden');
+      const onAdmin      = viewAdmin   && !viewAdmin.classList.contains('hidden');
+      if (onRestricted || onAdmin) showView('generator');
+    }
+  }
+
+  async function fetchAndApplyPermissions() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/my-permissions`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        currentUserPermissions = await res.json();
+      } else {
+        currentUserPermissions = { allowed: ['new_host'], is_admin: false, is_anonymous: true };
+      }
+    } catch(e) {
+      currentUserPermissions = { allowed: ['new_host'], is_admin: false, is_anonymous: true };
+    }
+    populateDocTypes();
   }
 
   // ── API calls ────────────────────────────────────────────────────────────────
@@ -2419,21 +3010,27 @@ document.addEventListener('DOMContentLoaded', () => {
       const username = loginUsernameInput.value.trim();
       const password = loginPasswordInput.value;
       if (!username || !password) {
-        loginError.textContent = 'Preencha usuário e senha.';
+        loginError.textContent = t('auth.error.fill_fields');
         loginError.classList.remove('hidden');
         return;
       }
       loginSubmitBtn.disabled = true;
-      loginSubmitBtn.textContent = 'Entrando…';
+      loginSubmitBtn.textContent = t('auth.login.btn_loading');
       try {
         const data = await apiLogin(username, password);
         _saveSession(data);
         loginPasswordInput.value = '';
         closeAuthModal();
         updateSidebarAuthState();
-        showToast(`Bem-vindo, ${data.username}!`, 'success');
-        // Refresh metrics if that view is open
-        if (!viewMetrics.classList.contains('hidden')) loadMetrics();
+        fetchAndApplyPermissions();
+        renderSidebarHistory();
+        showToast((t('toast.welcome') || 'Bem-vindo, {name}!').replace('{name}', data.username), 'success');
+        // Force password change for first admin login
+        if (data.force_password_change) {
+          setTimeout(() => showForcePwModal(), 400);
+        }
+        // Refresh metrics if admin and that view is open
+        if (data.is_admin && viewMetrics && !viewMetrics.classList.contains('hidden')) loadMetrics();
       } catch(err) {
         loginError.textContent = err.message;
         loginError.classList.remove('hidden');
@@ -2454,20 +3051,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const username = registerUsernameInput.value.trim();
       const password = registerPasswordInput.value;
       if (!username || !password) {
-        registerError.textContent = 'Preencha usuário e senha.';
+        registerError.textContent = t('auth.error.fill_fields');
         registerError.classList.remove('hidden');
         return;
       }
       registerSubmitBtn.disabled = true;
-      registerSubmitBtn.textContent = 'Criando…';
+      registerSubmitBtn.textContent = t('auth.register.btn_loading');
       try {
         const data = await apiRegister(username, password);
         _saveSession(data);
         registerPasswordInput.value = '';
         closeAuthModal();
         updateSidebarAuthState();
-        showToast(`Conta criada! Bem-vindo, ${data.username}!`, 'success');
-        if (!viewMetrics.classList.contains('hidden')) loadMetrics();
+        fetchAndApplyPermissions();
+        showToast((t('toast.account_created') || 'Conta criada! Bem-vindo, {name}!').replace('{name}', data.username), 'success');
       } catch(err) {
         registerError.textContent = err.message;
         registerError.classList.remove('hidden');
@@ -2484,11 +3081,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Logout ───────────────────────────────────────────────────────────────────
 
   if (sidebarLogoutBtn) {
-    sidebarLogoutBtn.addEventListener('click', async () => {
+    sidebarLogoutBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       await apiLogout();
       _clearSession();
+      currentUserPermissions = null;
       updateSidebarAuthState();
-      showToast('Sessão encerrada.', 'info');
+      fetchAndApplyPermissions();
+      renderSidebarHistory();
+      showToast(t('toast.session_ended'), 'info');
       if (!viewMetrics.classList.contains('hidden')) loadMetrics();
     });
   }
@@ -2511,15 +3112,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Navigation (Generator ↔ Metrics) ─────────────────────────────────────────
 
   function showView(name) {
+    const isAdmin = currentUser && currentUser.is_admin;
+    // Guard restricted views
+    if ((name === 'metrics' || name === 'admin') && !isAdmin) {
+      name = 'generator';
+    }
     viewGenerator.classList.toggle('hidden', name !== 'generator');
-    viewMetrics.classList.toggle('hidden',   name !== 'metrics');
+    viewMetrics  && viewMetrics.classList.toggle('hidden',   name !== 'metrics');
+    viewAdmin    && viewAdmin.classList.toggle('hidden',     name !== 'admin');
     navGenerator && navGenerator.classList.toggle('active', name === 'generator');
     navMetrics   && navMetrics.classList.toggle('active',   name === 'metrics');
+    navAdmin     && navAdmin.classList.toggle('active',     name === 'admin');
     if (name === 'metrics') loadMetrics();
+    if (name === 'admin')   loadAdminUsers();
   }
 
   if (navGenerator) navGenerator.addEventListener('click', e => { e.preventDefault(); showView('generator'); });
   if (navMetrics)   navMetrics.addEventListener('click',   e => { e.preventDefault(); showView('metrics'); });
+  if (navAdmin)     navAdmin.addEventListener('click',     e => { e.preventDefault(); showView('admin'); });
 
   // ── Metrics panel ─────────────────────────────────────────────────────────────
 
@@ -2567,14 +3177,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('kpi-top-type').textContent =
       data.by_type.length ? docTypeLabel(data.by_type[0].type) : '—';
 
-    // Title + guest notice
-    if (currentUser) {
-      if (metricsTitle) metricsTitle.textContent = `Minhas Métricas`;
-      metricsGuestNotice && metricsGuestNotice.classList.add('hidden');
-    } else {
-      if (metricsTitle) metricsTitle.textContent = 'Métricas Globais';
-      metricsGuestNotice && metricsGuestNotice.classList.remove('hidden');
-    }
+    if (metricsTitle) metricsTitle.textContent = t('metrics_global_title') || 'Métricas Globais';
+    metricsGuestNotice && metricsGuestNotice.classList.add('hidden');
 
     // By-type bars
     const maxCount = data.by_type.length ? data.by_type[0].count : 1;
@@ -2620,13 +3224,623 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>`;
       }).join('');
     }
+
+    // Time-series chart
+    _metricsRawData = data;
+    renderChart(data.time_series || [], _chartPeriod, _chartTypeFilter);
+
+    // Per-user breakdown
+    const perUserSection = document.getElementById('metrics-per-user-section');
+    const perUserEl      = document.getElementById('metrics-per-user');
+    if (data.per_user && data.per_user.length) {
+      perUserSection && perUserSection.classList.remove('hidden');
+      const maxU = data.per_user[0].count;
+      perUserEl.innerHTML = data.per_user.map(u => {
+        const pct = Math.round((u.count / maxU) * 100);
+        const uid = u.user_id || 0;
+        return `
+          <div class="metrics-type-row">
+            <div class="metrics-type-top">
+              <span class="metrics-type-name">${u.username}</span>
+              <span class="metrics-type-count">${u.count}
+                <button class="metrics-user-expand-btn" data-uid="${uid}" data-uname="${u.username}" title="Ver logs">▼ Logs</button>
+              </span>
+            </div>
+            <div class="metrics-type-bar-track">
+              <div class="metrics-type-bar-fill" style="width:${pct}%;background:var(--accent-green,#3fb950)"></div>
+            </div>
+            <div class="metrics-user-logs" id="user-logs-${uid}">
+              <table class="metrics-log-table">
+                <thead><tr><th>Tipo</th><th>Compartimento</th><th>Região</th><th>Data</th></tr></thead>
+                <tbody id="user-logs-body-${uid}"></tbody>
+              </table>
+            </div>
+          </div>`;
+      }).join('');
+
+      // Bind expand buttons
+      perUserEl.querySelectorAll('.metrics-user-expand-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const uid = btn.dataset.uid;
+          const logsContainer = document.getElementById(`user-logs-${uid}`);
+          const logsBody = document.getElementById(`user-logs-body-${uid}`);
+          if (!logsContainer) return;
+          const isOpen = logsContainer.classList.toggle('open');
+          btn.textContent = isOpen ? '▲ Logs' : '▼ Logs';
+          if (isOpen && logsBody) await loadUserLogs(uid, logsBody);
+        });
+      });
+    } else {
+      perUserSection && perUserSection.classList.add('hidden');
+    }
+  }
+
+  // ── Spline chart state ────────────────────────────────────────────────────────
+  let _metricsRawData   = null;
+  let _chartPeriod      = 30;
+  let _chartTypeFilter  = 'all';
+  let _chartRenderType  = 'spline'; // 'spline' | 'bar' | 'pie'
+
+  const SERIES_CONFIG = {
+    all:        { label: () => t('metrics_filter_all') || 'Total',         color: '#2f81f7' },
+    new_host:   { label: () => t('metrics_filter_new_host') || 'Novo Host', color: '#3fb950' },
+    full_infra: { label: () => t('metrics_filter_full_infra') || 'Infra Completa', color: '#f0883e' },
+    kubernetes: { label: () => 'Kubernetes',                               color: '#bc8cff' },
+    waf_report: { label: () => 'WAF Report',                               color: '#58a6ff' },
+  };
+
+  function getSeriesLabel(key) {
+    const cfg = SERIES_CONFIG[key];
+    return cfg ? (typeof cfg.label === 'function' ? cfg.label() : cfg.label) : key;
+  }
+
+  function renderChart(allSeries, periodDays, typeFilter) {
+    if (_chartRenderType === 'bar') renderBarChart(allSeries, periodDays, typeFilter);
+    else if (_chartRenderType === 'pie') renderPieChart(allSeries, periodDays, typeFilter);
+    else renderSplineChart(allSeries, periodDays, typeFilter);
+  }
+
+  function renderSplineChart(allSeries, periodDays, typeFilter) {
+    const wrap = document.getElementById('metrics-timeseries-chart');
+    const legendEl = document.getElementById('metrics-chart-legend');
+    if (!wrap) return;
+
+    // Slice to period
+    let series = allSeries.slice(-periodDays);
+    if (!series.length) { wrap.innerHTML = '<p class="no-data-message">Sem dados para o período</p>'; return; }
+
+    // Pad sparse data: if fewer than 7 points, fill in missing days with zeros
+    // so the chart renders lines instead of orphaned dots
+    if (series.length < 7) {
+      const daySet = new Set(series.map(d => d.day));
+      const last = new Date(series[series.length - 1].day);
+      const first = new Date(series[0].day);
+      // Expand to at least 7 days of context centered on available data
+      const filled = [];
+      const startDate = new Date(first);
+      startDate.setDate(startDate.getDate() - Math.max(0, Math.floor((7 - series.length) / 2)));
+      for (let i = 0; i < Math.max(7, series.length + 2); i++) {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + i);
+        const key = d.toISOString().slice(0, 10);
+        const existing = series.find(s => s.day === key);
+        filled.push(existing || { day: key, new_host: 0, full_infra: 0, kubernetes: 0, waf_report: 0 });
+      }
+      series = filled;
+    }
+
+    const W   = Math.max(wrap.clientWidth || 600, 400);
+    const H   = 180;
+    const pad = { top: 18, right: 20, bottom: 32, left: 36 };
+    const cW  = W - pad.left - pad.right;
+    const cH  = H - pad.top - pad.bottom;
+    const n   = series.length;
+
+    // Decide which series to draw — when 'all' show all 4 types for comparison
+    const activeSeries = typeFilter === 'all'
+      ? ['new_host', 'full_infra', 'kubernetes', 'waf_report']
+      : [typeFilter];
+
+    // Compute max value across active series
+    const maxVal = Math.max(
+      ...series.flatMap(d => activeSeries.map(k => d[k] || 0)),
+      1
+    );
+
+    // X positions
+    const xPos = (i) => pad.left + (i / Math.max(n - 1, 1)) * cW;
+    const yPos = (v) => pad.top + cH - (v / maxVal) * cH;
+
+    // Build smooth spline path using cubic bezier
+    function buildSplinePath(values) {
+      if (values.length < 2) return '';
+      const pts = values.map((v, i) => [xPos(i), yPos(v)]);
+      let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [x0, y0] = pts[i];
+        const [x1, y1] = pts[i + 1];
+        const cpX = (x0 + x1) / 2;
+        d += ` C ${cpX.toFixed(1)} ${y0.toFixed(1)}, ${cpX.toFixed(1)} ${y1.toFixed(1)}, ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+      }
+      return d;
+    }
+
+    function buildAreaPath(values) {
+      const spline = buildSplinePath(values);
+      if (!spline) return '';
+      const lastX = xPos(values.length - 1).toFixed(1);
+      const baseY = (pad.top + cH).toFixed(1);
+      const firstX = xPos(0).toFixed(1);
+      return `${spline} L ${lastX} ${baseY} L ${firstX} ${baseY} Z`;
+    }
+
+    // Grid lines
+    const gridCount = 4;
+    const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
+      const v = Math.round((maxVal / gridCount) * (gridCount - i));
+      const y = yPos(v === maxVal ? maxVal : v);
+      return `
+        <line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${pad.left + cW}" y2="${y.toFixed(1)}"
+              stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="${(pad.left - 5).toFixed(0)}" y="${(y + 4).toFixed(0)}"
+              text-anchor="end" fill="var(--text-secondary)" font-size="9" font-family="monospace">${v}</text>`;
+    });
+
+    // X-axis labels
+    const labelStep = Math.max(1, Math.floor(n / 8));
+    const xLabels = series
+      .map((d, i) => i % labelStep === 0 || i === n - 1
+        ? `<text x="${xPos(i).toFixed(1)}" y="${(H - 6).toFixed(0)}" text-anchor="middle"
+                fill="var(--text-secondary)" font-size="9">${d.day.slice(5)}</text>`
+        : '')
+      .filter(Boolean);
+
+    // Dot highlights (last point)
+    const dots = activeSeries.map(key => {
+      const cfg = SERIES_CONFIG[key] || SERIES_CONFIG.all;
+      const lastVal = series[n - 1]?.[key] || 0;
+      return `<circle cx="${xPos(n - 1).toFixed(1)}" cy="${yPos(lastVal).toFixed(1)}" r="4"
+                fill="${cfg.color}" stroke="var(--bg-card)" stroke-width="2"/>`;
+    });
+
+    // Build SVG paths
+    const paths = activeSeries.map(key => {
+      const cfg    = SERIES_CONFIG[key] || SERIES_CONFIG.all;
+      const values = series.map(d => d[key] || 0);
+      const areaPath   = buildAreaPath(values);
+      const splinePath = buildSplinePath(values);
+      return `
+        <defs>
+          <linearGradient id="grad-${key}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${cfg.color}" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="${cfg.color}" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaPath}" fill="url(#grad-${key})" />
+        <path d="${splinePath}" fill="none" stroke="${cfg.color}" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round"/>`;
+    });
+
+    // Tooltip overlay rects (invisible, for hover)
+    const tooltipRects = series.map((d, i) => {
+      const x    = xPos(i);
+      const vals = activeSeries.map(k => `${getSeriesLabel(k)}: ${d[k] || 0}`).join(' | ');
+      return `<rect x="${(x - cW / n / 2).toFixed(1)}" y="${pad.top}" width="${(cW / n).toFixed(1)}" height="${cH}"
+                fill="transparent" data-day="${d.day}" data-vals="${vals}">
+                <title>${d.day}: ${vals}</title>
+              </rect>`;
+    });
+
+    wrap.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">
+      ${gridLines.join('')}
+      ${paths.join('')}
+      ${dots.join('')}
+      ${xLabels.join('')}
+      ${tooltipRects.join('')}
+    </svg>`;
+
+    // Legend
+    if (legendEl) {
+      legendEl.innerHTML = activeSeries.map(key => {
+        const cfg = SERIES_CONFIG[key] || SERIES_CONFIG.all;
+        const total = series.reduce((s, d) => s + (d[key] || 0), 0);
+        return `<span class="chart-legend-item">
+          <span class="chart-legend-dot" style="background:${cfg.color}"></span>
+          ${getSeriesLabel(key)} <strong>${total}</strong>
+        </span>`;
+      }).join('');
+    }
+  }
+
+  function bindChartFilters() {
+    document.querySelectorAll('.metrics-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.metrics-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _chartPeriod = parseInt(btn.dataset.period);
+        if (_metricsRawData) renderChart(_metricsRawData.time_series, _chartPeriod, _chartTypeFilter);
+      });
+    });
+    document.querySelectorAll('.metrics-type-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.metrics-type-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _chartTypeFilter = btn.dataset.type;
+        if (_metricsRawData) renderChart(_metricsRawData.time_series, _chartPeriod, _chartTypeFilter);
+      });
+    });
+    document.querySelectorAll('.metrics-chart-type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.metrics-chart-type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _chartRenderType = btn.dataset.chartType;
+        if (_metricsRawData) renderChart(_metricsRawData.time_series, _chartPeriod, _chartTypeFilter);
+      });
+    });
+  }
+
+  function renderBarChart(allSeries, periodDays, typeFilter) {
+    const wrap = document.getElementById('metrics-timeseries-chart');
+    const legendEl = document.getElementById('metrics-chart-legend');
+    if (!wrap) return;
+    const series = allSeries.slice(-periodDays);
+    if (!series.length) { wrap.innerHTML = '<p class="no-data-message">Sem dados</p>'; return; }
+
+    const activeSeries = typeFilter === 'all'
+      ? ['new_host', 'full_infra', 'kubernetes', 'waf_report']
+      : [typeFilter];
+
+    const W = Math.max(wrap.clientWidth || 600, 400);
+    const H = 220;
+    const pad = { top: 20, right: 20, bottom: 30, left: 36 };
+    const cW = W - pad.left - pad.right;
+    const cH = H - pad.top - pad.bottom;
+    const n = series.length;
+    const barGroupW = cW / n;
+    const barW = Math.max(2, (barGroupW - 2) / activeSeries.length);
+
+    const maxVal = Math.max(...series.flatMap(d => activeSeries.map(k => d[k] || 0)), 1);
+    const yPos = v => pad.top + cH - (v / maxVal) * cH;
+
+    const bars = series.map((d, i) => {
+      const groupX = pad.left + i * barGroupW;
+      return activeSeries.map((key, si) => {
+        const cfg = SERIES_CONFIG[key];
+        const v = d[key] || 0;
+        const x = groupX + si * barW + 1;
+        const barH = Math.max(0, (v / maxVal) * cH);
+        const y = pad.top + cH - barH;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}"
+          fill="${cfg.color}" rx="2" opacity="0.85">
+          <title>${d.day}: ${getSeriesLabel(key)} = ${v}</title>
+        </rect>`;
+      }).join('');
+    }).join('');
+
+    const labelStep = Math.max(1, Math.floor(n / 8));
+    const xLabels = series.map((d, i) => i % labelStep === 0 || i === n - 1
+      ? `<text x="${(pad.left + i * barGroupW + barGroupW / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" fill="var(--text-secondary)" font-size="9">${d.day.slice(5)}</text>` : ''
+    ).filter(Boolean);
+
+    const gridCount = 4;
+    const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
+      const v = Math.round((maxVal / gridCount) * (gridCount - i));
+      const y = yPos(v);
+      return `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${pad.left + cW}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="${(pad.left - 5).toFixed(0)}" y="${(y + 4).toFixed(0)}" text-anchor="end" fill="var(--text-secondary)" font-size="9" font-family="monospace">${v}</text>`;
+    });
+
+    wrap.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">
+      ${gridLines.join('')}${bars}${xLabels.join('')}
+    </svg>`;
+
+    if (legendEl) {
+      legendEl.innerHTML = activeSeries.map(key => {
+        const cfg = SERIES_CONFIG[key];
+        const total = series.reduce((s, d) => s + (d[key] || 0), 0);
+        return `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${cfg.color}"></span>${getSeriesLabel(key)} <strong>${total}</strong></span>`;
+      }).join('');
+    }
+  }
+
+  function renderPieChart(allSeries, periodDays, typeFilter) {
+    const wrap = document.getElementById('metrics-timeseries-chart');
+    const legendEl = document.getElementById('metrics-chart-legend');
+    if (!wrap) return;
+    const series = allSeries.slice(-periodDays);
+
+    const keys = typeFilter === 'all'
+      ? ['new_host', 'full_infra', 'kubernetes', 'waf_report']
+      : [typeFilter];
+
+    const totals = keys.map(k => ({ key: k, val: series.reduce((s, d) => s + (d[k] || 0), 0) }));
+    const grand = totals.reduce((s, t) => s + t.val, 0);
+
+    if (!grand) { wrap.innerHTML = '<p class="no-data-message" style="padding:40px 20px;text-align:center">Sem dados</p>'; return; }
+
+    const W = 280, H = 220, cx = 110, cy = 110, r = 90, ir = 52;
+    let startAngle = -Math.PI / 2;
+    const slices = totals.map(({ key, val }) => {
+      const pct = val / grand;
+      const angle = pct * 2 * Math.PI;
+      const endAngle = startAngle + angle;
+      const x1 = cx + r * Math.cos(startAngle); const y1 = cy + r * Math.sin(startAngle);
+      const x2 = cx + r * Math.cos(endAngle);   const y2 = cy + r * Math.sin(endAngle);
+      const ix1 = cx + ir * Math.cos(startAngle); const iy1 = cy + ir * Math.sin(startAngle);
+      const ix2 = cx + ir * Math.cos(endAngle);   const iy2 = cy + ir * Math.sin(endAngle);
+      const lg = angle > Math.PI ? 1 : 0;
+      const d = `M ${ix1.toFixed(2)} ${iy1.toFixed(2)} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${lg} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix2.toFixed(2)} ${iy2.toFixed(2)} A ${ir} ${ir} 0 ${lg} 0 ${ix1.toFixed(2)} ${iy1.toFixed(2)} Z`;
+      const cfg = SERIES_CONFIG[key];
+      const slice = `<path d="${d}" fill="${cfg.color}" opacity="0.85"><title>${getSeriesLabel(key)}: ${val} (${(pct*100).toFixed(1)}%)</title></path>`;
+      startAngle = endAngle;
+      return slice;
+    });
+
+    const legendItems = totals.map(({ key, val }) => {
+      const cfg = SERIES_CONFIG[key];
+      return `<text x="200" y="${cy - 40 + totals.indexOf(totals.find(t=>t.key===key)) * 22}" fill="${cfg.color}" font-size="11" font-family="Inter, sans-serif">● ${getSeriesLabel(key)}: ${val}</text>`;
+    });
+
+    wrap.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">
+      ${slices.join('')}
+      <text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="var(--text-primary)" font-size="18" font-weight="700">${grand}</text>
+      <text x="${cx}" y="${cy + 20}" text-anchor="middle" fill="var(--text-secondary)" font-size="10">Total</text>
+      ${legendItems.join('')}
+    </svg>`;
+
+    if (legendEl) legendEl.innerHTML = '';
+  }
+
+  bindChartFilters();
+
+  // ── Sidebar brand click ───────────────────────────────────────────────────────
+  const sidebarBrandLink = document.getElementById('sidebar-brand-link');
+  if (sidebarBrandLink) sidebarBrandLink.addEventListener('click', () => showView('generator'));
+
+  // ── History login CTA ─────────────────────────────────────────────────────────
+  document.getElementById('history-login-cta')?.addEventListener('click', e => {
+    e.preventDefault(); openAuthModal('login');
+  });
+
+  // ── Sidebar user row → profile modal ─────────────────────────────────────────
+  sidebarProfileBtn?.addEventListener('click', openProfileModal);
+
+  // ── Force password change modal ───────────────────────────────────────────────
+
+  function showForcePwModal() {
+    const modal = document.getElementById('force-pw-modal');
+    if (modal) modal.classList.remove('hidden');
+    document.getElementById('force-pw-new')?.focus();
+  }
+
+  document.getElementById('force-pw-submit-btn')?.addEventListener('click', async () => {
+    const newPw  = (document.getElementById('force-pw-new')?.value || '').trim();
+    const conf   = (document.getElementById('force-pw-confirm')?.value || '').trim();
+    const errEl  = document.getElementById('force-pw-error');
+    if (errEl) errEl.style.display = 'none';
+
+    if (!newPw || newPw !== conf) {
+      if (errEl) { errEl.textContent = 'As senhas não coincidem.'; errEl.style.display = 'block'; }
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: newPw, current_password: '', force: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Erro ao alterar senha.');
+      document.getElementById('force-pw-modal')?.classList.add('hidden');
+      showToast('Senha alterada com sucesso!', 'success');
+    } catch(e) {
+      if (errEl) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+    }
+  });
+
+  // ── Profile Modal ─────────────────────────────────────────────────────────────
+
+  async function openProfileModal() {
+    if (!currentUser) { openAuthModal('login'); return; }
+    const modal = document.getElementById('profile-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    // Load profile
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/profile`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      document.getElementById('profile-username').value    = data.username || currentUser.username;
+      document.getElementById('profile-first-name').value = data.first_name || '';
+      document.getElementById('profile-last-name').value  = data.last_name  || '';
+      document.getElementById('profile-email').value      = data.email      || '';
+      document.getElementById('profile-phone').value      = data.phone      || '';
+      document.getElementById('profile-notes').value      = data.notes      || '';
+    } catch(e) { /* silent */ }
+  }
+
+  function closeProfileModal() {
+    document.getElementById('profile-modal')?.classList.add('hidden');
+    // Clear pw fields
+    ['profile-current-pw','profile-new-pw','profile-confirm-pw'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+  }
+
+  document.getElementById('profile-modal-close')?.addEventListener('click', closeProfileModal);
+  document.getElementById('profile-cancel-btn')?.addEventListener('click', closeProfileModal);
+  document.getElementById('profile-modal-backdrop')?.addEventListener('click', closeProfileModal);
+
+  document.getElementById('profile-save-btn')?.addEventListener('click', async () => {
+    try {
+      // Save profile info
+      await fetch(`${API_BASE_URL}/api/users/profile`, {
+        method: 'PUT',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: document.getElementById('profile-first-name')?.value || '',
+          last_name:  document.getElementById('profile-last-name')?.value  || '',
+          email:      document.getElementById('profile-email')?.value      || '',
+          phone:      document.getElementById('profile-phone')?.value      || '',
+          notes:      document.getElementById('profile-notes')?.value      || '',
+        }),
+      });
+      // Optional password change
+      const curPw  = document.getElementById('profile-current-pw')?.value || '';
+      const newPw  = document.getElementById('profile-new-pw')?.value     || '';
+      const confPw = document.getElementById('profile-confirm-pw')?.value || '';
+      if (newPw) {
+        if (newPw !== confPw) { showToast('As senhas não coincidem.', 'error'); return; }
+        const pwRes = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: curPw, new_password: newPw, force: false }),
+        });
+        const pwData = await pwRes.json();
+        if (!pwRes.ok) { showToast(pwData.detail || 'Erro ao alterar senha.', 'error'); return; }
+      }
+      showToast('Perfil salvo!', 'success');
+      closeProfileModal();
+      // Update display name if first_name set
+      const fn = document.getElementById('profile-first-name')?.value;
+      if (fn && sidebarUserName) {
+        const isAdmin = currentUser?.is_admin;
+        sidebarUserName.innerHTML = isAdmin
+          ? `${fn} <span class="admin-badge">Admin</span>`
+          : fn;
+      }
+    } catch(e) {
+      showToast('Erro ao salvar perfil.', 'error');
+    }
+  });
+
+  // ── Feedback Modal ────────────────────────────────────────────────────────────
+
+  let _feedbackCategory = 'sugestao';
+
+  document.getElementById('feedback-fab')?.addEventListener('click', () => {
+    document.getElementById('feedback-modal')?.classList.remove('hidden');
+  });
+
+  document.getElementById('feedback-cancel-btn')?.addEventListener('click', () => {
+    document.getElementById('feedback-modal')?.classList.add('hidden');
+  });
+
+  document.getElementById('feedback-modal-backdrop')?.addEventListener('click', () => {
+    document.getElementById('feedback-modal')?.classList.add('hidden');
+  });
+
+  document.querySelectorAll('.feedback-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.feedback-cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _feedbackCategory = btn.dataset.cat;
+    });
+  });
+
+  const feedbackText = document.getElementById('feedback-text');
+  const feedbackCount = document.getElementById('feedback-char-count');
+  if (feedbackText && feedbackCount) {
+    feedbackText.addEventListener('input', () => {
+      feedbackCount.textContent = feedbackText.value.length;
+    });
+  }
+
+  document.getElementById('feedback-submit-btn')?.addEventListener('click', async () => {
+    const msg = feedbackText?.value?.trim() || '';
+    if (msg.length < 3) { showToast('Por favor, escreva uma mensagem.', 'error'); return; }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/feedback`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: _feedbackCategory, message: msg }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
+      document.getElementById('feedback-modal')?.classList.add('hidden');
+      if (feedbackText) feedbackText.value = '';
+      if (feedbackCount) feedbackCount.textContent = '0';
+      showToast('Feedback enviado! Obrigado.', 'success');
+    } catch(e) { showToast(e.message || 'Erro ao enviar feedback.', 'error'); }
+  });
+
+  // ── Admin Feedback panel ──────────────────────────────────────────────────────
+
+  async function loadAdminFeedback() {
+    const wrap = document.getElementById('admin-feedback-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/feedback`, { headers: getAuthHeaders() });
+      const items = await res.json();
+      if (!items.length) { wrap.innerHTML = '<p class="no-data-message">Nenhum feedback recebido ainda.</p>'; return; }
+      const catEmoji = { sugestao: '💡', bug: '🐛', melhoria: '✨', outro: '📝' };
+      const statusColor = { open: '#f0883e', reviewed: '#3fb950', closed: '#6b7280' };
+      wrap.innerHTML = `<table class="admin-table">
+        <thead><tr><th>${t('admin.col.category')}</th><th>${t('admin.col.message')}</th><th>${t('admin.col.user')}</th><th>${t('admin.col.date')}</th><th>${t('admin.col.status')}</th><th>${t('admin.col.actions')}</th></tr></thead>
+        <tbody>
+          ${items.map(fb => `<tr>
+            <td><span style="font-size:16px">${catEmoji[fb.category] || '📝'}</span> ${fb.category}</td>
+            <td style="max-width:300px;white-space:pre-wrap">${fb.message}</td>
+            <td class="admin-cell-muted">${fb.username}</td>
+            <td class="admin-cell-muted">${new Date(fb.created_at).toLocaleDateString('pt-BR')}</td>
+            <td><span style="color:${statusColor[fb.status] || '#aaa'};font-weight:600">${fb.status}</span></td>
+            <td>
+              <select class="fb-status-select" data-fbid="${fb.id}" style="font-size:11px;padding:3px 6px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary)">
+                <option value="open" ${fb.status==='open'?'selected':''}>${t('admin.feedback.open')}</option>
+                <option value="reviewed" ${fb.status==='reviewed'?'selected':''}>${t('admin.feedback.reviewed')}</option>
+                <option value="closed" ${fb.status==='closed'?'selected':''}>${t('admin.feedback.closed')}</option>
+              </select>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+      wrap.querySelectorAll('.fb-status-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+          await fetch(`${API_BASE_URL}/api/feedback/${sel.dataset.fbid}`, {
+            method: 'PATCH',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: sel.value }),
+          });
+          showToast(t('admin.feedback.status_updated'), 'success');
+        });
+      });
+    } catch(e) { wrap.innerHTML = `<p class="no-data-message">${e.message}</p>`; }
+  }
+
+  // ── Per-user expandable logs in metrics ───────────────────────────────────────
+
+  async function loadUserLogs(userId, containerEl) {
+    containerEl.innerHTML = `<tr><td colspan="4" style="padding:8px 12px;color:var(--text-muted)">${t('logs.loading')}</td></tr>`;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/${userId}/logs`, { headers: getAuthHeaders() });
+      const logs = await res.json();
+      if (!logs.length) {
+        containerEl.innerHTML = `<tr><td colspan="4" style="padding:8px 12px;color:var(--text-muted)">${t('logs.no_records')}</td></tr>`;
+        return;
+      }
+      containerEl.innerHTML = logs.map(l => {
+        const d = new Date(l.generated_at);
+        const ds = isNaN(d) ? l.generated_at : d.toLocaleString('pt-BR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+        return `<tr>
+          <td>${docTypeLabel(l.doc_type)}</td>
+          <td>${l.compartment}</td>
+          <td>${l.region}</td>
+          <td>${ds}</td>
+        </tr>`;
+      }).join('');
+    } catch(e) {
+      containerEl.innerHTML = `<tr><td colspan="4" style="padding:8px 12px;color:var(--danger)">${e.message}</td></tr>`;
+    }
   }
 
   // ── Document History (localStorage, sidebar) ──────────────────────────────────
 
+  const _historyKey = () => currentUser ? `${HISTORY_KEY}_${currentUser.user_id}` : null;
+
   const addToHistory = (type, compartment, region) => {
+    if (!currentUser) return; // only save for logged-in users
+    const key = _historyKey();
     let history = [];
-    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) {}
+    try { history = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) {}
     history.unshift({
       type: docTypeLabel(type),
       compartment: compartment || 'N/A',
@@ -2634,19 +3848,34 @@ document.addEventListener('DOMContentLoaded', () => {
       date: new Date().toLocaleDateString(currentLanguage === 'pt' ? 'pt-BR' : 'en-US'),
     });
     history = history.slice(0, 6);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    localStorage.setItem(key, JSON.stringify(history));
     renderSidebarHistory();
   };
 
   const renderSidebarHistory = () => {
-    if (!sidebarHistory) return;
-    let history = [];
-    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) {}
-    if (!history.length) {
-      sidebarHistory.innerHTML = '<p class="sidebar-empty">Nenhum documento gerado ainda.</p>';
+    const historyEl = document.getElementById('sidebar-history');
+    const guestEl   = document.getElementById('sidebar-history-guest');
+    if (!historyEl) return;
+
+    if (!currentUser) {
+      // Show login notice, hide history
+      if (guestEl) guestEl.classList.remove('hidden');
+      historyEl.classList.add('hidden');
       return;
     }
-    sidebarHistory.innerHTML = history.map(item => `
+
+    // Logged in — hide guest notice, show history
+    if (guestEl) guestEl.classList.add('hidden');
+    historyEl.classList.remove('hidden');
+
+    const key = _historyKey();
+    let history = [];
+    try { history = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) {}
+    if (!history.length) {
+      historyEl.innerHTML = '<p class="sidebar-empty">Nenhum documento gerado ainda.</p>';
+      return;
+    }
+    historyEl.innerHTML = history.map(item => `
       <div class="sidebar-history-item">
         <div class="sidebar-history-dot"></div>
         <div class="sidebar-history-text">
@@ -2657,22 +3886,415 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
+  // Admin Panel
+  // ===========================================================================
+
+  const DOC_TYPES_ALL = ['new_host', 'full_infra', 'kubernetes', 'waf_report'];
+
+  async function loadAdminUsers() {
+    const wrap = document.getElementById('admin-users-table-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Falha ao carregar usuários.');
+      const users = await res.json();
+      renderAdminUsersTable(users);
+    } catch(e) {
+      wrap.innerHTML = `<p class="no-data-message">${e.message}</p>`;
+    }
+  }
+
+  async function loadAdminGroups() {
+    const wrap = document.getElementById('admin-groups-table-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/groups`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Falha ao carregar grupos.');
+      const groups = await res.json();
+      renderAdminGroupsTable(groups);
+    } catch(e) {
+      wrap.innerHTML = `<p class="no-data-message">${e.message}</p>`;
+    }
+  }
+
+  // State for group management modal
+  let _allGroupsCache = [];
+  let _currentGroupModalUid = null;
+
+  async function openGroupModal(uid, username) {
+    _currentGroupModalUid = uid;
+    const modal = document.getElementById('group-modal');
+    const title = document.getElementById('group-modal-title');
+    const body  = document.getElementById('group-modal-body');
+    if (!modal) return;
+    if (title) title.textContent = `Grupos — ${username}`;
+    body.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    modal.classList.remove('hidden');
+
+    try {
+      // Load all groups and user list (to know user's current groups)
+      const [gRes, uRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/admin/groups`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/api/admin/users`,  { headers: getAuthHeaders() }),
+      ]);
+      const allGroups  = await gRes.json();
+      const allUsers   = await uRes.json();
+      _allGroupsCache  = allGroups;
+
+      const user = allUsers.find(u => u.id === uid);
+      const userGroupNames = (user?.groups || '').split(',').map(s => s.trim()).filter(Boolean);
+
+      if (!allGroups.length) {
+        body.innerHTML = '<p class="no-data-message">Nenhum grupo criado ainda. Crie grupos na aba Grupos.</p>';
+        return;
+      }
+
+      body.innerHTML = `
+        <p class="group-modal-hint">Marque os grupos nos quais este usuário deve participar.</p>
+        <div class="group-modal-list">
+          ${allGroups.map(g => {
+            const isMember = userGroupNames.includes(g.name);
+            const typesList = g.allowed_doc_types
+              ? g.allowed_doc_types.split(',').map(t => `<span class="net-chip net-chip-blue" style="font-size:10px;padding:2px 6px">${docTypeLabel(t.trim())}</span>`).join('')
+              : '<span style="color:var(--text-muted);font-size:11px">Sem restrições</span>';
+            return `
+              <label class="group-modal-item ${isMember ? 'group-modal-item-active' : ''}">
+                <div class="group-modal-item-left">
+                  <input type="checkbox" class="group-member-cb" data-gid="${g.id}" data-gname="${g.name}" ${isMember ? 'checked' : ''}>
+                  <span class="group-modal-check-track"><span class="group-modal-check-thumb"></span></span>
+                  <div class="group-modal-item-info">
+                    <span class="group-modal-item-name">${g.name}</span>
+                    <span class="group-modal-item-meta">${g.member_count || 0} membro(s)</span>
+                  </div>
+                </div>
+                <div class="group-modal-item-types">${typesList}</div>
+              </label>`;
+          }).join('')}
+        </div>
+        <div class="group-modal-footer">
+          <button class="button-primary" id="group-modal-save-btn">Salvar alterações</button>
+        </div>`;
+
+      // Save handler
+      document.getElementById('group-modal-save-btn')?.addEventListener('click', async () => {
+        const cbs = body.querySelectorAll('.group-member-cb');
+        const toAdd    = [];
+        const toRemove = [];
+        cbs.forEach(cb => {
+          const gid = parseInt(cb.dataset.gid);
+          const wasIn = userGroupNames.includes(cb.dataset.gname);
+          if (cb.checked && !wasIn) toAdd.push(gid);
+          if (!cb.checked && wasIn) toRemove.push(gid);
+        });
+        try {
+          await Promise.all([
+            ...toAdd.map(gid => fetch(`${API_BASE_URL}/api/admin/groups/${gid}/users/${uid}`, { method: 'POST', headers: getAuthHeaders() })),
+            ...toRemove.map(gid => fetch(`${API_BASE_URL}/api/admin/groups/${gid}/users/${uid}`, { method: 'DELETE', headers: getAuthHeaders() })),
+          ]);
+          showToast('Grupos atualizados.', 'success');
+          modal.classList.add('hidden');
+          loadAdminUsers();
+        } catch(e) {
+          showToast('Erro ao salvar grupos.', 'error');
+        }
+      });
+
+      // Toggle active class on label when checkbox changes
+      body.querySelectorAll('.group-member-cb').forEach(cb => {
+        cb.addEventListener('change', () => {
+          cb.closest('.group-modal-item')?.classList.toggle('group-modal-item-active', cb.checked);
+        });
+      });
+
+    } catch(e) {
+      body.innerHTML = `<p class="no-data-message">${e.message}</p>`;
+    }
+  }
+
+  // Close group modal
+  document.getElementById('group-modal-close')?.addEventListener('click', () => {
+    document.getElementById('group-modal')?.classList.add('hidden');
+  });
+  document.getElementById('group-modal-backdrop')?.addEventListener('click', () => {
+    document.getElementById('group-modal')?.classList.add('hidden');
+  });
+
+  function renderAdminUsersTable(users) {
+    const wrap = document.getElementById('admin-users-table-wrap');
+    const searchVal = (document.getElementById('admin-user-search')?.value || '').toLowerCase();
+    const filtered = searchVal ? users.filter(u => u.username.toLowerCase().includes(searchVal)) : users;
+
+    if (!filtered.length) {
+      wrap.innerHTML = `<p class="no-data-message">${t('admin.no_users')}</p>`;
+      return;
+    }
+
+    wrap.innerHTML = `
+      <table class="admin-table">
+        <thead><tr>
+          <th>${t('admin.col.user')}</th>
+          <th>${t('admin.col.role')}</th>
+          <th>${t('admin.col.groups')}</th>
+          <th>${t('admin.col.generations')}</th>
+          <th>${t('admin.col.created_at')}</th>
+          <th>${t('admin.col.actions')}</th>
+        </tr></thead>
+        <tbody>
+          ${filtered.map(u => {
+            const isAdmin  = u.is_admin === 1;
+            const created  = new Date(u.created_at).toLocaleDateString('pt-BR');
+            const groupNames = u.groups ? u.groups.split(',').map(g => g.trim()).filter(Boolean) : [];
+            const groupChips = groupNames.length
+              ? groupNames.map(g => `<span class="admin-group-chip">${g}</span>`).join('')
+              : '<span class="admin-cell-muted">—</span>';
+            return `<tr>
+              <td>
+                <div class="admin-user-cell">
+                  <span class="admin-user-avatar">${u.username[0].toUpperCase()}</span>
+                  <div class="admin-user-info">
+                    <span class="admin-username">${u.username}</span>
+                    ${isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
+                  </div>
+                </div>
+              </td>
+              <td>
+                <label class="admin-toggle-label" title="${isAdmin ? t('admin.role.revoke') : t('admin.role.promote')}">
+                  <input type="checkbox" class="admin-role-toggle" data-uid="${u.id}" ${isAdmin ? 'checked' : ''}>
+                  <span class="admin-toggle-track"><span class="admin-toggle-thumb"></span></span>
+                  <span class="admin-toggle-text">${isAdmin ? t('admin.role.admin') : t('admin.role.user')}</span>
+                </label>
+              </td>
+              <td>
+                <div class="admin-groups-cell">
+                  ${groupChips}
+                  <button class="admin-btn-icon admin-manage-groups" data-uid="${u.id}" data-uname="${u.username}" title="Gerenciar grupos">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
+                </div>
+              </td>
+              <td class="admin-cell-count">${u.doc_count || 0}</td>
+              <td class="admin-cell-muted">${created}</td>
+              <td>
+                <button class="admin-btn-danger admin-delete-user" data-uid="${u.id}" title="Deletar usuário">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+
+    // Bind role toggles
+    wrap.querySelectorAll('.admin-role-toggle').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const uid = parseInt(cb.dataset.uid);
+        try {
+          const r = await fetch(`${API_BASE_URL}/api/admin/users/${uid}/role`, {
+            method: 'PATCH',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_admin: cb.checked }),
+          });
+          if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+          showToast(cb.checked ? t('admin.toast.promoted') : t('admin.toast.revoked'), 'success');
+          loadAdminUsers();
+        } catch(e) {
+          showToast(e.message, 'error');
+          cb.checked = !cb.checked;
+        }
+      });
+    });
+
+    // Bind group management buttons
+    wrap.querySelectorAll('.admin-manage-groups').forEach(btn => {
+      btn.addEventListener('click', () => openGroupModal(parseInt(btn.dataset.uid), btn.dataset.uname));
+    });
+
+    // Bind delete buttons
+    wrap.querySelectorAll('.admin-delete-user').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const uid = parseInt(btn.dataset.uid);
+        if (!confirm(t('admin.confirm.delete_user'))) return;
+        try {
+          const r = await fetch(`${API_BASE_URL}/api/admin/users/${uid}`, { method: 'DELETE', headers: getAuthHeaders() });
+          if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+          showToast(t('admin.toast.deleted_user'), 'success');
+          loadAdminUsers();
+        } catch(e) { showToast(e.message, 'error'); }
+      });
+    });
+  }
+
+  function renderAdminGroupsTable(groups) {
+    const wrap = document.getElementById('admin-groups-table-wrap');
+    if (!groups.length) {
+      wrap.innerHTML = `<p class="no-data-message">${t('admin.no_groups')}</p>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table class="admin-table">
+        <thead><tr>
+          <th>${t('admin.col.name')}</th>
+          <th>${t('admin.col.members')}</th>
+          <th>${t('admin.col.doc_types')}</th>
+          <th>${t('admin.col.actions')}</th>
+        </tr></thead>
+        <tbody>
+          ${groups.map(g => {
+            const types = g.allowed_doc_types ? g.allowed_doc_types.split(',').map(t => t.trim()) : [];
+            const typeChecks = DOC_TYPES_ALL.map(dt => {
+              const active = types.includes(dt);
+              return `<label class="admin-perm-toggle ${active ? 'active' : ''}" title="${docTypeLabel(dt)}">
+                <input type="checkbox" class="admin-perm-cb" data-gid="${g.id}" data-type="${dt}" ${active ? 'checked' : ''}>
+                <span class="admin-perm-track"><span class="admin-perm-thumb"></span></span>
+                <span class="admin-perm-label-text">${docTypeLabel(dt)}</span>
+              </label>`;
+            }).join('');
+            return `<tr>
+              <td><strong>${g.name}</strong></td>
+              <td class="admin-cell-count">${g.member_count || 0}</td>
+              <td><div class="admin-perm-row">${typeChecks}</div></td>
+              <td>
+                <button class="admin-btn-danger admin-delete-group" data-gid="${g.id}" title="Deletar grupo">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+                </button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+
+    // Bind permission checkboxes
+    wrap.querySelectorAll('.admin-perm-cb').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const label = cb.closest('.admin-perm-toggle');
+        if (label) label.classList.toggle('active', cb.checked);
+        const gid = parseInt(cb.dataset.gid);
+        const allCbs = wrap.querySelectorAll(`.admin-perm-cb[data-gid="${gid}"]`);
+        const doc_types = Array.from(allCbs).filter(c => c.checked).map(c => c.dataset.type);
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/admin/groups/${gid}/permissions`, {
+            method: 'PUT',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ doc_types }),
+          });
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            throw new Error(d.detail || `HTTP ${res.status}`);
+          }
+          showToast(t('admin.toast.permissions_saved'), 'success');
+        } catch(e) {
+          showToast(e.message || t('admin.toast.permissions_error'), 'error');
+          // Revert toggle on failure
+          if (label) label.classList.toggle('active', !cb.checked);
+          cb.checked = !cb.checked;
+        }
+      });
+    });
+
+    // Bind delete group buttons
+    wrap.querySelectorAll('.admin-delete-group').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const gid = parseInt(btn.dataset.gid);
+        if (!confirm(t('admin.confirm.delete_group'))) return;
+        try {
+          const r = await fetch(`${API_BASE_URL}/api/admin/groups/${gid}`, {
+            method: 'DELETE', headers: getAuthHeaders(),
+          });
+          if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+          showToast(t('admin.toast.deleted_group'), 'success');
+          loadAdminGroups();
+        } catch(e) { showToast(e.message, 'error'); }
+      });
+    });
+  }
+
+  // Admin tab switching
+  document.querySelectorAll('.admin-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const name = tab.dataset.tab;
+      document.getElementById('admin-panel-users')    && document.getElementById('admin-panel-users').classList.toggle('hidden',    name !== 'users');
+      document.getElementById('admin-panel-groups')   && document.getElementById('admin-panel-groups').classList.toggle('hidden',   name !== 'groups');
+      document.getElementById('admin-panel-feedback') && document.getElementById('admin-panel-feedback').classList.toggle('hidden', name !== 'feedback');
+      if (name === 'groups')   loadAdminGroups();
+      if (name === 'feedback') loadAdminFeedback();
+    });
+  });
+
+  const adminRefreshBtn = document.getElementById('admin-refresh-users');
+  if (adminRefreshBtn) adminRefreshBtn.addEventListener('click', loadAdminUsers);
+
+  const adminUserSearch = document.getElementById('admin-user-search');
+  if (adminUserSearch) {
+    adminUserSearch.addEventListener('input', async () => {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: getAuthHeaders() });
+      if (res.ok) renderAdminUsersTable(await res.json());
+    });
+  }
+
+  const adminCreateGroupBtn = document.getElementById('admin-create-group-btn');
+  if (adminCreateGroupBtn) {
+    adminCreateGroupBtn.addEventListener('click', async () => {
+      const input = document.getElementById('admin-new-group-name');
+      const name  = (input?.value || '').trim();
+      if (!name) return;
+      try {
+        const r = await fetch(`${API_BASE_URL}/api/admin/groups`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+        if (input) input.value = '';
+        showToast(`Grupo "${name}" criado.`, 'success');
+        loadAdminGroups();
+      } catch(e) { showToast(e.message, 'error'); }
+    });
+  }
+
+  // ===========================================================================
   // App Initialization
   // ===========================================================================
   const initializeApp = async () => {
     const savedLang = localStorage.getItem('oci-docgen-lang') || 'pt';
-    await setLanguage(savedLang);
     const savedTheme = localStorage.getItem('oci-docgen-theme') || 'dark';
-    applyTheme(savedTheme);
 
-    // Restore session if exists (no blocking gate — app is always usable)
+    // 1. Restore session first so currentUser is set before permission check
     const session = _loadSession();
     if (session) {
-      currentUser = session;
+      try {
+        const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${session.token}` }
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          currentUser = { ...session, is_admin: meData.is_admin };
+          _saveSession(currentUser);
+        } else {
+          _clearSession();
+        }
+      } catch(e) {
+        currentUser = session;
+      }
     }
+
+    // 2. Fetch permissions (now currentUser is set correctly)
+    await fetchAndApplyPermissions();
+
+    // 3. Fetch regions in parallel with language load
+    await Promise.all([
+      setLanguage(savedLang),
+      fetchRegions(),
+    ]);
+
+    // Re-apply theme AFTER translations are loaded so the label renders correctly
+    applyTheme(savedTheme);
+
     updateSidebarAuthState();
     renderSidebarHistory();
-    fetchRegions();
   };
 
 
@@ -2685,12 +4307,12 @@ document.addEventListener('DOMContentLoaded', () => {
       document.body.classList.add('light-mode');
       if (iconDark)  iconDark.style.display  = 'none';
       if (iconLight) iconLight.style.display = '';
-      if (themeBtnLabel) themeBtnLabel.textContent = 'Modo Escuro';
+      if (themeBtnLabel) themeBtnLabel.textContent = t('theme_dark') || 'Modo Escuro';
     } else {
       document.body.classList.remove('light-mode');
       if (iconDark)  iconDark.style.display  = '';
       if (iconLight) iconLight.style.display = 'none';
-      if (themeBtnLabel) themeBtnLabel.textContent = 'Modo Claro';
+      if (themeBtnLabel) themeBtnLabel.textContent = t('theme_light') || 'Modo Claro';
     }
   };
 
@@ -2727,7 +4349,11 @@ document.addEventListener('DOMContentLoaded', () => {
   previewOverlay.addEventListener('click', (e) => { if (e.target === previewOverlay) closeDocPreview(); });
   lightboxClose.addEventListener('click', closeLightbox);
   lightboxOverlay.addEventListener('click', (e) => { if (e.target === lightboxOverlay) closeLightbox(); });
-  languageSelector.addEventListener('change', (e) => setLanguage(e.target.value));
+  if (languageSelector) languageSelector.addEventListener('change', (e) => setLanguage(e.target.value));
+  // Flag language buttons
+  document.querySelectorAll('.lang-flag-btn').forEach(btn => {
+    btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
+  });
 
   // ===========================================================================
   // PT-BR: Inicialização da Aplicação

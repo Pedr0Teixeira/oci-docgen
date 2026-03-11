@@ -1,20 +1,15 @@
 # ==============================================================================
-# PT-BR: Módulo de geração de documentos .docx para o OCI DocGen.
-#        Converte dados de infraestrutura coletados em documentos Word formatados,
-#        com suporte a múltiplos tipos de documentação e idiomas (PT-BR / EN).
-# EN: .docx document generation module for OCI DocGen.
+# doc_generator.py — .docx document generation module for OCI DocGen.
 #     Converts collected infrastructure data into formatted Word documents,
 #     with support for multiple documentation types and languages (PT-BR / EN).
 # ==============================================================================
 
-# Standard Library Imports
 import os
 import re
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
-# Third-Party Imports
 import docx
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
@@ -26,12 +21,10 @@ from docx.oxml.shared import OxmlElement, qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
-# Local Application Imports
 from schemas import InfrastructureData, InstanceData, LoadBalancerData
 
 # ==============================================================================
-# PT-BR: Serviço de Internacionalização (i18n) — Traduções PT-BR e EN
-# EN: Internationalization (i18n) Service — PT-BR and EN Translations
+# Internationalisation (i18n) — Embedded PT-BR and EN string tables
 # ==============================================================================
 
 DOC_STRINGS = {
@@ -152,6 +145,8 @@ DOC_STRINGS = {
         "doc.headings.attached_volumes": "Volumes Anexados (Block Volumes)",
         "doc.headings.backup_policies": "Políticas de Backup",
         "doc.headings.backup_policy_details": "Detalhes da Política de Backup CCM-7D",
+        "doc.headings.standalone_volumes": "Block Volumes Desanexados (Sem Instância Associada)",
+        "doc.descriptions.standalone_volumes": "Os volumes abaixo existem no compartimento mas não estão atualmente anexados a nenhuma instância computacional.",
         "doc.headings.volume_groups": "Volume Groups",
         "doc.headings.general_info": "Informações Gerais",
         "doc.headings.data_protection_validation": "Validação de Proteção de Dados",
@@ -407,6 +402,8 @@ DOC_STRINGS = {
         "doc.headings.attached_volumes": "Attached Block Volumes",
         "doc.headings.backup_policies": "Backup Policies",
         "doc.headings.backup_policy_details": "CCM-7D Backup Policy Details",
+        "doc.headings.standalone_volumes": "Unattached Block Volumes (No Associated Instance)",
+        "doc.descriptions.standalone_volumes": "The volumes below exist in the compartment but are not currently attached to any compute instance.",
         "doc.headings.volume_groups": "Volume Groups",
         "doc.headings.general_info": "General Information",
         "doc.headings.data_protection_validation": "Data Protection Validation",
@@ -562,8 +559,7 @@ def t(key: str, lang: str) -> str:
 
 
 # ==============================================================================
-# PT-BR: Auxiliares de Sumário e Hyperlinks
-# EN: Table of Contents and Hyperlink Helpers
+# Table of Contents and Hyperlink Helpers
 # ==============================================================================
 def _define_toc_styles(document: Document):
     """Creates and configures 'TOC 1-3' styles with correct indentation if they don't exist."""
@@ -672,8 +668,7 @@ def _add_and_bookmark_heading(
 
 
 # ==============================================================================
-# PT-BR: Auxiliares de Estilo de Tabelas
-# EN: Table Styling Helpers
+# Table Styling Helpers
 # ==============================================================================
 def _shade_cell(cell, color="4472C4"):
     """Applies a background color shading to a table cell."""
@@ -682,15 +677,11 @@ def _shade_cell(cell, color="4472C4"):
     cell._tc.get_or_add_tcPr().append(shading_elm)
 
 
-# PT-BR: Mapeamento de estado para cor de fundo de linha (hex sem '#').
-#        TERMINATED → vermelho claro (alerta crítico: recurso excluído).
-#        STOPPED/PARADO  → laranja claro (alerta: recurso parado).
-#        PENDING_DELETION → amarelo claro (alerta: remoção agendada).
-#        Outros estados ativos → sem cor (fundo padrão branco).
-# EN: State-to-row-background-color mapping (hex without '#').
-#     TERMINATED  → light red    (critical alert: resource deleted).
-#     STOPPED     → light orange (warning: resource stopped).
-#     PENDING_DELETION → light yellow (warning: scheduled for removal).
+# Row background color by lifecycle state (hex without '#').
+# TERMINATED       → light red    (critical: resource deleted)
+# STOPPED/PARADO   → light orange (warning: resource stopped)
+# PENDING_DELETION → light yellow (warning: scheduled for removal)
+# Other active states → no color (default white background)
 #     Other active states → no color (default white background).
 _STATE_ROW_COLORS: Dict[str, Optional[str]] = {
     "TERMINATED":      "FADBD8",   # light red
@@ -711,12 +702,9 @@ _STATE_TEXT_COLORS: Dict[str, str] = {
 
 def _style_row_by_state(row, state_raw: str) -> None:
     """
-    PT-BR: Aplica cor de fundo e cor de texto em todas as células de uma linha
-           com base no estado do recurso. Recursos TERMINATED também recebem
-           strikethrough para reforçar visualmente que foram excluídos.
-    EN: Applies background color and text color to all cells in a row based on
-        the resource lifecycle state. TERMINATED rows also get strikethrough
-        to visually reinforce that the resource has been deleted.
+    Applies background color and text color to all cells in a row based on the
+    resource lifecycle state. TERMINATED rows also get strikethrough to visually
+    reinforce that the resource has been deleted.
     """
     state_key = state_raw.upper()
     bg_color   = _STATE_ROW_COLORS.get(state_key)
@@ -727,23 +715,17 @@ def _style_row_by_state(row, state_raw: str) -> None:
         return  # Active resources — no styling needed
 
     for cell in row.cells:
-        # PT-BR: Aplica fundo colorido na célula.
-        # EN: Apply colored background to the cell.
         if bg_color:
             _shade_cell(cell, bg_color)
 
-        # PT-BR: Aplica cor de texto e strikethrough em cada run da célula.
-        # EN: Apply text color and strikethrough to every run in the cell.
         for para in cell.paragraphs:
             for run in para.runs:
                 if text_color:
                     run.font.color.rgb = RGBColor.from_string(text_color)
                 if is_terminated:
                     run.font.strike = True
-            # PT-BR: Se o parágrafo tem texto mas não tem runs (texto direto na cell),
-            #        limpa e re-adiciona com a formatação correta.
-            # EN: If the paragraph has text but no runs (text set directly on cell),
-            #     clear and re-add with correct formatting.
+            # If the paragraph has text but no runs (text set directly on the cell),
+            # clear and re-add it with the correct formatting applied.
             if para.text and not para.runs:
                 text = para.text
                 para.clear()
@@ -758,12 +740,9 @@ def _style_row_by_state(row, state_raw: str) -> None:
 
 def _style_cert_kv_table_by_state(document: Document, state: str) -> None:
     """
-    PT-BR: Localiza a ultima tabela adicionada ao documento (tabela key-value
-           do certificado) e aplica cor de fundo em todas as linhas de dados
-           com base no estado do certificado. Linha de titulo mantem azul padrao.
-    EN: Locates the last table added (certificate key-value table) and applies
-        background color to all data rows based on the certificate state.
-        The title row keeps the default blue color.
+    Locates the last table added to the document (certificate key-value table)
+    and applies background color to all data rows based on the certificate
+    lifecycle state. The title row keeps the default blue color.
     """
     state_key  = state.upper()
     bg_color   = _STATE_ROW_COLORS.get(state_key)
@@ -828,8 +807,7 @@ def _create_titled_key_value_table(
 
 
 # ==============================================================================
-# PT-BR: Auxiliares de Formatação de Conteúdo
-# EN: Content Formatting Helpers
+# Content Formatting Helpers
 # ==============================================================================
 def _add_network_resource_details(
     document: Document,
@@ -877,7 +855,7 @@ def _add_network_resource_details(
                 cells[4].text = rule.description or ""
             else:  # route
                 target_str = rule.target
-                # Se o target for um OCID bruto (não traduzido pelo backend), aplica tradução genérica
+                # If the target is a raw OCID (not resolved by the backend), apply generic label.
                 if target_str and target_str.startswith("ocid1."):
                     target_lower = target_str.lower()
                     if "internetgateway" in target_lower:
@@ -903,15 +881,13 @@ def _add_network_resource_details(
 
 
 # ==============================================================================
-# PT-BR: Geradores de Seções do Documento
-# EN: Document Section Generators
+# Document Section Generators
 # ==============================================================================
 def _add_instances_table(document: Document, instances: List[InstanceData], lang: str):
     """Adds the main summary table of compute instances to the document."""
     if not instances:
         return
-    # PT-BR: Rótulos de estado para instâncias no documento (normaliza TERMINATED).
-    # EN: State labels for instances in the document (normalizes TERMINATED).
+    # State label map for instances — normalises TERMINATED to a display-friendly string.
     state_label_map = {
         "RUNNING":    "Ativo"         if lang == "pt" else "Running",
         "STOPPED":    "Parado"        if lang == "pt" else "Stopped",
@@ -945,8 +921,7 @@ def _add_instances_table(document: Document, instances: List[InstanceData], lang
         cells[6].text = data.os_name
         cells[7].text = data.private_ip
         cells[8].text = data.public_ip or "N/A"
-        # PT-BR: Aplica cor de alerta na linha com base no estado da instância.
-        # EN: Apply alert color to the row based on instance lifecycle state.
+        # Apply alert color to the row based on instance lifecycle state.
         _style_row_by_state(table.rows[-1], state_raw)
     document.add_paragraph()
 
@@ -1003,8 +978,7 @@ def _add_volume_and_backup_section(
     )
     document.add_paragraph(t("doc.descriptions.backup_policy_table", lang))
 
-    # PT-BR: Mapa de estado → label legível para as instâncias na tabela de backup.
-    # EN: State → readable label map for instances in the backup table.
+    # State label map for instances in the backup table.
     state_label_map = {
         "RUNNING":    "Ativo"    if lang == "pt" else "Running",
         "STOPPED":    "Parado"   if lang == "pt" else "Stopped",
@@ -1033,8 +1007,7 @@ def _add_volume_and_backup_section(
             )
         else:
             boot_cells[3].text = instance.backup_policy_name
-        # PT-BR: Destaca linha se a instância estiver excluída ou parada.
-        # EN: Highlight row if the instance is terminated or stopped.
+        # Highlight row if the instance is terminated or stopped.
         _style_row_by_state(table.rows[-1], state_raw)
 
         for vol in instance.block_volumes:
@@ -1073,6 +1046,42 @@ def _add_volume_and_backup_section(
         document.add_paragraph(t("doc.descriptions.backup_policy_details_3", lang))
         document.add_paragraph(t("doc.descriptions.backup_policy_details_4", lang))
     document.add_paragraph()
+
+    # Standalone (unattached) block volumes
+    standalone_vols = getattr(infra_data, "standalone_volumes", [])
+    if standalone_vols:
+        _add_and_bookmark_heading(
+            document, t("doc.headings.standalone_volumes", lang), 3, toc_list, counters
+        )
+        document.add_paragraph(t("doc.descriptions.standalone_volumes", lang))
+        headers_sv = [
+            t("doc.headers.volume_name", lang),
+            t("doc.headers.size_gb", lang),
+            t("doc.common.state", lang),
+            t("doc.headers.backup_policy", lang),
+            "Availability Domain",
+        ]
+        table_sv = document.add_table(rows=1, cols=len(headers_sv), style="Table Grid")
+        _style_table_headers(table_sv, headers_sv)
+        for sv in sorted(standalone_vols, key=lambda v: v.display_name):
+            sv_state_raw = (sv.lifecycle_state or "AVAILABLE").upper()
+            sv_state_map = {
+                "ACTIVE": t("doc.common.state_active", lang) if lang == "pt" else "Active",
+                "AVAILABLE": t("doc.common.state_active", lang) if lang == "pt" else "Active",
+                "TERMINATED": "Excluído" if lang == "pt" else "Deleted",
+                "TERMINATING": "Excluindo..." if lang == "pt" else "Deleting...",
+                "STOPPED": "Parado" if lang == "pt" else "Stopped",
+                "STOPPING": "Parando" if lang == "pt" else "Stopping",
+            }
+            sv_state_display = sv_state_map.get(sv_state_raw, sv.lifecycle_state or "N/A")
+            cells = table_sv.add_row().cells
+            cells[0].text = sv.display_name
+            cells[1].text = str(int(sv.size_in_gbs))
+            cells[2].text = sv_state_display
+            cells[3].text = sv.backup_policy_name
+            cells[4].text = sv.availability_domain or "N/A"
+            _style_row_by_state(table_sv.rows[-1], sv_state_raw)
+        document.add_paragraph()
 
 
 def _add_volume_groups_section(
@@ -1360,6 +1369,47 @@ def _add_load_balancers_section(
         _render_single_load_balancer(document, lb, infra_data, toc_list, counters, lang, base_level=3)
 
 
+
+# Row background/text colors for VPN tunnel status.
+# DOWN = amber (attention); UP = subtle green (ok); PROVISIONING = light orange.
+_TUNNEL_STATUS_ROW_COLORS: Dict[str, Optional[str]] = {
+    "DOWN":         "FEF3C7",   # amber-50: subtle yellow — attention without alarm
+    "PROVISIONING": "FFF7ED",   # amber-25: very light
+    "AVAILABLE":    None,       # no color — active/ok
+    "UP":           "F0FDF4",   # green-50: very subtle green
+}
+_TUNNEL_STATUS_TEXT_COLORS: Dict[str, str] = {
+    "DOWN":         "92400E",   # amber-800 brown — clearly readable
+    "PROVISIONING": "C2410C",   # orange-700
+    "UP":           "166534",   # green-800
+}
+
+
+def _style_row_by_tunnel_status(row, status_raw: str) -> None:
+    """
+    Applies subtle background/text color to a row based on VPN tunnel status.
+    DOWN = amber-yellow (attention); UP = very light green (ok).
+    """
+    key        = (status_raw or "").upper()
+    bg_color   = _TUNNEL_STATUS_ROW_COLORS.get(key)
+    text_color = _TUNNEL_STATUS_TEXT_COLORS.get(key)
+    if not bg_color and not text_color:
+        return
+    for cell in row.cells:
+        if bg_color:
+            _shade_cell(cell, bg_color)
+        for para in cell.paragraphs:
+            for run in para.runs:
+                if text_color:
+                    run.font.color.rgb = RGBColor.from_string(text_color)
+            if para.text and not para.runs:
+                text_val = para.text
+                para.clear()
+                run = para.add_run(text_val)
+                if text_color:
+                    run.font.color.rgb = RGBColor.from_string(text_color)
+
+
 def _add_connectivity_section(
     document: Document,
     infra_data: InfrastructureData,
@@ -1367,16 +1417,20 @@ def _add_connectivity_section(
     counters: Dict[int, int],
     lang: str,
 ):
-    """Adds the external connectivity section (DRG, CPE, VPN) to the document."""
+    """Adds the external connectivity section — DRGs first, then CPEs and VPN tunnels."""
     _add_and_bookmark_heading(
         document, t("doc.headings.connectivity", lang), 2, toc_list, counters
     )
+
+    # ── DRGs ────────────────────────────────────────────────────────────────────
     _add_and_bookmark_heading(
         document, t("doc.headings.drgs", lang), 3, toc_list, counters
     )
     if not infra_data.drgs:
         document.add_paragraph(t("doc.messages.no_drg_found", lang))
     else:
+        # Build VCN id→name map for attachment enrichment
+        vcn_name_map = {vcn.id: vcn.display_name for vcn in (infra_data.vcns or [])}
         for drg in infra_data.drgs:
             _add_and_bookmark_heading(
                 document,
@@ -1385,6 +1439,7 @@ def _add_connectivity_section(
                 toc_list,
                 counters,
             )
+            # Attachments
             _add_and_bookmark_heading(
                 document, t("doc.headings.drg_attachments", lang), 5, toc_list, counters
             )
@@ -1392,18 +1447,25 @@ def _add_connectivity_section(
                 headers = [
                     t("doc.headers.drg_attachment_name", lang),
                     t("doc.headers.drg_attachment_type", lang),
+                    "VCN",
                     t("doc.headers.drg_route_table", lang),
                 ]
                 table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
                 _style_table_headers(table, headers)
                 for attachment in drg.attachments:
+                    vcn_name = ""
+                    if (attachment.network_type or "").upper() == "VCN":
+                        vcn_name = vcn_name_map.get(attachment.network_id or "", "—")
                     cells = table.add_row().cells
                     cells[0].text = attachment.display_name
                     cells[1].text = attachment.network_type
-                    cells[2].text = attachment.route_table_name or "N/A"
+                    cells[2].text = vcn_name
+                    cells[3].text = attachment.route_table_name or "N/A"
                 document.add_paragraph()
             else:
                 document.add_paragraph(t("doc.messages.no_drg_attachment_found", lang))
+
+            # RPCs
             _add_and_bookmark_heading(
                 document, t("doc.headings.rpcs", lang), 5, toc_list, counters
             )
@@ -1427,6 +1489,7 @@ def _add_connectivity_section(
             else:
                 document.add_paragraph(t("doc.messages.no_rpc_found", lang))
 
+    # ── CPEs ────────────────────────────────────────────────────────────────────
     _add_and_bookmark_heading(
         document, t("doc.headings.cpes", lang), 3, toc_list, counters
     )
@@ -1446,6 +1509,8 @@ def _add_connectivity_section(
             cells[1].text = cpe.ip_address
             cells[2].text = cpe.vendor or "N/A"
     document.add_paragraph()
+
+    # ── VPN / IPSec ──────────────────────────────────────────────────────────────
     _add_and_bookmark_heading(
         document, t("doc.headings.vpn_connections", lang), 3, toc_list, counters
     )
@@ -1454,6 +1519,8 @@ def _add_connectivity_section(
     else:
         cpe_map = {cpe.id: cpe.display_name for cpe in infra_data.cpes}
         drg_map = {drg.id: drg.display_name for drg in infra_data.drgs}
+
+        # Summary table
         _add_and_bookmark_heading(
             document, t("doc.headings.vpn_summary", lang), 4, toc_list, counters
         )
@@ -1465,25 +1532,29 @@ def _add_connectivity_section(
             t("doc.headers.vpn_routing", lang),
             t("doc.headers.vpn_tunnels", lang),
         ]
-        table = document.add_table(rows=1, cols=len(headers), style="Table Grid")
-        _style_table_headers(table, headers)
+        tbl_summary = document.add_table(rows=1, cols=len(headers), style="Table Grid")
+        _style_table_headers(tbl_summary, headers)
         for ipsec in infra_data.ipsec_connections:
             routing_type = (
-                "BGP" if any(t.routing_type == "BGP" for t in ipsec.tunnels) else "STATIC"
+                "BGP" if any(tn.routing_type == "BGP" for tn in ipsec.tunnels) else "STATIC"
             )
             routing_display = (
                 f"STATIC ({len(ipsec.static_routes)} rotas)"
                 if routing_type == "STATIC"
                 else "BGP"
             )
-            cells = table.add_row().cells
+            cells = tbl_summary.add_row().cells
             cells[0].text = ipsec.display_name
             cells[1].text = ipsec.status
             cells[2].text = cpe_map.get(ipsec.cpe_id, ipsec.cpe_id)
             cells[3].text = drg_map.get(ipsec.drg_id, ipsec.drg_id)
             cells[4].text = routing_display
             cells[5].text = str(len(ipsec.tunnels))
+            # Color the summary row by connection status (UP/DOWN/PROVISIONING)
+            _style_row_by_tunnel_status(tbl_summary.rows[-1], ipsec.status)
         document.add_paragraph()
+
+        # Detailed tunnel tables
         _add_and_bookmark_heading(
             document, t("doc.headings.vpn_details", lang), 4, toc_list, counters
         )
@@ -1496,51 +1567,65 @@ def _add_connectivity_section(
                 document.add_paragraph(t("doc.messages.no_tunnel_found", lang))
                 continue
             for tunnel in ipsec.tunnels:
+                # ── Tunnel header paragraph with bold name + status badge ──────
                 p = document.add_paragraph()
-                p.add_run(
-                    f"{t('doc.headings.vpn_tunnel_details', lang)}: {tunnel.display_name} "
-                ).bold = True
-                p.add_run(f"({t('doc.common.status', lang)}: {tunnel.status})")
+                run_name = p.add_run(
+                    f"{t('doc.headings.vpn_tunnel_details', lang)}: {tunnel.display_name}  "
+                )
+                run_name.bold = True
+                # Status inline badge: DOWN → amber text, UP → green text
+                status_upper = (tunnel.status or "").upper()
+                run_status = p.add_run(f"[{tunnel.status}]")
+                run_status.bold = True
+                if status_upper == "DOWN":
+                    run_status.font.color.rgb = RGBColor.from_string("92400E")
+                elif status_upper == "UP":
+                    run_status.font.color.rgb = RGBColor.from_string("166534")
+                else:
+                    run_status.font.color.rgb = RGBColor.from_string("C2410C")
+
                 tunnel_info = {
                     t("doc.headers.vpn_oracle_ip", lang): tunnel.vpn_oracle_ip or "N/A",
-                    t("doc.headers.vpn_cpe_ip", lang): tunnel.cpe_ip or "N/A",
-                    t("doc.common.routing", lang): tunnel.routing_type,
+                    t("doc.headers.vpn_cpe_ip", lang):    tunnel.cpe_ip or "N/A",
+                    t("doc.common.routing", lang):         tunnel.routing_type,
                     t("doc.headers.vpn_ike_version", lang): tunnel.ike_version,
                 }
                 _create_titled_key_value_table(
                     document, t("doc.headings.vpn_tunnel_info", lang), tunnel_info
                 )
+                # Apply subtle row background to all data rows based on tunnel status
+                tbl_tunnel = document.tables[-1]
+                for row in tbl_tunnel.rows[1:]:
+                    _style_row_by_tunnel_status(row, tunnel.status)
+
                 if tunnel.routing_type == "BGP" and tunnel.bgp_session_info:
                     bgp = tunnel.bgp_session_info
                     bgp_info_data = {
-                        t("doc.headers.vpn_bgp_oracle_asn", lang): bgp.oracle_bgp_asn,
-                        t("doc.headers.vpn_bgp_customer_asn", lang): bgp.customer_bgp_asn,
-                        t("doc.headers.vpn_bgp_oracle_ip", lang): bgp.oracle_interface_ip,
-                        t("doc.headers.vpn_bgp_customer_ip", lang): bgp.customer_interface_ip,
+                        t("doc.headers.vpn_bgp_oracle_asn", lang):    bgp.oracle_bgp_asn,
+                        t("doc.headers.vpn_bgp_customer_asn", lang):   bgp.customer_bgp_asn,
+                        t("doc.headers.vpn_bgp_oracle_ip", lang):      bgp.oracle_interface_ip,
+                        t("doc.headers.vpn_bgp_customer_ip", lang):    bgp.customer_interface_ip,
                     }
                     _create_titled_key_value_table(
                         document, t("doc.headings.vpn_bgp_details", lang), bgp_info_data
                     )
+
                 p1 = tunnel.phase_one_details
                 p1_info = {
-                    t("doc.headers.vpn_p1_auth", lang): p1.authentication_algorithm,
+                    t("doc.headers.vpn_p1_auth", lang):       p1.authentication_algorithm,
                     t("doc.headers.vpn_p1_encryption", lang): p1.encryption_algorithm,
-                    t("doc.headers.vpn_p1_dh_group", lang): p1.dh_group,
-                    t("doc.headers.vpn_p1_lifetime", lang): str(
-                        p1.lifetime_in_seconds
-                    ),
+                    t("doc.headers.vpn_p1_dh_group", lang):   p1.dh_group,
+                    t("doc.headers.vpn_p1_lifetime", lang):   str(p1.lifetime_in_seconds),
                 }
                 _create_titled_key_value_table(
                     document, t("doc.headings.vpn_phase1", lang), p1_info
                 )
+
                 p2 = tunnel.phase_two_details
                 p2_info = {
-                    t("doc.headers.vpn_p2_auth", lang): p2.authentication_algorithm
-                    or "N/A",
+                    t("doc.headers.vpn_p2_auth", lang):       p2.authentication_algorithm or "N/A",
                     t("doc.headers.vpn_p2_encryption", lang): p2.encryption_algorithm,
-                    t("doc.headers.vpn_p2_lifetime", lang): str(
-                        p2.lifetime_in_seconds
-                    ),
+                    t("doc.headers.vpn_p2_lifetime", lang):   str(p2.lifetime_in_seconds),
                 }
                 _create_titled_key_value_table(
                     document, t("doc.headings.vpn_phase2", lang), p2_info
@@ -1579,8 +1664,7 @@ def _add_responsible_section(
 
 
 # ==============================================================================
-# PT-BR: Função Orquestradora Principal — Ponto de entrada da geração de documentos
-# EN: Main Orchestrator Function — Entry point for document generation
+# Main Orchestrator Function — Entry point for document generation
 # ==============================================================================
 def _add_network_resource_details(
     document: Document,
@@ -1776,9 +1860,8 @@ def generate_documentation(
         target_vcn_names = set()
         target_lbs = []
 
-        # 2. Extrai LBs e referências de rede atreladas aos Firewalls
-        # PT-BR: Itera sobre TODAS as integrações da política (suporte a múltiplos LBs por política).
-        # EN: Iterate over ALL policy integrations (support for multiple LBs per policy).
+        # 2. Extract LBs and network references tied to each Firewall.
+        # Iterate over ALL policy integrations (one policy may bind multiple LBs).
         for policy in active_waf_policies:
             all_integrations = getattr(policy, "integrations", []) or []
             if not all_integrations and getattr(policy, "integration", None):
@@ -1794,7 +1877,7 @@ def generate_documentation(
                         for subnet_id in getattr(lb, "subnet_ids", []):
                             target_subnet_ids.add(subnet_id)
 
-            # Utiliza a network_infrastructure mapeada apenas como último recurso
+            # Use network_infrastructure as a last-resort source for VCN/subnet names.
             net = getattr(policy, "network_infrastructure", None)
             if net:
                 if getattr(net, "subnet_name", "N/A") != "N/A":
@@ -1802,7 +1885,7 @@ def generate_documentation(
                 if getattr(net, "vcn_name", "N/A") != "N/A":
                     target_vcn_names.add(net.vcn_name)
 
-        # 3. Filtra as VCNs rigorosamente
+        # 3. Filter VCNs to only those relevant to the WAF/LB scope.
         filtered_vcns = []
         if target_subnet_ids or target_subnet_names or target_vcn_names:
             for vcn in getattr(infra_data, "vcns", []):
@@ -1839,7 +1922,7 @@ def generate_documentation(
                     filtered_vcn.lpgs = []
                     filtered_vcns.append(filtered_vcn)
 
-        # 4. Payload estritamente isolado para a numeração sair perfeita
+        # 4. Isolated payload so section numbering is clean and consistent.
         filtered_infra_data = infra_data.copy(deep=True)
         filtered_infra_data.instances = []
         filtered_infra_data.drgs = []
@@ -1850,14 +1933,12 @@ def generate_documentation(
         filtered_infra_data.load_balancers = target_lbs
         filtered_infra_data.vcns = filtered_vcns
         filtered_infra_data.waf_policies = active_waf_policies
-        # PT-BR: Preserva os certificados no payload filtrado — o deep copy já os
-        #        carrega de infra_data, então apenas garantimos que não foram zerados.
-        # EN: Preserve certificates in the filtered payload — the deep copy already
-        #     carries them from infra_data, so we just ensure they weren't cleared.
+        # Preserve certificates in the filtered payload — the deep copy already
+        # carries them from infra_data; ensure they were not accidentally cleared.
         if not getattr(filtered_infra_data, "certificates", None):
             filtered_infra_data.certificates = getattr(infra_data, "certificates", []) or []
 
-        # 5. MÁGICA DA ORDENAÇÃO NATIVA (Sem recriar layouts)
+        # 5. Render sections in order: VCN → LB → WAF → Certificates
         if target_lbs or filtered_vcns:
             _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
             if filtered_vcns:
@@ -1870,14 +1951,10 @@ def generate_documentation(
             else:
                 document.add_paragraph(t("doc.messages.no_lb_association", lang))
 
-        # PT-BR: Seção WAF
-        # EN: WAF section
+        # WAF section
         _add_waf_report_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
 
-        # PT-BR: Seção de Certificados — exibe ACTIVE e PENDING_DELETION,
-        #        idêntico ao fluxo full_infra.
-        # EN: Certificates section — shows ACTIVE and PENDING_DELETION,
-        #     identical to the full_infra flow.
+        # Certificates section — shows ACTIVE and PENDING_DELETION, identical to the full_infra flow.
         waf_active_certs = [
             c for c in (getattr(filtered_infra_data, "certificates", []) or [])
             if isinstance(c, dict)
@@ -1928,24 +2005,19 @@ def generate_documentation(
             
     else:  # 'full_infra'
         _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
+        # 1. Instâncias
         _add_and_bookmark_heading(document, t("doc.headings.compute_instances", lang), 2, headings_for_toc, numbering_counters)
         _add_instances_table(document, infra_data.instances, lang)
+        # 2. Armazenamento / Volumes
         _add_volume_and_backup_section(document, infra_data, headings_for_toc, numbering_counters, lang)
         if hasattr(infra_data, "volume_groups") and infra_data.volume_groups:
             _add_volume_groups_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        # 3. VCN
         _add_vcn_details_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        _add_kubernetes_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        # 4. Load Balancers
         if hasattr(infra_data, "load_balancers") and infra_data.load_balancers:
             _add_load_balancers_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-
-        # PT-BR: Adiciona seção WAF + Certificados na documentação de infraestrutura
-        #        completa quando esses recursos existirem no compartimento coletado.
-        # EN: Adds the WAF + Certificates section to the full infrastructure document
-        #     when those resources exist in the collected compartment.
-        _add_waf_report_section(
-            document, infra_data, headings_for_toc, numbering_counters, lang
-        )
+        # 5. Certificados
         active_certs = [
             c for c in (getattr(infra_data, "certificates", []) or [])
             if isinstance(c, dict)
@@ -1960,6 +2032,14 @@ def generate_documentation(
             _add_compartment_certificates_section(
                 document, infra_data, headings_for_toc, numbering_counters, lang
             )
+        # 6. WAF
+        _add_waf_report_section(
+            document, infra_data, headings_for_toc, numbering_counters, lang
+        )
+        # 7. Conectividade (DRG → CPE → VPN)
+        _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        # 8. Kubernetes (se existir)
+        _add_kubernetes_section(document, infra_data, headings_for_toc, numbering_counters, lang)
 
     # Insert "end" image sections after infra content, before responsible
     _insert_image_sections(document, image_sections or [], "end", headings_for_toc, numbering_counters, lang)
@@ -2016,13 +2096,9 @@ def _add_waf_report_section(
             t("doc.common.time_created",lang): policy.time_created,
         })
 
-        # ── 2. Firewalls e Load Balancers Vinculados (tabela única) ─────────────
-        # PT-BR: Uma única tabela consolida o Firewall e o LB vinculado — cada linha
-        #        representa um binding completo (Firewall → LB), eliminando a
-        #        duplicação que existia entre as antigas seções 2.1.2 e 2.1.3.
-        # EN: A single table consolidates the Firewall and its bound LB — each row
-        #     represents a complete binding (Firewall → LB), removing the duplication
-        #     that existed between the former sections 2.1.2 and 2.1.3.
+        # ── 2. Firewalls and bound Load Balancers (single consolidated table) ──────
+        # One row per complete Firewall → LB binding, removing the duplication
+        # that existed between the former separate firewall and LB sections.
         _add_and_bookmark_heading(document, t("doc.headings.waf_firewall", lang), 3, toc_list, counters)
 
         all_integrations = getattr(policy, "integrations", []) or []
@@ -2033,12 +2109,9 @@ def _add_waf_report_section(
             document.add_paragraph("Esta política WAF não possui Web Application Firewall associado.")
             continue
 
-        # PT-BR: Tabela de binding sem OCIDs — eles já estão documentados nas seções
-        #        1.2.x (Informações Gerais do LB) e 2.1.1 (Visão Geral da política).
-        #        Colunas: Firewall | LB Vinculado | IPs | Estado | Enforcement
-        # EN:  Binding table without OCIDs — already documented in sections
-        #      1.2.x (LB General Info) and 2.1.1 (Policy Overview).
-        #      Columns: Firewall | Bound LB | IPs | State | Enforcement
+        # Binding table without OCIDs — already documented in LB General Info
+        # and Policy Overview sections.
+        # Columns: Firewall | Bound LB | IPs | State | Enforcement Point
         binding_headers = [
             t("doc.headers.firewall_name", lang),
             t("doc.headers.lb_name",       lang),
@@ -2277,12 +2350,9 @@ def _add_compartment_certificates_section(
     lang: str,
 ) -> None:
     """
-    PT-BR: Adiciona uma seção resumida dos certificados OCI Certificates Service
-           à documentação de infraestrutura completa. Lista campos chave como
-           Common Name, algoritmos, validade e associações de cada certificado.
-    EN: Adds a summarized OCI Certificates Service section to the full
-        infrastructure document. Lists key fields like Common Name, algorithms,
-        validity window, and associations for each certificate.
+    Adds an OCI Certificates Service section to the infrastructure document.
+    Lists Common Name, algorithms, validity window, and associations for each certificate.
+    Only ACTIVE and PENDING_DELETION certificates are included.
     """
     certificates = [
         c for c in (getattr(infra_data, "certificates", []) or [])
@@ -2293,12 +2363,10 @@ def _add_compartment_certificates_section(
         document.add_paragraph(t("doc.messages.no_certificates_found", lang))
         return
 
-    # PT-BR: Monta índice OCID → display_name de todos os Load Balancers do compartimento
-    #        para resolver o nome do recurso vinculado ao certificado.
-    #        Usa lb.id diretamente — campo agora presente em LoadBalancerData.
-    # EN: Build OCID → display_name index from all LBs in the compartment
-    #     to resolve the name of the resource associated with the certificate.
-    #     Uses lb.id directly — field now present in LoadBalancerData.
+    # OCID → display_name index built from all LBs in scope.
+    # Used to resolve the bound resource name in certificate associations,
+    # since the association's display_name is the association object name,
+    # not the LB name. lb.id is always present in LoadBalancerData.
     lb_ocid_to_name = {
         lb.id: lb.display_name
         for lb in (getattr(infra_data, "load_balancers", []) or [])
@@ -2329,12 +2397,10 @@ def _add_compartment_certificates_section(
 
         _create_titled_key_value_table(document, t("doc.headings.general_info", lang), cert_info)
 
-        # PT-BR: Colore as linhas da tabela KV com base no estado do certificado.
-        # EN: Color the KV table rows based on certificate state.
+        # Color the KV table rows based on certificate lifecycle state.
         _style_cert_kv_table_by_state(document, state)
 
-        # PT-BR: SANs — tabela separada; aplica cor diretamente no objeto da tabela.
-        # EN: SANs — separate table; apply color directly on the table object.
+        # SANs — separate table; apply row color directly on each row.
         sans = cert.get("subject_alternative_names", []) or []
         if sans:
             headers_san = ["SAN Type", "Value"]
@@ -2345,17 +2411,15 @@ def _add_compartment_certificates_section(
                     cells = table_san.add_row().cells
                     cells[0].text = san.get("san_type", san.get("type", "N/A"))
                     cells[1].text = san.get("value", "N/A")
-                    # PT-BR: Aplica cor em cada linha da tabela SAN.
-                    # EN: Apply color to each SAN row.
+                    # Apply lifecycle state color to each SAN row.
                     _style_row_by_state(table_san.rows[-1], state)
             document.add_paragraph()
 
-        # PT-BR: Associações do certificado com outros recursos.
-        #        O campo display_name da associação é o nome da associação (ex: "certificate-loadbalancer-xxx"),
-        #        não o nome do recurso vinculado. Por isso, o lookup no índice de LBs é a fonte primária.
-        # EN: Certificate associations with other resources.
-        #     The display_name field of the association is the association name (e.g. "certificate-loadbalancer-xxx"),
-        #     not the name of the bound resource. The LB index lookup is therefore the primary source.
+        # Certificate associations with other resources.
+        # Name resolution order for the bound resource:
+        #   1. Lookup by resource OCID in the LB index (most reliable)
+        #   2. Fallback to display_name (association object name, less readable)
+        #   3. Last resort: last 12 chars of the OCID
         if assoc:
             headers_a = [
                 t("doc.common.name",  lang),
@@ -2367,14 +2431,6 @@ def _add_compartment_certificates_section(
             _style_table_headers(table_a, headers_a)
             for a in assoc:
                 if isinstance(a, dict):
-                    # PT-BR: Ordem de resolução do nome do recurso vinculado:
-                    #        1. Lookup pelo OCID do recurso no índice de LBs (fonte mais confiável)
-                    #        2. Fallback para display_name (nome da associação, menos legível)
-                    #        3. Último recurso: últimos 12 chars do OCID
-                    # EN: Name resolution order for the bound resource:
-                    #     1. Lookup by resource OCID in the LB index (most reliable source)
-                    #     2. Fallback to display_name (association name, less readable)
-                    #     3. Last resort: last 12 chars of the OCID
                     resource_ocid = a.get("associated_resource_id", "")
                     resolved_name = (
                         lb_ocid_to_name.get(resource_ocid)

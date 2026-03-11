@@ -17,9 +17,15 @@
   <div id="loading-overlay" class="hidden">
     <div class="progress-container">
       <div class="progress-icon-ring">
-        <div class="spinner"></div>
-        <svg class="progress-inner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <div class="spinner" id="progress-spinner"></div>
+        <!-- Cloud icon (shows during loading) -->
+        <svg id="progress-cloud-icon" class="progress-inner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+        </svg>
+        <!-- Checkmark icon (shows when done) -->
+        <svg id="progress-check-icon" class="progress-inner-icon progress-check-hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
         </svg>
       </div>
       <span id="progress-timer" class="progress-timer">00:00</span>
@@ -120,7 +126,7 @@
     <aside id="app-sidebar">
       <div class="sidebar-top">
 
-        <div class="sidebar-brand">
+        <div class="sidebar-brand" id="sidebar-brand-link" title="Gerar Documento">
           <div class="sidebar-brand-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
@@ -143,7 +149,7 @@
               <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span>Gerar Documento</span>
+            <span data-i18n="nav_generator">Gerar Documento</span>
           </a>
           <a href="#" class="sidebar-nav-item" id="nav-metrics">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -151,15 +157,24 @@
               <line x1="12" x2="12" y1="20" y2="4"/>
               <line x1="6"  x2="6"  y1="20" y2="14"/>
             </svg>
-            <span>Métricas</span>
+            <span data-i18n="nav_metrics">Métricas</span>
+          </a>
+          <a href="#" class="sidebar-nav-item hidden" id="nav-admin">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <span data-i18n="nav_admin">Administração</span>
           </a>
         </nav>
 
         <div class="sidebar-divider"></div>
 
-        <!-- History (visible always) -->
-        <div class="sidebar-section-label">Histórico Recente</div>
-        <div id="sidebar-history" class="sidebar-history">
+        <!-- History (per-user) -->
+        <div class="sidebar-section-label" data-i18n="nav_history">Histórico Recente</div>
+        <div id="sidebar-history-guest" class="sidebar-history-guest hidden">
+          🔒 <a href="#" id="history-login-cta" data-i18n="history_login_required">Faça login para ver seu histórico.</a>
+        </div>
+        <div id="sidebar-history" class="sidebar-history hidden">
           <p class="sidebar-empty">Nenhum documento gerado ainda.</p>
         </div>
 
@@ -182,17 +197,26 @@
 
         <!-- Logged-in state -->
         <div id="sidebar-user" class="sidebar-user hidden">
-          <div class="sidebar-user-row">
+          <div class="sidebar-user-identity">
             <div class="sidebar-user-avatar" id="sidebar-user-avatar">P</div>
             <div class="sidebar-user-info">
               <span class="sidebar-user-name" id="sidebar-user-name">Pedro</span>
-              <span class="sidebar-user-role">Logado</span>
+              <span class="sidebar-user-role" data-i18n="sidebar_user_logged">Logado</span>
             </div>
-            <button class="sidebar-logout-btn" id="sidebar-logout-btn" title="Sair">
+          </div>
+          <div class="sidebar-user-actions">
+            <button class="sidebar-profile-btn" id="sidebar-profile-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              </svg>
+              <span data-i18n="sidebar_profile_btn">Meu Perfil</span>
+            </button>
+            <button class="sidebar-logout-btn" id="sidebar-logout-btn">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>
               </svg>
+              <span data-i18n="sidebar_logout_btn">Sair</span>
             </button>
           </div>
         </div>
@@ -213,14 +237,17 @@
             <span id="theme-btn-label">Modo Claro</span>
           </button>
 
-          <div class="language-selector-container">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>
-            </svg>
-            <select id="language-selector">
-              <option value="pt">Português</option>
-              <option value="en">English</option>
-            </select>
+          <div class="lang-flag-selector lang-flag-list">
+            <button class="lang-flag-btn active" data-lang="pt" title="Português Brasil">
+              <span class="flag-emoji">🇧🇷</span>
+              <span class="lang-label">Português</span>
+              <span class="lang-check"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            </button>
+            <button class="lang-flag-btn" data-lang="en" title="English">
+              <span class="flag-emoji">🇺🇸</span>
+              <span class="lang-label">English</span>
+              <span class="lang-check"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            </button>
           </div>
         </div>
 
@@ -234,8 +261,8 @@
       <div id="view-generator" class="app-content">
 
         <div class="page-intro">
-          <p class="section-eyebrow">Gerador de Documentação</p>
-          <h2 class="page-title">Configure e gere sua documentação OCI</h2>
+          <p class="section-eyebrow" data-i18n="page_eyebrow_generator">Gerador de Documentação</p>
+          <h2 class="page-title" data-i18n="page_title_generator">Configure e gere sua documentação OCI</h2>
         </div>
 
         <main class="content-card wizard-card">
@@ -270,6 +297,14 @@
               <label data-i18n="step4_label">Selecione a(s) Instância(s)</label>
               <div id="instance-select-container" class="custom-select-container"></div>
             </div>
+          </div>
+
+          <!-- Storage scope option — only shown for full_infra -->
+          <div id="storage-options-row" class="storage-options-row hidden">
+            <label class="storage-option-label">
+              <input type="checkbox" id="include-standalone-volumes" checked>
+              <span class="storage-option-text" data-i18n="storage_option_standalone">Incluir Block Volumes sem instância associada</span>
+            </label>
           </div>
 
           <div class="wizard-action">
@@ -345,8 +380,8 @@
       <div id="view-metrics" class="app-content hidden">
 
         <div class="page-intro">
-          <p class="section-eyebrow">Painel de Dados</p>
-          <h2 class="page-title" id="metrics-title">Métricas de Geração</h2>
+          <p class="section-eyebrow" data-i18n="page_eyebrow_metrics">Painel de Dados</p>
+          <h2 class="page-title" id="metrics-title" data-i18n="page_title_metrics">Métricas de Geração</h2>
         </div>
 
         <!-- KPI cards -->
@@ -359,7 +394,7 @@
               </svg>
             </div>
             <div class="metrics-kpi-body">
-              <span class="metrics-kpi-label">Total Gerado</span>
+              <span class="metrics-kpi-label" data-i18n="metrics_kpi_total">Total Gerado</span>
               <span class="metrics-kpi-value" id="kpi-total">—</span>
             </div>
           </div>
@@ -372,7 +407,7 @@
               </svg>
             </div>
             <div class="metrics-kpi-body">
-              <span class="metrics-kpi-label">Este Mês</span>
+              <span class="metrics-kpi-label" data-i18n="metrics_kpi_month">Este Mês</span>
               <span class="metrics-kpi-value" id="kpi-month">—</span>
             </div>
           </div>
@@ -383,7 +418,7 @@
               </svg>
             </div>
             <div class="metrics-kpi-body">
-              <span class="metrics-kpi-label">Tipo Mais Usado</span>
+              <span class="metrics-kpi-label" data-i18n="metrics_kpi_top_type">Tipo Mais Usado</span>
               <span class="metrics-kpi-value" id="kpi-top-type">—</span>
             </div>
           </div>
@@ -398,7 +433,7 @@
                 <line x1="12" x2="12" y1="20" y2="4"/>
                 <line x1="6"  x2="6"  y1="20" y2="14"/>
               </svg>
-              <span>Por Tipo de Documento</span>
+              <span data-i18n="metrics_by_type_title">Por Tipo de Documento</span>
             </div>
             <div id="metrics-by-type" class="metrics-by-type"></div>
           </div>
@@ -409,7 +444,7 @@
                 <circle cx="12" cy="12" r="10"/>
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
-              <span>Gerações Recentes</span>
+              <span data-i18n="metrics_recent_title">Gerações Recentes</span>
             </div>
             <div id="metrics-recent" class="metrics-recent-list"></div>
           </div>
@@ -421,14 +456,123 @@
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
           <div>
-            <strong>Visão global</strong> — você está vendo métricas agregadas de todos os usuários.
-            <a href="#" id="metrics-login-cta">Faça login</a> para ver apenas as suas.
+            <strong data-i18n="metrics_guest_title">Visão global</strong> — <span data-i18n="metrics_guest_body">você está vendo métricas agregadas de todos os usuários.</span>
+            <a href="#" id="metrics-login-cta" data-i18n="metrics_guest_login">Faça login</a> <span data-i18n="metrics_guest_suffix">para ver apenas as suas.</span>
           </div>
+        </div>
+
+        <!-- Time series chart -->
+        <div class="content-card metrics-card" style="margin-top:20px">
+          <div class="metrics-card-header">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+            <span data-i18n="metrics_chart_title">Evolução de Gerações</span>
+            <!-- Filters row -->
+            <div class="metrics-chart-filters">
+              <div class="metrics-filter-group">
+                <button class="metrics-filter-btn active" data-period="30">30d</button>
+                <button class="metrics-filter-btn" data-period="7">7d</button>
+                <button class="metrics-filter-btn" data-period="90">90d</button>
+              </div>
+              <div class="metrics-filter-types" id="metrics-type-filter-btns">
+                <button class="metrics-type-filter-btn active" data-type="all" data-i18n="metrics_filter_all">Todos</button>
+                <button class="metrics-type-filter-btn" data-type="new_host" data-i18n="metrics_filter_new_host">Novo Host</button>
+                <button class="metrics-type-filter-btn" data-type="full_infra" data-i18n="metrics_filter_full_infra">Infra Completa</button>
+                <button class="metrics-type-filter-btn" data-type="kubernetes">Kubernetes</button>
+                <button class="metrics-type-filter-btn" data-type="waf_report">WAF</button>
+              </div>
+              <div class="metrics-chart-type-btns">
+                <button class="metrics-chart-type-btn active" data-chart-type="spline" title="Spline">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </button>
+                <button class="metrics-chart-type-btn" data-chart-type="bar" title="Bar Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                </button>
+                <button class="metrics-chart-type-btn" data-chart-type="pie" title="Pie Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="metrics-timeseries-chart" class="metrics-timeseries-wrap"></div>
+          <div id="metrics-chart-legend" class="metrics-chart-legend"></div>
+        </div>
+
+        <!-- Per-user breakdown (admin only) -->
+        <div id="metrics-per-user-section" class="content-card metrics-card hidden" style="margin-top:20px">
+          <div class="metrics-card-header">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span data-i18n="metrics_per_user_title">Gerações por Usuário</span>
+          </div>
+          <div id="metrics-per-user" class="metrics-by-type"></div>
         </div>
 
       </div>
 
-    </div><!-- /#app-main -->
+      <!-- ── ADMIN VIEW ── -->
+      <div id="view-admin" class="app-content hidden">
+
+        <div class="page-intro">
+          <p class="section-eyebrow" data-i18n="page_eyebrow_admin">Painel Administrativo</p>
+          <h2 class="page-title" data-i18n="page_title_admin">Administração</h2>
+        </div>
+
+        <!-- Admin tabs -->
+        <div class="admin-tabs">
+          <button class="admin-tab active" data-tab="users">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span data-i18n="admin_tab_users">Usuários</span>
+          </button>
+          <button class="admin-tab" data-tab="groups">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <span data-i18n="admin_tab_groups">Grupos</span>
+          </button>
+          <button class="admin-tab" data-tab="feedback">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span data-i18n="admin_tab_feedback">Feedback</span>
+          </button>
+        </div>
+
+        <!-- Users panel -->
+        <div id="admin-panel-users" class="admin-panel">
+          <div class="admin-panel-toolbar">
+            <input type="text" id="admin-user-search" class="admin-search-input" placeholder="Filtrar usuários…">
+            <button class="button-secondary" id="admin-refresh-users">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Atualizar
+            </button>
+          </div>
+          <div id="admin-users-table-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+        <!-- Groups panel -->
+        <div id="admin-panel-groups" class="admin-panel hidden">
+          <div class="admin-panel-toolbar">
+            <input type="text" id="admin-new-group-name" class="admin-search-input" placeholder="Nome do novo grupo…">
+            <button class="button-primary" id="admin-create-group-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Criar Grupo
+            </button>
+          </div>
+          <div id="admin-groups-table-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+        <!-- Feedback panel (admin only) -->
+        <div id="admin-panel-feedback" class="admin-panel hidden">
+          <div id="admin-feedback-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+      </div>
   </div><!-- /#app-shell -->
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -481,6 +625,159 @@
       <div id="preview-modal-body"></div>
     </div>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Admin — Group Management Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="group-modal" class="hidden">
+    <div class="group-modal-backdrop" id="group-modal-backdrop"></div>
+    <div class="group-modal-card">
+      <div class="group-modal-header">
+        <h3 class="group-modal-title" id="group-modal-title">Grupos do Usuário</h3>
+        <button class="auth-modal-close" id="group-modal-close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="group-modal-body" class="group-modal-body">
+        <p class="no-data-message">Carregando…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Force Password Change Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="force-pw-modal" class="hidden">
+    <div class="force-pw-backdrop"></div>
+    <div class="force-pw-card">
+      <h3 data-i18n="force_pw_title">🔐 Altere sua senha</h3>
+      <p data-i18n="force_pw_desc">Por segurança, defina uma nova senha para continuar. Esta ação é obrigatória no primeiro acesso.</p>
+      <div class="force-pw-field">
+        <label data-i18n="force_pw_new_label">Nova Senha</label>
+        <input type="password" id="force-pw-new" data-i18n-placeholder="force_pw_new_placeholder" placeholder="Mínimo 8 caracteres">
+      </div>
+      <div class="force-pw-field">
+        <label data-i18n="force_pw_confirm_label">Confirmar Nova Senha</label>
+        <input type="password" id="force-pw-confirm" data-i18n-placeholder="force_pw_confirm_placeholder" placeholder="Repita a senha">
+      </div>
+      <ul class="force-pw-rules">
+        <li data-i18n="force_pw_rule_length">Mínimo de 8 caracteres</li>
+        <li data-i18n="force_pw_rule_upper">Pelo menos uma letra maiúscula</li>
+        <li data-i18n="force_pw_rule_number">Pelo menos um número</li>
+      </ul>
+      <p id="force-pw-error"></p>
+      <button id="force-pw-submit-btn" class="button-primary" style="width:100%" data-i18n="force_pw_submit">Salvar nova senha</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       User Profile Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="profile-modal" class="hidden">
+    <div class="profile-backdrop" id="profile-modal-backdrop"></div>
+    <div class="profile-card">
+      <div class="profile-card-header">
+        <h3 data-i18n="profile_title">Meu Perfil</h3>
+        <button class="profile-close-btn" id="profile-modal-close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="profile-section-label" data-i18n="profile_section_identity">Identidade</div>
+      <div class="profile-field">
+        <label data-i18n="profile_username">Usuário (login)</label>
+        <input type="text" id="profile-username" readonly style="opacity:0.6;cursor:not-allowed">
+      </div>
+      <div class="profile-field-row">
+        <div class="profile-field">
+          <label data-i18n="profile_first_name">Nome</label>
+          <input type="text" id="profile-first-name" placeholder="João">
+        </div>
+        <div class="profile-field">
+          <label data-i18n="profile_last_name">Sobrenome</label>
+          <input type="text" id="profile-last-name" placeholder="Silva">
+        </div>
+      </div>
+
+      <div class="profile-section-label" data-i18n="profile_section_contact">Contato (opcional)</div>
+      <div class="profile-field">
+        <label data-i18n="profile_email">E-mail</label>
+        <input type="email" id="profile-email" placeholder="joao@empresa.com">
+      </div>
+      <div class="profile-field">
+        <label data-i18n="profile_phone">Telefone</label>
+        <input type="text" id="profile-phone" placeholder="+55 11 99999-0000">
+      </div>
+      <div class="profile-field">
+        <label data-i18n="profile_notes">Observações</label>
+        <textarea id="profile-notes" placeholder="Notas internas..."></textarea>
+      </div>
+
+      <hr class="profile-divider">
+      <div class="profile-section-label" data-i18n="profile_section_password">Alterar Senha (opcional)</div>
+      <div class="profile-field">
+        <label data-i18n="profile_current_password">Senha atual</label>
+        <input type="password" id="profile-current-pw" placeholder="••••••••">
+      </div>
+      <div class="profile-field-row">
+        <div class="profile-field">
+          <label data-i18n="profile_new_password">Nova senha</label>
+          <input type="password" id="profile-new-pw" placeholder="••••••••">
+        </div>
+        <div class="profile-field">
+          <label data-i18n="profile_confirm_password">Confirmar</label>
+          <input type="password" id="profile-confirm-pw" placeholder="••••••••">
+        </div>
+      </div>
+
+      <div class="profile-actions">
+        <button class="button-secondary" id="profile-cancel-btn" data-i18n="btn_cancel">Cancelar</button>
+        <button class="button-primary" id="profile-save-btn" data-i18n="btn_save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Feedback Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="feedback-modal" class="hidden">
+    <div class="feedback-backdrop" id="feedback-modal-backdrop"></div>
+    <div class="feedback-card">
+      <div class="feedback-card-header">
+        <h3 data-i18n="feedback_title">Feedback & Sugestões</h3>
+        <a href="https://github.com/Pedr0Teixeira/oci-docgen" target="_blank" class="feedback-github-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.1 3.29 9.43 7.86 10.96.57.1.78-.25.78-.55v-2.17c-3.19.69-3.86-1.54-3.86-1.54-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.74 2.68 1.24 3.33.95.1-.74.4-1.24.72-1.52-2.55-.29-5.23-1.27-5.23-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.45.11-3.03 0 0 .96-.31 3.15 1.18a10.96 10.96 0 0 1 5.74 0c2.18-1.49 3.14-1.18 3.14-1.18.62 1.58.23 2.74.11 3.03.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.37-5.25 5.65.41.36.78 1.06.78 2.13v3.17c0 .3.2.66.79.55C20.22 21.43 23.5 17.1 23.5 12 23.5 5.73 18.27.5 12 .5z"/></svg>
+          GitHub
+        </a>
+      </div>
+
+      <div class="feedback-categories">
+        <button class="feedback-cat-btn active" data-cat="sugestao" data-i18n="feedback_cat_suggestion">💡 Sugestão</button>
+        <button class="feedback-cat-btn" data-cat="bug" data-i18n="feedback_cat_bug">🐛 Bug</button>
+        <button class="feedback-cat-btn" data-cat="melhoria" data-i18n="feedback_cat_improvement">✨ Melhoria</button>
+        <button class="feedback-cat-btn" data-cat="outro" data-i18n="feedback_cat_other">📝 Outro</button>
+      </div>
+
+      <textarea id="feedback-text" class="feedback-textarea" data-i18n-placeholder="feedback_placeholder" placeholder="Descreva sua sugestão ou problema..." maxlength="1000"></textarea>
+      <div class="feedback-char-counter"><span id="feedback-char-count">0</span>/1000</div>
+
+      <div class="feedback-actions">
+        <button class="button-secondary" id="feedback-cancel-btn" data-i18n="btn_cancel">Cancelar</button>
+        <button class="button-primary" id="feedback-submit-btn" data-i18n="feedback_submit">Enviar Feedback</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback FAB -->
+  <button id="feedback-fab" title="Feedback & Sugestões">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  </button>
 
   <script src="js/app.js"></script>
 </body>
