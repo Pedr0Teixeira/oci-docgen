@@ -1,7 +1,7 @@
 # ==============================================================================
-# oci_connector.py — OCI data collection module for OCI DocGen.
-#     Handles authentication, client initialisation, and all OCI SDK calls
-#     required for documentation generation.
+# OCI (Oracle Cloud Infrastructure) data collection module.
+#     Responsible for authentication, client initialization, and collecting
+#     all infrastructure data needed for documentation generation.
 # ==============================================================================
 
 import logging
@@ -88,9 +88,9 @@ retry_strategy = oci.retry.RetryStrategyBuilder(
 
 def get_auth_provider() -> Dict[str, Any]:
     """
-    Determines the authentication method based on the OCI_AUTH_METHOD environment
-    variable. Supports 'INSTANCE_PRINCIPAL' (for workloads running inside OCI)
-    and 'API_KEY' (default, using ~/.oci/config).
+    Determines the auth method from the OCI_AUTH_METHOD environment variable.
+    Supports INSTANCE_PRINCIPAL (for workloads running inside OCI)
+    and API_KEY (default, uses ~/.oci/config).
     """
     auth_method = os.environ.get("OCI_AUTH_METHOD", "API_KEY").upper()
     if auth_method == "INSTANCE_PRINCIPAL":
@@ -114,39 +114,71 @@ def get_auth_provider() -> Dict[str, Any]:
             logging.fatal(f"Error loading OCI configuration from file: {e}")
             return {"config": None, "tenancy_id": None, "signer": None}
 
-auth_details = get_auth_provider()
-config = auth_details["config"]
-signer = auth_details["signer"]
-tenancy_id = auth_details["tenancy_id"]
+# Default auth loaded at startup (used for list_regions / list_compartments when
+# no profile is selected, and for Instance Principal tenancies).
+_default_auth = get_auth_provider()
 
-# Identity client initialized globally for compartment operations
-#     that occur throughout the entire application.
+# Global identity client used for compartment helpers (default auth only).
 identity_client_for_compartment = None
-if tenancy_id:
+_default_tenancy_id = _default_auth["tenancy_id"]
+if _default_tenancy_id:
     try:
-        if signer:
+        if _default_auth["signer"]:
             identity_client_for_compartment = oci.identity.IdentityClient(
-                config={}, signer=signer, retry_strategy=retry_strategy
+                config={}, signer=_default_auth["signer"], retry_strategy=retry_strategy
             )
         else:
             identity_client_for_compartment = oci.identity.IdentityClient(
-                config, retry_strategy=retry_strategy
+                _default_auth["config"], retry_strategy=retry_strategy
             )
     except Exception as e:
         logging.fatal(f"Could not initialize the global identity client: {e}")
 
-def get_client(client_class, region: str):
+
+def _auth_from_profile(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    OCI client factory with support for API Key and Instance Principal auth.
-    Automatically injects the retry strategy into all clients.
+    Builds an auth dict from a tenancy profile row (with decrypted private_key_pem).
+    Falls back to the default auth if profile is None.
     """
+    if not profile:
+        return _default_auth
+    if profile.get("auth_method", "").upper() == "INSTANCE_PRINCIPAL":
+        return get_auth_provider()  # always re-fetches instance principal signer
+    try:
+        import tempfile, os as _os
+        key_pem = profile.get("private_key_pem") or ""
+        # Write private key to a temp file (OCI SDK requires a file path)
+        tf = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
+        tf.write(key_pem)
+        tf.flush()
+        tf.close()
+        config = {
+            "user":        profile.get("user_ocid", ""),
+            "fingerprint": profile.get("fingerprint", ""),
+            "tenancy":     profile.get("tenancy_ocid", ""),
+            "region":      profile.get("region", ""),
+            "key_file":    tf.name,
+        }
+        oci.config.validate_config(config)
+        return {"config": config, "signer": None, "tenancy_id": config["tenancy"], "_tmp_key": tf.name}
+    except Exception as e:
+        logging.error(f"Failed to build auth from profile '{profile.get('name')}': {e}")
+        return {"config": None, "signer": None, "tenancy_id": None}
+
+
+def get_client(client_class, region: str, profile: Optional[Dict[str, Any]] = None):
+    """
+    OCI client factory. Accepts an optional profile dict (with decrypted key).
+    Falls back to default auth when profile is None.
+    """
+    auth = _auth_from_profile(profile)
     client_kwargs = {"retry_strategy": retry_strategy}
     try:
-        if signer:
-            return client_class(config={"region": region}, signer=signer, **client_kwargs)
-        regional_config = config.copy()
-        regional_config["region"] = region
-        return client_class(regional_config, **client_kwargs)
+        if auth.get("signer"):
+            return client_class(config={"region": region}, signer=auth["signer"], **client_kwargs)
+        cfg = auth["config"].copy()
+        cfg["region"] = region
+        return client_class(cfg, **client_kwargs)
     except Exception as e:
         logging.error(f"Failed to create client {client_class.__name__} for region {region}: {e}")
         return None
@@ -156,10 +188,7 @@ def get_client(client_class, region: str):
 # ==============================================================================
 
 def _safe_api_call(func, *args, **kwargs):
-    """
-    Wrapper for OCI API calls with consistent error handling.
-    Suppresses 404 errors (resource not found) and logs the rest.
-    """
+    """Wrapper for OCI API calls. Suppresses 404 errors and logs all others."""
     try:
         return func(*args, **kwargs).data
     except oci.exceptions.ServiceError as e:
@@ -171,14 +200,11 @@ def _safe_api_call(func, *args, **kwargs):
         return None
 
 def _translate_protocol(protocol_code: str) -> str:
-    """Converts IANA numeric protocol code to a human-readable name."""
+    """Converts an IANA numeric protocol code to a human-readable name."""
     return IANA_PROTOCOL_MAP.get(str(protocol_code), str(protocol_code))
 
 def _format_rule_ports(rule: Any) -> str:
-    """
-    Extracts the port range from an OCI security rule.
-    Returns an empty string if the rule does not specify ports.
-    """
+    """Extracts the port range from an OCI security rule as a string (e.g. "80-443"). Returns "" if unspecified."""
     options = None
     if hasattr(rule, "tcp_options") and rule.tcp_options:
         options = rule.tcp_options
@@ -192,10 +218,7 @@ def _format_rule_ports(rule: Any) -> str:
     return f"{port_range.min}-{port_range.max}"
 
 def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
-    """
-    Resolves the human-readable name of a network resource from its OCID.
-    Supports Internet Gateway, NAT Gateway, Service Gateway, LPG, DRG, and IPs.
-    """
+    """Resolves the display name of a network resource (IGW, NAT, SGW, LPG, DRG, Private IP) from its OCID."""
     if not entity_id:
         return "N/A"
     try:
@@ -225,27 +248,24 @@ def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
     return entity_id
 
 def _get_drg_route_table_name(virtual_network_client, drg_route_table_id: str) -> str:
-    """Resolves the name of a DRG Route Table from its OCID."""
+    """Resolves the display name of a DRG Route Table from its OCID."""
     if not drg_route_table_id:
         return "N/A"
     route_table = _safe_api_call(virtual_network_client.get_drg_route_table, drg_route_table_id)
     return route_table.display_name if route_table else drg_route_table_id
 
 def _get_source_dest_name(virtual_network_client, source_dest: str) -> str:
-    """
-    Resolves the name of an NSG from its OCID (used in NSG rules).
-    Returns the original value if it is not an NSG OCID.
-    """
+    """Resolves an NSG display name from its OCID. Returns the original value if it is not an NSG OCID."""
     if not source_dest or not source_dest.startswith("ocid1.networksecuritygroup"):
         return source_dest
     nsg = _safe_api_call(virtual_network_client.get_network_security_group, source_dest)
     return nsg.display_name if nsg else source_dest
 
 def get_compartment_name(compartment_id: str) -> str:
-    """Returns the name of a compartment by its OCID."""
+    """Returns the display name of a compartment by its OCID."""
     if not identity_client_for_compartment:
         return "N/A"
-    if compartment_id == tenancy_id:
+    if compartment_id == _default_tenancy_id:
         return "Raiz (Tenancy)"
     compartment = _safe_api_call(identity_client_for_compartment.get_compartment, compartment_id)
     return compartment.name if compartment else "N/A"
@@ -254,9 +274,8 @@ def _validate_ipsec_parameters(
     tunnel: oci.core.models.IPSecConnectionTunnel,
 ) -> Tuple[str, Optional[str]]:
     """
-    Validates the encryption parameters of an IPSec tunnel against Oracle's
-    official recommendations. Returns the compliance status and a documentation
-    link when out of spec.
+    Validates IPSec tunnel encryption parameters against Oracle's official
+    recommendations. Returns a (status, docs_link_or_None) tuple.
     """
     p1, p2 = tunnel.phase_one_details, tunnel.phase_two_details
     if not p1 or not p2:
@@ -283,22 +302,32 @@ def _validate_ipsec_parameters(
 # ==============================================================================
 # Public API Functions — Resource Listing
 # ==============================================================================
-def list_regions() -> List[Dict[str, str]]:
-    """Returns all subscribed and active OCI regions for the tenancy."""
+def list_regions(profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
+    """Returns all subscribed and active OCI regions for the given profile's tenancy."""
+    auth = _auth_from_profile(profile)
+    tenancy_id = auth.get("tenancy_id")
     if not tenancy_id:
-        raise ConnectionError("Tenancy ID not found in OCI configuration.")
-    if signer:
-        identity_client = oci.identity.IdentityClient(config={}, signer=signer, retry_strategy=retry_strategy)
+        raise ConnectionError("Tenancy ID not found. Please select a valid Tenancy Profile.")
+    if auth.get("signer"):
+        identity_client = oci.identity.IdentityClient(
+            config={}, signer=auth["signer"], retry_strategy=retry_strategy
+        )
     else:
-        identity_client = oci.identity.IdentityClient(config, retry_strategy=retry_strategy)
+        identity_client = oci.identity.IdentityClient(
+            auth["config"], retry_strategy=retry_strategy
+        )
     regions = _safe_api_call(identity_client.list_region_subscriptions, tenancy_id)
     if not regions:
         return []
     return [{"key": r.region_key, "name": r.region_name} for r in regions if r.status == "READY"]
 
-def list_compartments(region: str) -> List[Dict[str, Any]]:
-    """Returns all active compartments in the tenancy as a hierarchical structure."""
-    identity_client = get_client(oci.identity.IdentityClient, region)
+def list_compartments(region: str, profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """Returns all active compartments in the tenancy as a flattened hierarchical list."""
+    auth = _auth_from_profile(profile)
+    tenancy_id = auth.get("tenancy_id")
+    if not tenancy_id:
+        raise ConnectionError("Tenancy ID not found. Please select a valid Tenancy Profile.")
+    identity_client = get_client(oci.identity.IdentityClient, region, profile)
     if not identity_client:
         raise ConnectionError("OCI Identity Client could not be initialized.")
     all_compartments = oci.pagination.list_call_get_all_results(
@@ -332,9 +361,9 @@ def list_compartments(region: str) -> List[Dict[str, Any]]:
     hierarchical_list.extend(build_tree(tenancy_id, level=1))
     return hierarchical_list
 
-def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict[str, str]]:
-    """Returns RUNNING or STOPPED instances from a compartment."""
-    compute_client = get_client(oci.core.ComputeClient, region)
+def list_instances_in_compartment(region: str, compartment_id: str, profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
+    """Returns RUNNING and STOPPED compute instances from the specified compartment."""
+    compute_client = get_client(oci.core.ComputeClient, region, profile)
     if not compute_client:
         raise ConnectionError("OCI Compute Client could not be initialized.")
     all_instances = oci.pagination.list_call_get_all_results(
@@ -351,10 +380,10 @@ def list_instances_in_compartment(region: str, compartment_id: str) -> List[Dict
 # ==============================================================================
 # Detailed Instance and Storage Data Collection
 # ==============================================================================
-def get_instance_details(region: str, instance_id: str, compartment_name: str = "N/A") -> InstanceData:
-    compute_client = get_client(oci.core.ComputeClient, region)
-    virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
-    block_storage_client = get_client(oci.core.BlockstorageClient, region)
+def get_instance_details(region: str, instance_id: str, compartment_name: str = "N/A", profile: Optional[Dict[str, Any]] = None) -> InstanceData:
+    compute_client = get_client(oci.core.ComputeClient, region, profile)
+    virtual_network_client = get_client(oci.core.VirtualNetworkClient, region, profile)
+    block_storage_client = get_client(oci.core.BlockstorageClient, region, profile)
 
     instance = _safe_api_call(compute_client.get_instance, instance_id)
     if not instance:
@@ -563,7 +592,7 @@ def _get_volume_groups(
     compartment_id: str,
     all_volumes_map: Dict[str, str],
 ) -> List[VolumeGroupData]:
-    """Collects Volume Groups from the compartment with backup policy and cross-region replication data."""
+    """Collects Volume Groups from the compartment, including backup policy and cross-region replication data."""
     volume_groups_data = []
     all_vgs_sdk = oci.pagination.list_call_get_all_results(
         block_storage_client.list_volume_groups,
@@ -614,7 +643,7 @@ def _get_oke_clusters(
     compartment_id: str,
     vcn_map: Dict[str, Any],
 ) -> List[OkeClusterData]:
-    """Collects active OKE clusters with their Node Pools and network information."""
+    """Collects active OKE clusters with their Node Pools and associated network information."""
     oke_clusters_data = []
     all_clusters_summary_sdk = oci.pagination.list_call_get_all_results(
         ce_client.list_clusters, compartment_id=compartment_id, retry_strategy=retry_strategy
@@ -712,17 +741,19 @@ def _infer_resource_type_from_ocid(ocid: str) -> str:
 def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> list:
     """
     Collects OCI Certificates Service certificates and their associations.
+    Only ACTIVE and PENDING_DELETION states are kept; others are discarded silently.
 
-    IMPORTANT — getattr() is used instead of to_dict() throughout this function
-    because some SDK versions return objects that do not implement to_dict().
-    Only ACTIVE and PENDING_DELETION lifecycle states are preserved.
+    Uses getattr() instead of to_dict() — some SDK versions return objects that
+    do not implement that method.
 
-    FIELD ACCESS STRATEGY (OCI SDK behavior):
-      - Top-level fields: getattr(obj, "snake_case_attr") — always works on SDK objects.
-      - Nested objects: also expose attributes via getattr().
-      - list_certificates exposes .current_version_summary; get_certificate exposes
-        .current_version — these are DIFFERENT attribute names on the same concept.
-      - to_dict() is intentionally NOT used on the outer object for SDK compatibility.
+    FIELD ACCESS STRATEGY (based on tested OCI SDK behavior):
+      - Top-level fields: getattr(obj, "snake_case_attr") — always works on SDK objects
+      - Nested objects (subject, current_version_summary, validity):
+        the nested SDK objects also expose attributes via getattr().
+        For the version dict, list_certificates uses .current_version_summary
+        and get_certificate uses .current_version (different attribute name!).
+      - to_dict() is intentionally NOT used for the outer object because some
+        SDK/platform combinations return an empty dict or an object without to_dict().
     """
 
     def _ga(obj, attr, default=None):
@@ -894,7 +925,7 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
                     logging.warning("Skipping certificate with no OCID: name=%s", name)
                     continue
 
-                # ── Fetch detail (has .current_version instead of .current_version_summary)
+                # The detail endpoint uses .current_version; the list endpoint uses .current_version_summary.
                 cert_detail_obj = None
                 try:
                     cert_detail_obj = certs_mgmt_client.get_certificate(
@@ -922,9 +953,7 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
                 if subj["common_name"] == "N/A" and cert_detail_obj:
                     subj = _subject_from_obj(getattr(cert_detail_obj, "subject", None))
 
-                # ── Version data ───────────────────────────────────────────
-                # summary → .current_version_summary
-                # detail  → .current_version   (DIFFERENT attribute name!)
+                # Attribute name differs by endpoint: list → current_version_summary, get → current_version.
                 cvs_obj = (
                     getattr(cert_obj,         "current_version_summary", None)
                     or (getattr(cert_detail_obj, "current_version",         None) if cert_detail_obj else None)
@@ -983,13 +1012,12 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
 def get_infrastructure_details(
     task, region: str, compartment_id: str, doc_type: str,
     include_standalone: bool = True,
+    profile: Optional[Dict[str, Any]] = None,
 ) -> InfrastructureData:
     """
     Main orchestrator for full infrastructure data collection.
-    Parallelises instance collection using ThreadPoolExecutor to reduce total
-    time in compartments with many instances. Progress is reported incrementally
-    via Celery task states.
-    Adjust MAX_WORKERS_FOR_DETAILS if OCI API throttling (HTTP 429) is observed.
+    Instance collection is parallelized via ThreadPoolExecutor to reduce total runtime
+    on compartments with many instances. Progress is reported via Celery task states.
     """
     is_k8s_flow = doc_type == "kubernetes"
 
@@ -998,12 +1026,12 @@ def get_infrastructure_details(
         meta={"current": 0, "total": 100, "step_key": "progress.initializing_clients", "context": {}},
     )
 
-    compute_client = get_client(oci.core.ComputeClient, region)
-    virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
-    load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region)
-    block_storage_client = get_client(oci.core.BlockstorageClient, region)
-    ce_client = get_client(ContainerEngineClient, region)
-    waf_client = get_client(WafClient, region)
+    compute_client = get_client(oci.core.ComputeClient, region, profile)
+    virtual_network_client = get_client(oci.core.VirtualNetworkClient, region, profile)
+    load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region, profile)
+    block_storage_client = get_client(oci.core.BlockstorageClient, region, profile)
+    ce_client = get_client(ContainerEngineClient, region, profile)
+    waf_client = get_client(WafClient, region, profile)
 
     oracle_managed_str = "Gerenciado pela Oracle (Padrão)"
     instances = []
@@ -1025,7 +1053,7 @@ def get_infrastructure_details(
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS_FOR_DETAILS) as executor:
         future_to_instance = {
-            executor.submit(get_instance_details, region, i.id, get_compartment_name(i.compartment_id)): i
+            executor.submit(get_instance_details, region, i.id, get_compartment_name(i.compartment_id), profile): i
             for i in all_instances_sdk
         }
         completed_count = 0
@@ -1050,7 +1078,8 @@ def get_infrastructure_details(
     all_volumes_map.update({bv.id: f"Block Volume ({bv.display_name})" for i in instances for bv in i.block_volumes})
     volume_groups = _get_volume_groups(block_storage_client, compartment_id, all_volumes_map)
 
-    # Skip standalone volume collection if include_standalone=False (avoids a potentially slow API call).
+    # Collect volumes that exist in the compartment but aren't attached to any instance.
+    # Respects user preference: if include_standalone=False, skip this potentially slow API call.
     attached_ids = {bv.id for i in instances for bv in i.block_volumes}
     standalone_volumes = _get_standalone_block_volumes(block_storage_client, compartment_id, attached_ids) if include_standalone else []
 
@@ -1321,7 +1350,7 @@ def get_infrastructure_details(
                     not_after = str(cert_obj.public_certificate.not_valid_after)
                 certificates.append(LoadBalancerCertificateData(name=cert_name, valid_not_after=not_after))
 
-        # FIX: append was missing in the original code
+        # load_balancers must be initialised before the loop or the append below raises NameError.
         load_balancers.append(
             LoadBalancerData(
                 id=lb_details.id,
@@ -1340,7 +1369,7 @@ def get_infrastructure_details(
             )
         )
 
-    # Collect WAF policies from the compartment for inclusion in the full infrastructure document.
+    # Collect WAF policies for the compartment, then enrich each with firewall/LB integration data.
     task.update_state(
         state="PROGRESS",
         meta={"current": 94, "total": 100, "step_key": "progress.collecting_waf_infra", "context": {}},
@@ -1350,9 +1379,8 @@ def get_infrastructure_details(
         try:
             waf_policies = _get_waf_policies(waf_client, compartment_id, region, compartment_name="")
 
-            # Enrich each policy with integration data (Firewall + LB).
-            # Reuses already-collected load_balancers: each LB has waf_policy_id
-            # populated, enabling direct matching without extra API calls.
+            # Enrich each policy with its Firewall + LB integration data.
+            # LBs already have waf_policy_id set from collection, so no extra API calls are needed.
             firewalls_sdk = oci.pagination.list_call_get_all_results(
                 waf_client.list_web_app_firewalls,
                 compartment_id=compartment_id,
@@ -1360,14 +1388,14 @@ def get_infrastructure_details(
             ).data
             active_firewalls = [fw for fw in firewalls_sdk if fw.lifecycle_state != "DELETED"]
 
-            # LB index by waf_policy_id → list, as one policy may have multiple LBs.
+            # Index LBs by waf_policy_id; a single policy can be bound to multiple LBs.
             lb_by_policy_id: dict = {}
             for lb in load_balancers:
                 if lb.waf_policy_id:
                     lb_by_policy_id.setdefault(lb.waf_policy_id, []).append(lb)
 
             for policy in waf_policies:
-                # Collect ALL firewalls bound to this policy (there may be more than one LB).
+                # Collect all firewalls bound to this policy.
                 policy_firewalls = [f for f in active_firewalls if f.web_app_firewall_policy_id == policy.id]
                 policy_integrations = []
 
@@ -1379,8 +1407,7 @@ def get_infrastructure_details(
                         load_balancer_id=getattr(fw, "load_balancer_id", None),
                     )
 
-                    # Resolve LB by the firewall's load_balancer_id — index lookup
-                    #     or targeted API call if it's in another compartment.
+                    # Resolve the LB from the index; fall back to a direct API call for cross-compartment LBs.
                     fw_lb_id = getattr(fw, "load_balancer_id", None)
                     lb_data = None
                     if fw_lb_id:
@@ -1414,22 +1441,21 @@ def get_infrastructure_details(
                     )
                     policy_integrations.append(integration)
 
-                # Backward compatibility: keep `integration` with the first firewall.
+                # Keep singular `integration` for backward compatibility — holds the first firewall.
                 if policy_integrations:
                     policy.integration = policy_integrations[0]
                 policy.integrations = policy_integrations
         except Exception as e:
             logging.warning("WAF collection skipped in infrastructure flow: %s", e)
 
-    # Collect OCI Certificates Service certificates for display in the
-    # web summary and full infrastructure document.
+    # Collect OCI Certificates Service certificates for the summary and full infrastructure report.
     task.update_state(
         state="PROGRESS",
         meta={"current": 97, "total": 100, "step_key": "progress.collecting_certificates", "context": {}},
     )
     all_certificates = []
     try:
-        certs_mgmt_client = get_client(oci.certificates_management.CertificatesManagementClient, region)
+        certs_mgmt_client = get_client(oci.certificates_management.CertificatesManagementClient, region, profile)
         all_certificates = _get_compartment_certificates(certs_mgmt_client, compartment_id)
     except Exception as e:
         logging.warning("Certificates collection skipped in infrastructure flow: %s", e)
@@ -1456,11 +1482,9 @@ def get_infrastructure_details(
 def get_new_host_details(
     task, region: str, compartment_id: str, compartment_name: str,
     instance_ids: List[str], doc_type: str,
+    profile: Optional[Dict[str, Any]] = None,
 ) -> InfrastructureData:
-    """
-    Data collection orchestrator for the New Host flow.
-    Collects only the instances identified by their OCIDs and their network resources.
-    """
+    """Data collection orchestrator for the New Host flow. Collects only the specified instances and their network resources."""
     instances = []
     total_instances = len(instance_ids)
     task.update_state(
@@ -1470,7 +1494,7 @@ def get_new_host_details(
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS_FOR_DETAILS) as executor:
         future_to_id = {
-            executor.submit(get_instance_details, region, i_id, compartment_name): i_id
+            executor.submit(get_instance_details, region, i_id, compartment_name, profile): i_id
             for i_id in instance_ids
         }
         completed_count = 0
@@ -1490,7 +1514,7 @@ def get_new_host_details(
             except Exception as exc:
                 logging.error(f"Error fetching details for instance ID {instance_id}: {exc}")
 
-    block_storage_client = get_client(oci.core.BlockstorageClient, region)
+    block_storage_client = get_client(oci.core.BlockstorageClient, region, profile)
     all_volumes_map = {i.boot_volume_id: f"Boot Volume ({i.host_name})" for i in instances if i.boot_volume_id}
     all_volumes_map.update({bv.id: f"Block Volume ({bv.display_name})" for i in instances for bv in i.block_volumes})
     selected_volume_ids = set(all_volumes_map.keys())
@@ -1565,10 +1589,7 @@ def _get_waf_policies(
     return policies_data
 
 def _get_vcn_details(virtual_network_client, compartment_id: str) -> list:
-    """
-    Collects VCNs and all nested network resources (subnets, security lists,
-    route tables, NSGs, LPGs). Resolves gateway names in route rules.
-    """
+    """Collects VCNs and all nested resources (subnets, security lists, route tables, NSGs, LPGs). Resolves gateway names in route rules."""
     vcns_data = []
     try:
         vcns_sdk = oci.pagination.list_call_get_all_results(
@@ -1657,21 +1678,22 @@ def _get_vcn_details(virtual_network_client, compartment_id: str) -> list:
     return vcns_data
 
 def get_waf_report_details(
-    task, region: str, compartment_id: str, compartment_name: str
+    task, region: str, compartment_id: str, compartment_name: str,
+    profile: Optional[Dict[str, Any]] = None,
 ) -> InfrastructureData:
     """
     Data collection orchestrator for the WAF report.
-    Collects active policies, firewalls, integrated Load Balancers,
-    relevant VCNs, and compartment certificates.
+    Collects active WAF policies, bound firewalls, integrated load balancers,
+    relevant VCNs, and OCI Certificates from the compartment.
     """
     task.update_state(
         state="PROGRESS",
         meta={"current": 0, "total": 100, "step_key": "progress.initializing_clients", "context": {}},
     )
 
-    waf_client = get_client(WafClient, region)
-    load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region)
-    virtual_network_client = get_client(oci.core.VirtualNetworkClient, region)
+    waf_client = get_client(WafClient, region, profile)
+    load_balancer_client = get_client(oci.load_balancer.LoadBalancerClient, region, profile)
+    virtual_network_client = get_client(oci.core.VirtualNetworkClient, region, profile)
 
     task.update_state(
         state="PROGRESS",
@@ -1699,7 +1721,7 @@ def get_waf_report_details(
         meta={"current": 75, "total": 100, "step_key": "progress.mapping_waf_network", "context": {}},
     )
 
-    # FIX: initialize load_balancers list before the loop — was missing (NameError bug)
+    # Initialise load_balancers before the loop to avoid NameError on first append.
     load_balancers: List[LoadBalancerData] = []
 
     for policy in waf_policies:
@@ -1767,7 +1789,7 @@ def get_waf_report_details(
                             waf_policy_id=policy.id, waf_policy_name=policy.display_name,
                         )
 
-                        # Set network_infrastructure from the first LB with a subnet.
+                        # Use the first LB that has a resolved subnet for network_infrastructure.
                         if lb_details.subnet_ids and not policy.network_infrastructure:
                             subnet = _safe_api_call(virtual_network_client.get_subnet, lb_details.subnet_ids[0])
                             if subnet:
@@ -1788,7 +1810,7 @@ def get_waf_report_details(
             )
             policy_integrations.append(integration)
 
-        # Backward compatibility + full integrations list.
+        # Populate both `integration` (first item, backward compat) and `integrations` (all).
         if policy_integrations:
             policy.integration = policy_integrations[0]
         policy.integrations = policy_integrations
@@ -1800,7 +1822,7 @@ def get_waf_report_details(
 
     all_vcns = _get_vcn_details(virtual_network_client, compartment_id)
 
-    certs_mgmt_client = get_client(oci.certificates_management.CertificatesManagementClient, region)
+    certs_mgmt_client = get_client(oci.certificates_management.CertificatesManagementClient, region, profile)
     all_certificates = _get_compartment_certificates(certs_mgmt_client, compartment_id)
 
     return InfrastructureData(

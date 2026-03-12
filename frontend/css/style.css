@@ -61,7 +61,6 @@
 }
 
 /* ── Light Mode ─────────────────────────────────────────────────────────────── */
-/* ── Light mode: softer, warmer whites ── */
 body.light-mode {
   --sb-bg:       #1e2b3a;
   --sb-bg-hover: rgba(255,255,255,0.07);
@@ -147,6 +146,13 @@ input[type="text"], input[type="password"], textarea {
   align-items: center;
   gap: 10px;
   padding: 0 16px 16px;
+  width: 100%;
+  box-sizing: border-box;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
 }
 
 .sidebar-brand-icon {
@@ -1599,7 +1605,7 @@ input.info-value:focus {
 .img-section-remove-btn svg { width: 14px; height: 14px; stroke: currentColor; }
 .img-section-remove-btn:hover { background: rgba(248,81,73,0.12); color: #f85149; }
 
-/* ── Text fields ABOVE/BELOW (FIXED: label on top, textarea below) ── */
+/* ── Text fields above/below image sections ── */
 .img-section-texts {
   padding: 14px 14px 0;
   display: grid;
@@ -1755,7 +1761,6 @@ input.info-value:focus {
 }
 .img-thumb-wrap:hover .img-thumb-remove { opacity: 1; }
 
-/* Legacy compatibility */
 .section-text-row { margin-top: 10px; }
 .section-text-row label {
   display: block;
@@ -2346,13 +2351,24 @@ body.light-mode .cert-assoc-type-badge { background: #dbeafe; color: #2563eb; bo
   border: 1px solid var(--border-muted);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow);
-  padding: 32px 32px 28px;
+  padding: 20px 28px 28px;
   animation: fadeIn 0.2s ease;
 }
 
+.auth-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.auth-modal-header .auth-tabs {
+  flex: 1;
+  margin-bottom: 0;
+}
+
 .auth-modal-close {
-  position: absolute;
-  top: 14px; right: 14px;
+  flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   width: 30px; height: 30px;
   border: 1px solid var(--border); border-radius: 7px;
@@ -2366,7 +2382,7 @@ body.light-mode .cert-assoc-type-badge { background: #dbeafe; color: #2563eb; bo
 .auth-tabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 24px;
+  margin-bottom: 0;
   background: var(--bg-input);
   border-radius: 9px;
   padding: 4px;
@@ -2767,7 +2783,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
    ADDITIONAL FIXES — Multiselect tags, Connectivity chips, CIDR, Admin, Chart
    ============================================================================= */
 
-/* ── Issue 1: Multiselect instance tags ── */
+/* ── Multiselect: instance tag chips ── */
 .selected-items-container {
   display: flex;
   flex-wrap: wrap;
@@ -2803,7 +2819,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   flex-shrink: 0;
 }
 
-/* ── Issue 2: Network Connectivity Summary chips ── */
+/* ── Network Connectivity Summary chips ── */
 .summary-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -2852,7 +2868,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   font-style: italic;
 }
 
-/* ── Issue 3: Loading icon — replace ring+SVG with cleaner animation ── */
+/* ── Loading icon animation ── */
 .progress-icon-ring {
   position: relative;
   width: 72px; height: 72px;
@@ -2883,7 +2899,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   50%       { opacity: 0.9; transform: scale(1); }
 }
 
-/* ── Issue 4: VCN CIDR column alignment ── */
+/* ── VCN CIDR column alignment ── */
 .resource-table th:last-child,
 .resource-table td:last-child {
   text-align: right;
@@ -2898,7 +2914,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   color: var(--text-code, #79b8ff);
 }
 
-/* ── Issue 5: Admin panel styles ── */
+/* ── Admin panel ── */
 .admin-tabs {
   display: flex;
   gap: 4px;
@@ -3097,7 +3113,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
    FIXES ROUND 3 — Cloud→Check, Net Summary, Admin Modal, Spline Chart
    ============================================================================= */
 
-/* ── Fix 1: Progress cloud→check icon transition ── */
+/* ── Progress icon: cloud-to-checkmark transition ── */
 .progress-check-hidden {
   opacity: 0 !important;
   transform: scale(0.4) !important;
@@ -3128,7 +3144,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   to { border-top-color: #3fb950; opacity: 0.6; }
 }
 
-/* ── Fix 2: Network connectivity card redesign ── */
+/* ── Network connectivity card ── */
 .net-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3210,7 +3226,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
 .net-chip-teal   { background: rgba(63,185,80,0.1);   border-color: rgba(63,185,80,0.3);   color: #56d364; }
 .net-chip-empty  { background: transparent; border-color: var(--border-muted); color: var(--text-muted); font-style: italic; font-size: 11.5px; }
 
-/* ── Fix 3: Group management modal ── */
+/* ── Group management modal ── */
 .group-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -3422,7 +3438,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
 .admin-btn-icon:hover { background: var(--hover-bg); color: var(--accent); border-color: var(--accent); }
 .admin-btn-icon svg   { width: 13px; height: 13px; stroke: currentColor; }
 
-/* ── Fix 4: Spline chart & filters ── */
+/* ── Spline chart and period filters ── */
 .metrics-card-header {
   display: flex;
   align-items: center;
@@ -3594,8 +3610,6 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
 /* ═══════════════════════════════════════════════════════════════════════════
    SIDEBAR BRAND CLICKABLE
    ═══════════════════════════════════════════════════════════════════════════ */
-.sidebar-brand { cursor: pointer; }
-.sidebar-brand:hover .sidebar-brand-name { color: var(--accent); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HISTORY GUEST NOTICE
@@ -3663,7 +3677,9 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   font-size: 11px; color: var(--text-muted);
   list-style: none; padding: 0;
 }
-.force-pw-rules li::before { content: "• "; }
+.force-pw-rules li::before { content: "✗  "; color: var(--danger, #ef4444); }
+.force-pw-rules li.rule-ok::before { content: "✓  "; color: var(--success, #22c55e); }
+.force-pw-rules li.rule-ok { color: var(--success, #22c55e); }
 #force-pw-error {
   font-size: 12px; color: var(--danger);
   margin-bottom: 12px; display: none;
@@ -3677,9 +3693,20 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   display: flex; align-items: center; justify-content: center;
 }
 #profile-modal.hidden { display: none; }
+#user-profile-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#user-profile-modal.hidden { display: none; }
+
 .profile-backdrop {
-  position: absolute; inset: 0;
+  position: fixed; inset: 0;
   background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+  z-index: 0;
 }
 .profile-card {
   position: relative; z-index: 1;
@@ -4274,3 +4301,1165 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
 .status-badge.status-down        { background: rgba(248,81,73,.12);  border-color: rgba(248,81,73,.3);  color: #f85149; }
 .status-badge.status-provisioning{ background: rgba(240,136,62,.12); border-color: rgba(240,136,62,.3); color: #f0883e; }
 .status-badge.status-available   { background: rgba(63,185,80,.12);  border-color: rgba(63,185,80,.3);  color: #3fb950; }
+/* =============================================================================
+   Tenancy Profile: no-profile block & active badge
+   ============================================================================= */
+
+.no-profile-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 32px;
+  text-align: center;
+}
+
+.no-profile-icon {
+  width: 40px;
+  height: 40px;
+  stroke: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.no-profile-msg {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 380px;
+  margin: 0;
+}
+
+.no-profile-msg strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.no-profile-msg a {
+  color: var(--primary, #2f81f7);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.no-profile-msg a:hover {
+  text-decoration: underline;
+}
+
+.active-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 28px 0;
+  cursor: default;
+  transition: opacity .2s;
+  letter-spacing: 0.01em;
+}
+
+.active-profile-badge svg {
+  flex-shrink: 0;
+  stroke: var(--text-muted);
+}
+
+/* =============================================================================
+   Profile Modal — form layout
+   ============================================================================= */
+
+.profile-modal-card {
+  max-width: 580px;
+}
+
+.profile-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+
+.profile-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.profile-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-form-section:last-child {
+  border-bottom: none;
+}
+
+.profile-form-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 2px;
+}
+
+.profile-form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.profile-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-form-group--full {
+  flex: 1 1 100%;
+}
+
+.profile-form-group--checkbox {
+  flex: 0 0 auto;
+  min-width: 180px;
+}
+
+.profile-form-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.profile-form-required {
+  color: var(--danger, #ef4444);
+}
+
+.profile-form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.profile-form-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.profile-form-input:focus {
+  border-color: var(--accent);
+}
+
+.profile-form-textarea {
+  font-family: monospace;
+  font-size: 11px;
+  resize: vertical;
+  min-height: 100px;
+}
+
+.profile-form-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.profile-form-checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.profile-user-list {
+  max-height: 130px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* =============================================================================
+   Profile step selector (generator wizard)
+   ============================================================================= */
+
+.profile-native-select {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  appearance: auto;
+}
+
+.profile-native-select:focus {
+  border-color: var(--accent);
+}
+
+/* =============================================================================
+   Active profile badge (generator header)
+   ============================================================================= */
+
+.active-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 28px 4px;
+  cursor: default;
+}
+
+.active-profile-badge svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  stroke: var(--text-muted);
+}
+
+/* =============================================================================
+   No-profile block (generator guard)
+   ============================================================================= */
+
+.no-profile-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 52px 32px;
+  text-align: center;
+}
+
+.no-profile-icon {
+  width: 36px;
+  height: 36px;
+  stroke: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.no-profile-msg {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 400px;
+  margin: 0;
+}
+
+.no-profile-msg strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.no-profile-msg a {
+  color: var(--accent, #2f81f7);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.no-profile-msg a:hover {
+  text-decoration: underline;
+}
+
+/* =============================================================================
+   Profile Visibility Radio Cards (modal)
+   ============================================================================= */
+
+.profile-vis-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.profile-vis-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: center;
+  position: relative;
+}
+
+.profile-vis-card:hover {
+  border-color: rgba(47,129,247,0.4);
+  background: var(--hover-bg);
+}
+
+.profile-vis-card--active,
+.profile-vis-card input:checked ~ .profile-vis-icon,
+.profile-vis-card:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(47,129,247,0.07);
+}
+
+.profile-vis-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.profile-vis-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.profile-vis-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke: var(--text-secondary);
+  transition: stroke 0.15s;
+}
+
+.profile-vis-card--active .profile-vis-icon,
+.profile-vis-card:has(input:checked) .profile-vis-icon {
+  background: rgba(47,129,247,0.12);
+  border-color: rgba(47,129,247,0.4);
+}
+
+.profile-vis-card--active .profile-vis-icon svg,
+.profile-vis-card:has(input:checked) .profile-vis-icon svg {
+  stroke: var(--accent);
+}
+
+.profile-vis-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  transition: color 0.15s;
+}
+
+.profile-vis-card--active .profile-vis-label,
+.profile-vis-card:has(input:checked) .profile-vis-label {
+  color: var(--accent);
+}
+
+/* =============================================================================
+   Active profile badge (wizard header — single profile mode)
+   ============================================================================= */
+
+.active-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 28px 2px;
+  cursor: default;
+}
+
+.active-profile-badge svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  stroke: var(--text-muted);
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* =============================================================================
+   Profile modal — enhanced credential inputs
+   ============================================================================= */
+
+.profile-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg-input);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.profile-input-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-border);
+}
+
+.profile-input-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-left: 10px;
+  stroke: var(--text-muted);
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.profile-input-inner {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 13px;
+  outline: none;
+}
+
+.profile-input-copy {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  height: 100%;
+  min-height: 36px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: var(--bg-card-alt);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.profile-input-copy:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.profile-input-copy svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+/* PEM textarea block */
+.profile-pem-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg-input);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.profile-pem-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-border);
+}
+
+.profile-pem-textarea {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 100px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.profile-pem-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-card-alt);
+}
+
+.profile-pem-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Segmented toggle: Arquivo | Texto */
+.pem-action-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  gap: 0;
+}
+
+.pem-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  font-family: var(--font);
+  white-space: nowrap;
+}
+.pem-toggle-btn svg {
+  width: 13px; height: 13px;
+  flex-shrink: 0;
+}
+.pem-toggle-btn:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.pem-toggle-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* =============================================================================
+   Profile dropdown — action item (+ Novo Profile)
+   ============================================================================= */
+
+.select-item-action {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.select-item-action:hover {
+  background: rgba(47,129,247,0.06) !important;
+}
+
+/* =============================================================================
+   No-profile block — button variant for admins
+   ============================================================================= */
+
+.no-profile-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 52px 32px;
+  text-align: center;
+}
+
+#no-profile-actions .button-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  padding: 9px 18px;
+}
+
+/* =============================================================================
+   Profile modal — anon toggle row
+   ============================================================================= */
+
+.profile-anon-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+.profile-anon-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Sidebar brand as button */
+button.sidebar-brand {
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+}
+/* =============================================================================
+   PATCH — Toast position top-right
+   ============================================================================= */
+#toast-container {
+  position: fixed !important;
+  top: 20px !important;
+  bottom: auto !important;
+  right: 20px !important;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  animation: toastSlideDown 0.3s ease forwards;
+  opacity: 0;
+  transform: translateY(-20px) translateX(20px);
+}
+@keyframes toastSlideDown {
+  to { opacity: 1; transform: translateY(0) translateX(0); }
+}
+
+/* =============================================================================
+   PATCH — Sidebar brand alignment fix (definitive)
+   ============================================================================= */
+.sidebar-brand {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  /* Use padding for clickable area but margin for spacing below */
+  padding: 6px 10px !important;
+  margin: 0 6px 10px !important;
+  /* Width auto with margin instead of 100% + 16px padding */
+  width: auto !important;
+  box-sizing: border-box !important;
+  min-width: 0;
+  border-radius: 8px !important;
+}
+.sidebar-brand-icon {
+  flex-shrink: 0 !important;
+}
+.sidebar-brand > div:nth-child(2) {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.sidebar-brand-name,
+.sidebar-brand-sub {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-brand-badge {
+  flex-shrink: 0 !important;
+  margin-left: auto;
+}
+
+/* =============================================================================
+   PATCH — Validation highlight (required fields)
+   ============================================================================= */
+.field-error .selected-item-display,
+.field-error input,
+.field-error select {
+  border-color: var(--s-stopped) !important;
+  box-shadow: 0 0 0 2px rgba(248,81,73,0.18) !important;
+}
+.field-error-label {
+  font-size: 11px;
+  color: var(--s-stopped);
+  margin-top: 4px;
+  display: block;
+}
+
+/* =============================================================================
+   PATCH — PEM redesign (create vs edit states)
+   ============================================================================= */
+.pem-choose-mode {
+  display: flex;
+  gap: 10px;
+  padding: 14px 12px 10px;
+}
+.pem-mode-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-family: var(--font);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.1s;
+}
+.pem-mode-btn svg {
+  width: 22px; height: 22px;
+  stroke: currentColor;
+  transition: stroke 0.15s;
+}
+.pem-mode-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  transform: translateY(-2px);
+}
+.pem-mode-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* PEM file item (edit mode) */
+.pem-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 8px 12px;
+}
+.pem-file-icon {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.pem-file-icon svg { width: 16px; height: 16px; stroke: var(--accent); }
+.pem-file-info { flex: 1; min-width: 0; }
+.pem-file-name {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pem-file-meta { font-size: 11px; color: var(--text-muted); }
+.pem-file-actions { display: flex; gap: 6px; }
+.pem-action-sm {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pem-action-sm svg { width: 13px; height: 13px; }
+.pem-action-sm:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pem-action-sm.pem-action-danger:hover { border-color: var(--s-stopped); color: var(--s-stopped); background: rgba(248,81,73,0.1); }
+
+/* PEM paste area */
+.pem-paste-area {
+  margin: 8px 12px 4px;
+  position: relative;
+}
+.pem-paste-hint {
+  font-size: 11px; color: var(--text-muted);
+  text-align: center;
+  margin: 6px 12px 8px;
+}
+
+/* =============================================================================
+   PATCH — Admin user edit modal
+   ============================================================================= */
+#admin-user-modal {
+  position: fixed; inset: 0; z-index: 9200;
+  display: flex; align-items: center; justify-content: center;
+}
+#admin-user-modal.hidden { display: none; }
+.admin-user-modal-card {
+  position: relative; z-index: 1;
+  width: 100%; max-width: 520px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+  max-height: 88vh; overflow-y: auto;
+}
+.admin-user-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 22px;
+}
+.admin-user-modal-header h3 { margin: 0; font-size: 17px; font-weight: 700; color: var(--text-primary); }
+
+/* =============================================================================
+   PATCH — Hover effects enhancement
+   ============================================================================= */
+.sidebar-nav-item {
+  transition: background 0.15s, color 0.15s, transform 0.1s !important;
+}
+.sidebar-nav-item:hover {
+  transform: translateX(2px);
+}
+.button-primary {
+  transition: background 0.15s, opacity 0.15s, transform 0.1s, box-shadow 0.15s !important;
+}
+.button-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(47,129,247,0.35);
+}
+.button-secondary {
+  transition: background 0.15s, border-color 0.15s, transform 0.1s !important;
+}
+.button-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.admin-tab {
+  transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.1s !important;
+}
+.admin-tab:hover:not(.active) {
+  transform: translateY(-1px);
+}
+.admin-btn-icon {
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s !important;
+}
+.admin-btn-icon:hover {
+  transform: scale(1.1);
+}
+.admin-btn-danger {
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s !important;
+}
+.admin-btn-danger:hover {
+  transform: scale(1.1);
+}
+.profile-input-copy {
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s !important;
+}
+.profile-input-copy:hover {
+  transform: scale(1.08);
+}
+.select-item, .select-item-parent {
+  transition: background 0.12s, color 0.12s, padding-left 0.1s !important;
+}
+@keyframes toastSlideOut {
+  to { opacity: 0; transform: translateY(-10px) translateX(20px); }
+}
+
+/* =============================================================================
+   PATCH — Auth register form field row
+   ============================================================================= */
+.auth-field-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.auth-field-row .auth-field {
+  flex: 1;
+  min-width: 0;
+}
+.auth-field-row .auth-input-wrap input {
+  min-width: 0;
+  width: 100%;
+}
+
+/* =============================================================================
+   PATCH — Comprehensive hover effects (reactive UI)
+   ============================================================================= */
+
+/* Custom select items */
+.select-item,
+.select-item-parent {
+  transition: background 0.12s, color 0.12s, padding-left 0.12s !important;
+}
+.select-item:hover,
+.select-item-parent:hover {
+  background: var(--hover-bg) !important;
+  color: var(--text-primary) !important;
+}
+.select-item-action:hover {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+}
+
+/* Custom select trigger */
+.custom-select-selected {
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+}
+.custom-select-selected:hover:not(.disabled) {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-soft) !important;
+}
+
+/* Profile modal vis buttons */
+.vis-card {
+  transition: border-color 0.15s, background 0.15s, transform 0.1s !important;
+}
+.vis-card:hover:not(.selected) {
+  border-color: var(--accent) !important;
+  background: var(--accent-soft) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Admin table rows */
+.admin-table tbody tr {
+  transition: background 0.12s !important;
+}
+.admin-table tbody tr:hover {
+  background: var(--hover-bg) !important;
+}
+
+/* Admin group chips */
+.admin-group-chip {
+  transition: background 0.12s, color 0.12s !important;
+  cursor: default;
+}
+.admin-group-chip:hover {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+}
+
+/* Admin tabs */
+.admin-tab {
+  transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.1s !important;
+}
+.admin-tab:not(.active):hover {
+  transform: translateY(-1px) !important;
+  color: var(--accent) !important;
+}
+
+/* PEM action buttons */
+.pem-action-sm {
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s !important;
+}
+.pem-action-sm:hover {
+  transform: scale(1.12) !important;
+}
+
+/* PEM mode choice buttons */
+.pem-mode-btn {
+  transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.12s, box-shadow 0.15s !important;
+}
+.pem-mode-btn:hover {
+  box-shadow: 0 4px 12px rgba(47,129,247,0.2) !important;
+}
+
+/* Nav items */
+.sidebar-nav-item {
+  transition: background 0.12s, color 0.12s, transform 0.1s, padding-left 0.1s !important;
+}
+.sidebar-nav-item:hover:not(.active) {
+  transform: translateX(3px) !important;
+}
+
+/* History items */
+.sidebar-history-item {
+  transition: background 0.12s, transform 0.1s !important;
+}
+.sidebar-history-item:hover {
+  background: var(--hover-bg) !important;
+  transform: translateX(2px) !important;
+}
+
+/* Net chips (status badges) */
+.net-chip {
+  transition: filter 0.15s, transform 0.1s !important;
+}
+.net-chip:hover {
+  filter: brightness(1.1) !important;
+  transform: scale(1.05) !important;
+}
+
+/* Input fields focus ring */
+.profile-form-input:focus,
+.admin-search-input:focus,
+.auth-input-wrap input:focus {
+  outline: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-soft) !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+}
+
+/* Collapsible cards */
+.collapsible .instance-card-header,
+.collapsible .vcn-card-header,
+.collapsible .ipsec-card-header {
+  transition: background 0.12s !important;
+  cursor: pointer;
+}
+.collapsible .instance-card-header:hover,
+.collapsible .vcn-card-header:hover,
+.collapsible .ipsec-card-header:hover {
+  background: var(--hover-bg) !important;
+}
+
+/* Lang flag buttons */
+.lang-flag-btn {
+  transition: background 0.12s, transform 0.1s, box-shadow 0.12s !important;
+}
+.lang-flag-btn:hover {
+  transform: scale(1.06) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+}
+
+/* Sidebar brand hover — :focus clears background so it doesn't persist after click */
+.sidebar-brand {
+  transition: background 0.15s !important;
+}
+.sidebar-brand:hover {
+  background: var(--hover-bg) !important;
+}
+.sidebar-brand:hover .sidebar-brand-name {
+  color: var(--accent) !important;
+}
+.sidebar-brand:focus {
+  outline: none !important;
+  background: transparent !important;
+}
+.sidebar-brand:active {
+  background: transparent !important;
+}
+
+/* =============================================================================
+   PATCH — Cursor pointer / not-allowed everywhere it matters
+   ============================================================================= */
+
+/* Everything clickable gets pointer */
+button,
+[role="button"],
+.sidebar-nav-item,
+.sidebar-history-item,
+.sidebar-brand,
+.admin-tab,
+.auth-tab,
+.select-item,
+.select-item-parent,
+.select-item-action,
+.custom-select-selected:not(.disabled),
+.lang-flag-btn,
+.feedback-cat-btn,
+.profile-vis-card,
+.profile-input-copy,
+.pem-mode-btn,
+.pem-action-sm,
+.pem-toggle-btn,
+.admin-btn-icon,
+.admin-btn-danger,
+.admin-manage-groups,
+.admin-delete-user,
+.admin-edit-user,
+.admin-role-toggle,
+.admin-group-chip,
+.instance-card-header,
+.vcn-card-header,
+.ipsec-card-header,
+.oke-card-header,
+.cert-card-header,
+.collapsible-header,
+.metrics-chart-type-btn,
+.metrics-period-btn,
+.metrics-filter-btn,
+.sidebar-theme-btn,
+.sidebar-logout-btn,
+.admin-toggle-label,
+.toggle-switch,
+.toggle-slider,
+.group-modal-close,
+.profile-modal-close,
+.anon-toggle-row,
+.pem-file-panel button,
+.pem-choose-btn,
+.pem-clear-btn,
+.pem-paste-btn,
+.pem-edit-action,
+.feedback-github-link,
+a,
+label[for],
+.checkbox-label,
+.toast,
+#feedback-fab {
+  cursor: pointer !important;
+}
+
+/* Disabled states get not-allowed */
+button:disabled,
+.button-primary:disabled,
+.button-secondary:disabled,
+.custom-select-selected.disabled,
+.select-item-locked,
+[disabled],
+.select-item-locked * {
+  cursor: not-allowed !important;
+}
+
+/* Locked items show lock cursor */
+.select-item-locked {
+  cursor: not-allowed !important;
+}
+
+/* Text inputs keep text cursor */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="search"],
+textarea {
+  cursor: text !important;
+}
+
+/* Read-only textarea (PEM preview) */
+textarea[readonly] {
+  cursor: default !important;
+}
+
+/* =============================================================================
+   PATCH — Feedback FAB z-index fix (must be above toast container)
+   ============================================================================= */
+#feedback-fab {
+  z-index: 9050 !important;
+}

@@ -1,28 +1,21 @@
 // =============================================================================
-// PT-BR: Aplicação frontend do OCI DocGen.
-//        Gerencia o fluxo completo da interface: seleção de região/compartimento,
-//        inicio de coletas assíncronas, exibição do resumo de infraestrutura
-//        e geração/download de documentos .docx.
-// EN: OCI DocGen frontend application.
-//     Manages the complete UI flow: region/compartment selection,
-//     async collection start, infrastructure summary display,
-//     and .docx document generation/download.
+// OCI DocGen — Frontend Application
+// Manages the full UI flow: region/compartment selection, async data collection,
+// infrastructure summary rendering, and .docx generation/download.
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
 
   // ===========================================================================
-  // PT-BR: Configurações e Constantes
-  // EN: Settings and Constants
+  // Settings and Constants
   // ===========================================================================
-  const API_BASE_URL = 'http://127.0.0.1:8000'; // Uncomment for local development
-  //const API_BASE_URL = ''; // Uncomment for production
+  const API_BASE_URL = ''; // Docker / produção (nginx proxy)
 
   // ===========================================================================
-  // PT-BR: Seletores de Elementos do DOM
-  // EN: DOM Element Selectors
+  // DOM Element Selectors
   // ===========================================================================
   const mainAppContainer = document.getElementById('app-shell');
+  const profileContainer = document.getElementById('profile-select-container');
   const regionContainer = document.getElementById('region-select-container');
   const docTypeContainer = document.getElementById('doctype-select-container');
   const compartmentContainer = document.getElementById('compartment-select-container');
@@ -90,8 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const metricsLoginCta    = document.getElementById('metrics-login-cta');
 
   // ===========================================================================
-  // PT-BR: Definições de Ícones SVG inline
-  // EN: Inline SVG Icon Definitions
+  // Inline SVG Icon Definitions
   // ===========================================================================
   const ICONS = {
     WAF:          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>`,
@@ -112,8 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // ===========================================================================
-  // PT-BR: Helper para normalizar labels de estado de ciclo de vida
-  // EN: Helper to normalize lifecycle state display labels
+  // Lifecycle State Label Normalizer
   // ===========================================================================
   function getStateLabel(state) {
     const s = (state || '').toUpperCase();
@@ -130,8 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
-  // PT-BR: Estado Global da Aplicação
-  // EN: Global Application State
+  // Global Application State
   // ===========================================================================
   let selectedRegion = null;
   let selectedDocType = null;
@@ -152,8 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let allInstancesData = [];
 
   // ===========================================================================
-  // PT-BR: Funções de Internacionalização (i18n)
-  // EN: Internationalization (i18n) Functions
+  // Internationalization (i18n)
   // ===========================================================================
 
   const loadTranslations = async (lang) => {
@@ -191,6 +180,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     updateUiForDocType();
+
+    // Re-render dynamically built admin tables so column headers update on language change
+    const profilesTableWrap = document.getElementById('admin-profiles-table-wrap');
+    if (profilesTableWrap && profilesTableWrap.querySelector('table')) {
+      loadAdminProfiles();
+    }
   };
 
   const setLanguage = async (lang) => {
@@ -310,8 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // PT-BR: Funções de Interface do Usuário
-  // EN: User Interface Functions
+  // User Interface Functions
   // ===========================================================================
 
   function showToast(message, type = 'success') {
@@ -328,8 +322,9 @@ document.addEventListener('DOMContentLoaded', () => {
     toastContainer.appendChild(toast);
 
     setTimeout(() => {
-      toast.remove();
-    }, 5000);
+      toast.style.animation = 'toastSlideOut 0.3s ease forwards';
+      setTimeout(() => toast.remove(), 310);
+    }, 4500);
   }
 
   const showProgress = () => {
@@ -544,7 +539,16 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>`;
       } else {
         item.classList.add('select-item-parent');
-        if (container === regionContainer) {
+        if (container === profileContainer) {
+          if (option._isAction) {
+            // "Create profile" action item — styled distinctly
+            item.classList.remove('select-item-parent');
+            item.classList.add('select-item', 'select-item-action');
+            item.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon" style="stroke:var(--accent)"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span class="item-text" style="color:var(--accent)">${optionName}</span>`;
+          } else {
+            iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`;
+          }
+        } else if (container === regionContainer) {
           iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>`;
         } else if (container === docTypeContainer) {
           iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
@@ -581,6 +585,12 @@ document.addEventListener('DOMContentLoaded', () => {
         item.addEventListener('click', () => {
           if (option.locked) {
             onSelectCallback(optionValue, optionName, false, option);
+            return;
+          }
+          // Action items (e.g. "+ Novo Profile") must NOT set display — they only trigger callback
+          if (option._isAction) {
+            onSelectCallback(optionValue, optionName, false, option);
+            closeAllSelects();
             return;
           }
           const selectedContent = selected.querySelector('.selected-item-display');
@@ -649,19 +659,20 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
-  // PT-BR: Funções de Chamadas à API Backend
-  // EN: Backend API Call Functions
+  // Backend API Calls
   // ===========================================================================
 
   /**
    * Fetches the list of available OCI regions and populates the selector.
    */
   const fetchRegions = async () => {
+    if (!selectedProfileId) return;
     try {
       toggleLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/regions`);
+      const response = await fetch(`${API_BASE_URL}/api/regions?profile_id=${selectedProfileId}`, { headers: getAuthHeaders() });
       if (!response.ok) {
-        throw new Error('Erro ao buscar regiões');
+        const d = await response.json().catch(() => ({}));
+        throw new Error(d.detail || 'Erro ao buscar regiões');
       }
       const regions = await response.json();
       allRegionsData = regions;
@@ -742,7 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       toggleLoading(true);
       createCustomSelect(compartmentContainer, [], t('progress_loading'), () => {}, false, false);
-      const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/compartments`);
+      const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/compartments?profile_id=${selectedProfileId}`, { headers: getAuthHeaders() });
       if (!response.ok) {
         throw new Error('Erro ao buscar compartimentos');
       }
@@ -776,7 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       toggleLoading(true);
       createCustomSelect(instanceContainer, [], t('progress_loading'), () => {}, false, true);
-      const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/instances/${selectedCompartmentId}`);
+      const response = await fetch(`${API_BASE_URL}/api/${selectedRegion}/instances/${selectedCompartmentId}?profile_id=${selectedProfileId || ''}`, { headers: getAuthHeaders() });
       if (!response.ok) {
         throw new Error('Erro ao buscar instâncias');
       }
@@ -834,8 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // PT-BR: Fluxo Assíncrono e Coleta de Dados
-  // EN: Asynchronous Flow and Data Collection
+  // Async Data Collection Flow
   // ===========================================================================
 
   /**
@@ -865,6 +875,7 @@ document.addEventListener('DOMContentLoaded', () => {
       type: taskType,
       doc_type: selectedDocType,
       region: selectedRegion,
+      profile_id: selectedProfileId || null,
     };
 
     if (taskType === 'new_host') {
@@ -988,8 +999,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // PT-BR: Geração de Resumo de Infraestrutura e Documentos
-  // EN: Infrastructure Summary and Document Generation
+  // Infrastructure Summary and Document Generation
   // ===========================================================================
 
   /**
@@ -998,10 +1008,8 @@ document.addEventListener('DOMContentLoaded', () => {
    * @returns {string} The generated HTML string.
    */
   // ===========================================================================
-  // PT-BR: Constrói o HTML das políticas WAF para o resumo de infraestrutura completa.
-  //        Separado para evitar backticks aninhados em template literals.
-  // EN: Builds WAF policy HTML for the full infrastructure summary.
-  //     Extracted to avoid nested backtick issues inside template literals.
+  // WAF Policy HTML Builder
+  // Extracted from the main summary builder to avoid nested backtick conflicts.
   // ===========================================================================
   function buildWafInfraSectionHtml(policies, createTable) {
     let html = '';
@@ -1012,8 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let wafCardContent   = '';
 
       if (!isDeleted) {
-        // PT-BR: Itera sobre todos os firewalls vinculados (integrations) com fallback para integration singular.
-        // EN: Iterate over all bound firewalls (integrations) with fallback to singular integration.
+        // Iterate over all bound firewalls (integrations) with fallback to singular integration.
         const integrations = (policy.integrations && policy.integrations.length > 0)
           ? policy.integrations
           : (policy.integration ? [policy.integration] : []);
@@ -1085,8 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
             p.lifecycle_state?.toUpperCase() !== 'DELETED'
         );
         activePolicies.forEach(policy => {
-            // PT-BR: Itera sobre todos os firewalls da política para popular todos os LBs.
-            // EN: Iterate over all policy firewalls to populate all LBs.
+            // Iterate over all policy firewalls to populate all bound LBs.
             const integrations = (policy.integrations && policy.integrations.length > 0)
                 ? policy.integrations
                 : (policy.integration ? [policy.integration] : []);
@@ -1569,8 +1575,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isDeleted) {
             wafCardContent = `<p class="no-data-message">${t('doc.messages.resource_deleted_info') || 'Recurso deletado.'}</p>`;
         } else {
-            // PT-BR: Usa `integrations` (todos os firewalls) com fallback para `integration` singular.
-            // EN: Use `integrations` (all firewalls) with fallback to singular `integration`.
+            // Use `integrations` (all firewalls) with fallback to singular `integration`.
             const integrations = (policy.integrations && policy.integrations.length > 0)
                 ? policy.integrations
                 : (policy.integration ? [policy.integration] : []);
@@ -1881,8 +1886,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('doc.messages.no_network_found')}</p>`}</div></fieldset>
       `;
     } else { // Full Infra
-      // PT-BR: WAF ativo: integra políticas ao resumo de infraestrutura completa.
-      // EN: Active WAF: merges policies into the full infrastructure summary.
+      // Active WAF: merge policies into the full infrastructure summary.
       const activeWafPolicies = (waf_policies || []).filter(p =>
           p.lifecycle_state?.toUpperCase() !== 'DELETED'
       );
@@ -1891,12 +1895,8 @@ document.addEventListener('DOMContentLoaded', () => {
           ['ACTIVE','PENDING_DELETION'].includes((c.lifecycle_state || '').toUpperCase())
       ).length > 0;
 
-      // PT-BR: Se há políticas WAF no compartimento, injeta a seção de WAF e Certificados.
-      //        Reutiliza `wafHtml` — já calculado acima com o UX idêntico ao WAF Report
-      //        (tabela de Firewall com Attachment State, grid de regras, etc.).
-      // EN: If WAF policies exist, inject WAF and Certificates sections.
-      //     Reuses `wafHtml` — already computed above with the same UX as the WAF Report
-      //     (Firewall table with Attachment State, rules grid, etc.).
+      // If WAF policies exist, inject the WAF and Certificates sections.
+      // Reuses `wafHtml` computed above — same rendering as the WAF Report view.
       const wafInfraSection  = hasWaf  ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.WAF + t('summary.waf_policies') + '</legend><div class="instances-container">' + wafHtml + '</div></fieldset>' : '';
       const certInfraSection = hasCerts ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.CERTIFICATES + (t('summary.section.certificates') || 'Certificados TLS/SSL') + '</legend><div class="instances-container">' + renderCertificates(certificates) + '</div></fieldset>' : '';
 
@@ -2873,8 +2873,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const SESSION_KEY = 'oci-docgen-session';   // { token, username, user_id }
   const HISTORY_KEY = 'oci-docgen-history';
 
-  let currentUser = null;  // null = anonymous, object = logged-in user
-  let currentUserPermissions = null; // null until fetchAndApplyPermissions() resolves
+  let currentUser = null;
+  let currentUserPermissions = null;
+  let availableProfiles = [];
+  let selectedProfileId = null;
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2966,6 +2968,133 @@ document.addEventListener('DOMContentLoaded', () => {
       currentUserPermissions = { allowed: ['new_host'], is_admin: false, is_anonymous: true };
     }
     populateDocTypes();
+    await loadProfileSelector();
+  }
+
+  async function loadProfileSelector() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/profiles`, { headers: getAuthHeaders() });
+      if (!res.ok) { availableProfiles = []; }
+      else availableProfiles = await res.json();
+    } catch(e) { availableProfiles = []; }
+
+    const step = document.getElementById('profile-step');
+    const container = profileContainer;
+    const generatorContent = document.getElementById('generator-steps-content');
+    const noProfileBlock  = document.getElementById('no-profile-block');
+    if (!step || !container) return;
+
+    // ── No profiles at all ──────────────────────────────────────────────────────
+    if (availableProfiles.length === 0) {
+      selectedProfileId = null;
+      step.style.display = 'none';
+      if (generatorContent) generatorContent.style.display = 'none';
+      if (noProfileBlock) {
+        noProfileBlock.classList.remove('hidden');
+        const isAdmin = currentUser?.is_admin;
+        const msgEl = document.getElementById('no-profile-msg-text');
+        const actionsEl = document.getElementById('no-profile-actions');
+        if (msgEl) msgEl.textContent = isAdmin
+          ? 'Nenhum Tenancy Profile configurado.'
+          : 'Nenhum Tenancy Profile disponível para sua conta.';
+        if (actionsEl) {
+          if (isAdmin) {
+            actionsEl.innerHTML = `<button class="button-primary" id="goto-create-profile" style="margin-top:4px">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Criar Tenancy Profile
+            </button>`;
+            document.getElementById('goto-create-profile')?.addEventListener('click', () => {
+              showView('admin');
+              setTimeout(() => {
+                document.querySelector('[data-tab-name="profiles"]')?.click();
+                document.getElementById('admin-create-profile-btn')?.click();
+              }, 150);
+            });
+          } else {
+            actionsEl.innerHTML = `<p style="font-size:12px;color:var(--text-muted);margin:0">Entre em contato com o administrador para solicitar acesso.</p>`;
+          }
+        }
+      }
+      return;
+    }
+
+    // ── Has profiles ─────────────────────────────────────────────────────────────
+    if (noProfileBlock) noProfileBlock.classList.add('hidden');
+    if (generatorContent) generatorContent.style.display = '';
+
+    const savedId = parseInt(sessionStorage.getItem('selectedProfileId'), 10);
+    const match = availableProfiles.find(p => p.id === savedId);
+    selectedProfileId = match ? savedId : availableProfiles[0].id;
+
+    const tenancyIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`;
+
+    // Always show the profile step — consistent with other wizard steps
+    step.style.display = '';
+    const profileOptions = availableProfiles.map(p => ({ key: p.id, id: p.id, name: p.name, display_name: p.name }));
+
+    // Add "create profile" action for admins at bottom of list
+    if (currentUser?.is_admin) {
+      profileOptions.push({ key: '__create__', id: '__create__', name: t('action_new_profile') || 'Novo Tenancy Profile', display_name: t('action_new_profile') || 'Novo Tenancy Profile', _isAction: true });
+    }
+
+    createCustomSelect(container, profileOptions, 'Selecione um profile…', (val) => {
+      if (val === '__create__') {
+        showView('admin');
+        setTimeout(() => {
+          document.querySelector('[data-tab-name="profiles"]')?.click();
+          document.getElementById('admin-create-profile-btn')?.click();
+        }, 150);
+        return;
+      }
+      selectedProfileId = parseInt(val, 10) || null;
+      sessionStorage.setItem('selectedProfileId', selectedProfileId);
+      allRegionsData = [];
+      selectedRegion = null;
+      selectedDocType = null;
+      selectedCompartmentId = null;
+      selectedCompartmentName = null;
+      // Reset all downstream selects visually
+      const _placeholders = [
+        [regionContainer, t('step1_placeholder')],
+        [docTypeContainer, t('step2_placeholder')],
+        [compartmentContainer, t('step3_placeholder')],
+      ];
+      _placeholders.forEach(([c, ph]) => {
+        if (!c) return;
+        const disp = c.querySelector('.selected-item-display');
+        if (disp) disp.innerHTML = `<span class="placeholder-text">${ph}</span>`;
+        const dd = c.querySelector('.custom-select-dropdown');
+        if (dd) dd.classList.remove('open');
+      });
+      fetchRegions();
+    }, true, false);
+
+    // Pre-select saved/first profile in display
+    const firstProfile = availableProfiles.find(p => p.id === selectedProfileId);
+    if (firstProfile) {
+      const selectedDisplay = container.querySelector('.selected-item-display');
+      if (selectedDisplay) {
+        selectedDisplay.innerHTML = `${tenancyIconSvg}<span class="item-text">${firstProfile.name}</span>`;
+      }
+    }
+
+    await fetchRegions();
+  }
+
+  function updateProfileBadge() {
+    const badge = document.getElementById('active-profile-badge');
+    if (!badge) return;
+    const p = availableProfiles.find(x => x.id === selectedProfileId);
+    const step = document.getElementById('profile-step');
+    // Only show badge when the step selector is hidden (single profile — no choice needed)
+    const stepHidden = !step || step.style.display === 'none';
+    if (p && stepHidden) {
+      badge.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg><span>${p.name}</span>`;
+      badge.title = `Tenancy: ${p.tenancy_ocid || 'N/A'} · Região: ${p.region || 'N/A'}`;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
   }
 
   // ── API calls ────────────────────────────────────────────────────────────────
@@ -3048,10 +3177,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (registerSubmitBtn) {
     registerSubmitBtn.addEventListener('click', async () => {
-      const username = registerUsernameInput.value.trim();
-      const password = registerPasswordInput.value;
+      const username    = registerUsernameInput.value.trim();
+      const password    = registerPasswordInput.value;
+      const confirmPw   = document.getElementById('register-confirm-password')?.value || '';
+      const firstName   = document.getElementById('register-first-name')?.value.trim() || '';
+      const lastName    = document.getElementById('register-last-name')?.value.trim() || '';
+      const email       = document.getElementById('register-email')?.value.trim() || '';
+
       if (!username || !password) {
         registerError.textContent = t('auth.error.fill_fields');
+        registerError.classList.remove('hidden');
+        return;
+      }
+      if (password !== confirmPw) {
+        registerError.textContent = t('toast.passwords_mismatch') || 'As senhas não coincidem.';
         registerError.classList.remove('hidden');
         return;
       }
@@ -3059,8 +3198,22 @@ document.addEventListener('DOMContentLoaded', () => {
       registerSubmitBtn.textContent = t('auth.register.btn_loading');
       try {
         const data = await apiRegister(username, password);
+        // Save optional profile fields if provided
+        if (firstName || lastName || email) {
+          try {
+            await fetch(`${API_BASE_URL}/api/users/profile`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${data.token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ first_name: firstName, last_name: lastName, email }),
+            });
+          } catch (_) { /* non-critical */ }
+        }
         _saveSession(data);
         registerPasswordInput.value = '';
+        document.getElementById('register-confirm-password') && (document.getElementById('register-confirm-password').value = '');
+        document.getElementById('register-first-name') && (document.getElementById('register-first-name').value = '');
+        document.getElementById('register-last-name') && (document.getElementById('register-last-name').value = '');
+        document.getElementById('register-email') && (document.getElementById('register-email').value = '');
         closeAuthModal();
         updateSidebarAuthState();
         fetchAndApplyPermissions();
@@ -3560,16 +3713,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const W = 280, H = 220, cx = 110, cy = 110, r = 90, ir = 52;
     let startAngle = -Math.PI / 2;
+
+    // Helper: arc path that handles the degenerate 100%-slice case
+    function makeArcPath(cx, cy, r, ir, sa, ea) {
+      const span = ea - sa;
+      // Full circle — SVG can't render a single arc from point to itself; split into two 180° arcs
+      if (Math.abs(span - 2 * Math.PI) < 1e-6) {
+        const mid = sa + Math.PI;
+        const p1 = makeArcPath(cx, cy, r, ir, sa, mid);
+        const p2 = makeArcPath(cx, cy, r, ir, mid, ea - 1e-6); // tiny gap avoids collapse
+        return p1 + ' ' + p2;
+      }
+      const x1 = cx + r * Math.cos(sa);  const y1 = cy + r * Math.sin(sa);
+      const x2 = cx + r * Math.cos(ea);  const y2 = cy + r * Math.sin(ea);
+      const ix1 = cx + ir * Math.cos(sa); const iy1 = cy + ir * Math.sin(sa);
+      const ix2 = cx + ir * Math.cos(ea); const iy2 = cy + ir * Math.sin(ea);
+      const lg = span > Math.PI ? 1 : 0;
+      return `M ${ix1.toFixed(2)} ${iy1.toFixed(2)} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${lg} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix2.toFixed(2)} ${iy2.toFixed(2)} A ${ir} ${ir} 0 ${lg} 0 ${ix1.toFixed(2)} ${iy1.toFixed(2)} Z`;
+    }
+
     const slices = totals.map(({ key, val }) => {
+      if (!val) { return ''; }
       const pct = val / grand;
-      const angle = pct * 2 * Math.PI;
-      const endAngle = startAngle + angle;
-      const x1 = cx + r * Math.cos(startAngle); const y1 = cy + r * Math.sin(startAngle);
-      const x2 = cx + r * Math.cos(endAngle);   const y2 = cy + r * Math.sin(endAngle);
-      const ix1 = cx + ir * Math.cos(startAngle); const iy1 = cy + ir * Math.sin(startAngle);
-      const ix2 = cx + ir * Math.cos(endAngle);   const iy2 = cy + ir * Math.sin(endAngle);
-      const lg = angle > Math.PI ? 1 : 0;
-      const d = `M ${ix1.toFixed(2)} ${iy1.toFixed(2)} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${lg} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix2.toFixed(2)} ${iy2.toFixed(2)} A ${ir} ${ir} 0 ${lg} 0 ${ix1.toFixed(2)} ${iy1.toFixed(2)} Z`;
+      const endAngle = startAngle + pct * 2 * Math.PI;
+      const d = makeArcPath(cx, cy, r, ir, startAngle, endAngle);
       const cfg = SERIES_CONFIG[key];
       const slice = `<path d="${d}" fill="${cfg.color}" opacity="0.85"><title>${getSeriesLabel(key)}: ${val} (${(pct*100).toFixed(1)}%)</title></path>`;
       startAngle = endAngle;
@@ -3603,23 +3770,59 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Sidebar user row → profile modal ─────────────────────────────────────────
-  sidebarProfileBtn?.addEventListener('click', openProfileModal);
+  sidebarProfileBtn?.addEventListener('click', openUserProfileModal);
 
   // ── Force password change modal ───────────────────────────────────────────────
 
   function showForcePwModal() {
     const modal = document.getElementById('force-pw-modal');
     if (modal) modal.classList.remove('hidden');
+    // Clear fields
+    ['force-pw-new', 'force-pw-confirm'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const errEl = document.getElementById('force-pw-error');
+    if (errEl) errEl.style.display = 'none';
+    _resetPwRules();
     document.getElementById('force-pw-new')?.focus();
   }
 
+  function _checkPwRule(id, pass) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('rule-ok', pass);
+  }
+
+  function _resetPwRules() {
+    ['rule-length','rule-upper','rule-lower','rule-number','rule-special']
+      .forEach(id => document.getElementById(id)?.classList.remove('rule-ok'));
+  }
+
+  function _validatePwFrontend(pw) {
+    _checkPwRule('rule-length',  pw.length >= 8);
+    _checkPwRule('rule-upper',   /[A-Z]/.test(pw));
+    _checkPwRule('rule-lower',   /[a-z]/.test(pw));
+    _checkPwRule('rule-number',  /\d/.test(pw));
+    _checkPwRule('rule-special', /[^A-Za-z0-9]/.test(pw));
+    return pw.length >= 8 && /[A-Z]/.test(pw) && /[a-z]/.test(pw)
+        && /\d/.test(pw) && /[^A-Za-z0-9]/.test(pw);
+  }
+
+  document.getElementById('force-pw-new')?.addEventListener('input', e => {
+    _validatePwFrontend(e.target.value);
+  });
+
   document.getElementById('force-pw-submit-btn')?.addEventListener('click', async () => {
-    const newPw  = (document.getElementById('force-pw-new')?.value || '').trim();
-    const conf   = (document.getElementById('force-pw-confirm')?.value || '').trim();
+    const newPw  = (document.getElementById('force-pw-new')?.value || '');
+    const conf   = (document.getElementById('force-pw-confirm')?.value || '');
     const errEl  = document.getElementById('force-pw-error');
     if (errEl) errEl.style.display = 'none';
 
-    if (!newPw || newPw !== conf) {
+    if (!_validatePwFrontend(newPw)) {
+      if (errEl) { errEl.textContent = 'A senha não atende aos requisitos de complexidade.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (newPw !== conf) {
       if (errEl) { errEl.textContent = 'As senhas não coincidem.'; errEl.style.display = 'block'; }
       return;
     }
@@ -3640,9 +3843,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Profile Modal ─────────────────────────────────────────────────────────────
 
-  async function openProfileModal() {
+  async function openUserProfileModal() {
     if (!currentUser) { openAuthModal('login'); return; }
-    const modal = document.getElementById('profile-modal');
+    const modal = document.getElementById('user-profile-modal');
     if (!modal) return;
     modal.classList.remove('hidden');
     // Load profile
@@ -3658,19 +3861,19 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch(e) { /* silent */ }
   }
 
-  function closeProfileModal() {
-    document.getElementById('profile-modal')?.classList.add('hidden');
+  function closeUserProfileModal() {
+    document.getElementById('user-profile-modal')?.classList.add('hidden');
     // Clear pw fields
     ['profile-current-pw','profile-new-pw','profile-confirm-pw'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
   }
 
-  document.getElementById('profile-modal-close')?.addEventListener('click', closeProfileModal);
-  document.getElementById('profile-cancel-btn')?.addEventListener('click', closeProfileModal);
-  document.getElementById('profile-modal-backdrop')?.addEventListener('click', closeProfileModal);
+  document.getElementById('user-profile-modal-close')?.addEventListener('click', closeUserProfileModal);
+  document.getElementById('user-profile-cancel-btn')?.addEventListener('click', closeUserProfileModal);
+  document.getElementById('user-profile-modal-backdrop')?.addEventListener('click', closeUserProfileModal);
 
-  document.getElementById('profile-save-btn')?.addEventListener('click', async () => {
+  document.getElementById('user-profile-save-btn')?.addEventListener('click', async () => {
     try {
       // Save profile info
       await fetch(`${API_BASE_URL}/api/users/profile`, {
@@ -3699,7 +3902,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!pwRes.ok) { showToast(pwData.detail || 'Erro ao alterar senha.', 'error'); return; }
       }
       showToast('Perfil salvo!', 'success');
-      closeProfileModal();
+      closeUserProfileModal();
       // Update display name if first_name set
       const fn = document.getElementById('profile-first-name')?.value;
       if (fn && sidebarUserName) {
@@ -3905,6 +4108,314 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // ── Tenancy Profiles admin panel ─────────────────────────────────────────────
+
+  let _editingProfileId = null;
+
+  async function loadAdminProfiles() {
+    const wrap = document.getElementById('admin-profiles-table-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/profiles`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Erro ao carregar profiles.');
+      const profiles = await res.json();
+      if (!profiles.length) {
+        wrap.innerHTML = '<p class="no-data-message">Nenhum profile criado ainda.</p>';
+        return;
+      }
+      const visConfig = {
+        admin_only: { label: t('vis.admin_only'), cls: 'net-chip-purple', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>' },
+        all_users:  { label: t('vis.all_users'), cls: 'net-chip-teal',   icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+        by_group:   { label: t('vis.by_group'),  cls: 'net-chip-blue',   icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+        by_user:    { label: t('vis.by_user'),   cls: '',                 icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
+      };
+      wrap.innerHTML = `<table class="admin-table">
+        <thead><tr>
+          <th>${t('th.name')}</th><th>${t('th.method')}</th><th>${t('th.region')}</th><th>${t('th.tenancy') || 'Tenancy'}</th><th>${t('th.visibility')}</th><th>${t('th.public')}</th><th>${t('th.active')}</th><th></th>
+        </tr></thead>
+        <tbody>
+        ${profiles.map(p => {
+          const vc = visConfig[p.visibility] || visConfig.by_group;
+          return `<tr>
+            <td><strong>${p.name}</strong></td>
+            <td><span class="net-chip net-chip-blue">${p.auth_method === 'INSTANCE_PRINCIPAL' ? 'Instance Principal' : 'API Key'}</span></td>
+            <td class="admin-cell-muted">${p.region || '—'}</td>
+            <td class="admin-cell-muted">${p.tenancy_name || '—'}</td>
+            <td><span class="net-chip ${vc.cls}">${vc.icon}${vc.label}</span></td>
+            <td>${p.is_public ? `<span class="net-chip net-chip-teal">${t('label.yes')}</span>` : `<span class="net-chip net-chip-empty">${t('label.no')}</span>`}</td>
+            <td>${p.is_active ? `<span class="net-chip net-chip-teal">${t('label.active')}</span>` : `<span class="net-chip net-chip-empty">${t('label.inactive')}</span>`}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+                <button class="admin-btn-icon admin-edit-profile" data-pid="${p.id}" title="${t('action.edit_profile')}">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="admin-btn-icon admin-toggle-profile" data-pid="${p.id}" data-active="${p.is_active ? '1' : '0'}" title="${p.is_active ? t('action.deactivate_profile') : t('action.activate_profile')}">
+                  ${p.is_active
+                    ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`
+                    : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
+                  }
+                </button>
+                <button class="admin-btn-danger admin-delete-profile" data-pid="${p.id}" title="${t('action.delete_profile')}">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>`;
+
+      wrap.querySelectorAll('.admin-edit-profile').forEach(btn => {
+        btn.addEventListener('click', () => openProfileModal(parseInt(btn.dataset.pid)));
+      });
+      wrap.querySelectorAll('.admin-toggle-profile').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pid = parseInt(btn.dataset.pid);
+          const active = btn.dataset.active === '1';
+          await fetch(`${API_BASE_URL}/api/admin/profiles/${pid}`, {
+            method: 'PATCH', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: !active }),
+          });
+          loadAdminProfiles();
+        });
+      });
+      wrap.querySelectorAll('.admin-delete-profile').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pid = parseInt(btn.dataset.pid);
+          if (!confirm(t('confirm.delete_profile'))) return;
+          await fetch(`${API_BASE_URL}/api/admin/profiles/${pid}`, { method: 'DELETE', headers: getAuthHeaders() });
+          showToast(t('toast.profile_deleted'), 'success');
+          loadAdminProfiles();
+        });
+      });
+    } catch(e) {
+      wrap.innerHTML = `<p class="no-data-message">${e.message}</p>`;
+    }
+  }
+
+  function openProfileModal(profileId = null) {
+    _editingProfileId = profileId;
+    const modal = document.getElementById('profile-modal');
+    const title = document.getElementById('profile-modal-title');
+    if (!modal) return;
+
+    // Reset form
+    ['name','region','tenancy','user','fingerprint'].forEach(f => {
+      const el = document.getElementById(`profile-field-${f}`);
+      if (el) el.value = '';
+    });
+    const tenancyNameEl = document.getElementById('profile-field-tenancy-name');
+    if (tenancyNameEl) tenancyNameEl.value = '';
+    const keyEl = document.getElementById('profile-field-key');
+    if (keyEl) keyEl.value = '';
+    const pubEl = document.getElementById('profile-field-public');
+    if (pubEl) pubEl.checked = false;
+    const authEl = document.getElementById('profile-field-auth-method');
+    if (authEl) { authEl.value = 'API_KEY'; toggleApiKeyFields('API_KEY'); }
+    // Reset visibility radio cards to default
+    _setVisibility('by_group');
+    // Reset user assignments panel
+    const uaWrap = document.getElementById('profile-user-assignments-wrap');
+    if (uaWrap) uaWrap.innerHTML = '';
+
+    if (profileId) {
+      title.textContent = t('tenancy_modal.edit');
+      // Store profile id for PEM preview button
+      window._pemEditingProfileId = profileId;
+      // Show edit PEM panel (key exists, not shown for security)
+      window._pemShowMode?.('edit');
+      fetch(`${API_BASE_URL}/api/admin/profiles`, { headers: getAuthHeaders() })
+        .then(r => r.json())
+        .then(profiles => {
+          const p = profiles.find(x => x.id === profileId);
+          if (!p) return;
+          document.getElementById('profile-field-name').value        = p.name || '';
+          if (tenancyNameEl) tenancyNameEl.value = p.tenancy_name || '';
+          document.getElementById('profile-field-region').value      = p.region || '';
+          document.getElementById('profile-field-tenancy').value     = p.tenancy_ocid || '';
+          document.getElementById('profile-field-user').value        = p.user_ocid || '';
+          document.getElementById('profile-field-fingerprint').value = p.fingerprint || '';
+          document.getElementById('profile-field-public').checked    = !!p.is_public;
+          document.getElementById('profile-field-auth-method').value = p.auth_method || 'API_KEY';
+          toggleApiKeyFields(p.auth_method || 'API_KEY');
+          _setVisibility(p.visibility || 'by_group');
+          // Toggle user assignments panel visibility
+          const uaSection = document.getElementById('profile-user-assignments-section');
+          if (uaSection) uaSection.style.display = p.visibility === 'by_user' ? '' : 'none';
+          // Load assigned users
+          if (p.visibility === 'by_user') loadProfileUserAssignments(profileId);
+        });
+    } else {
+      title.textContent = t('tenancy_modal.new');
+      window._pemEditingProfileId = null;
+      const uaSection = document.getElementById('profile-user-assignments-section');
+      if (uaSection) uaSection.style.display = 'none';
+      // Show PEM mode chooser for new profiles
+      window._pemShowMode?.('choose');
+    }
+    modal.classList.remove('hidden');
+  }
+
+  function toggleApiKeyFields(method) {
+    const fields = document.getElementById('profile-apikey-fields');
+    if (fields) fields.style.display = method === 'INSTANCE_PRINCIPAL' ? 'none' : 'flex';
+  }
+
+  const profileAuthMethodEl = document.getElementById('profile-field-auth-method');
+  if (profileAuthMethodEl) {
+    profileAuthMethodEl.addEventListener('change', e => toggleApiKeyFields(e.target.value));
+  }
+
+  // Visibility radio card helpers
+  function _getVisibility() {
+    const checked = document.querySelector('input[name="profile-visibility"]:checked');
+    return checked ? checked.value : 'by_group';
+  }
+  function _setVisibility(val) {
+    const radios = document.querySelectorAll('input[name="profile-visibility"]');
+    radios.forEach(r => {
+      r.checked = r.value === val;
+      r.closest('.profile-vis-card')?.classList.toggle('profile-vis-card--active', r.value === val);
+    });
+    _toggleAnonCheckbox(val);
+  }
+  function _toggleAnonCheckbox(val) {
+    // Anonymous access only makes sense for "all_users" — hide for other tiers
+    const anonRow = document.getElementById('profile-anon-row');
+    if (anonRow) anonRow.style.display = val === 'all_users' ? '' : 'none';
+  }
+
+  // Show/hide user assignment section when visibility radio changes
+  document.getElementById('profile-vis-grid')?.addEventListener('change', e => {
+    if (e.target.name === 'profile-visibility') {
+      const uaSection = document.getElementById('profile-user-assignments-section');
+      if (uaSection) uaSection.style.display = e.target.value === 'by_user' ? '' : 'none';
+      if (e.target.value === 'by_user' && _editingProfileId) {
+        loadProfileUserAssignments(_editingProfileId);
+      }
+      _setVisibility(e.target.value);
+    }
+  });
+
+  async function loadProfileUserAssignments(profileId) {
+    const wrap = document.getElementById('profile-user-assignments-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<span style="color:var(--text-muted);font-size:12px">Carregando usuários…</span>';
+    try {
+      const [usersRes, assignedRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/admin/users`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/api/admin/profiles/${profileId}/users`, { headers: getAuthHeaders() }),
+      ]);
+      const allUsers    = usersRes.ok    ? await usersRes.json()    : [];
+      const assignedRaw = assignedRes.ok ? await assignedRes.json() : [];
+      const assignedIds = new Set(assignedRaw.map(u => u.id));
+      wrap.innerHTML = allUsers.map(u => `
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:3px 0">
+          <input type="checkbox" data-uid="${u.id}" ${assignedIds.has(u.id) ? 'checked' : ''}>
+          ${u.username}${u.is_admin ? ' <span class="admin-badge" style="font-size:9px">Admin</span>' : ''}
+        </label>`).join('') || '<span style="color:var(--text-muted);font-size:12px">Nenhum usuário cadastrado.</span>';
+    } catch(e) {
+      wrap.innerHTML = `<span style="color:var(--danger);font-size:12px">${e.message}</span>`;
+    }
+  }
+
+  function closeProfileModal() {
+    const modal = document.getElementById('profile-modal');
+    if (modal) modal.classList.add('hidden');
+    _editingProfileId = null;
+  }
+
+  document.getElementById('profile-modal-close')  ?.addEventListener('click', closeProfileModal);
+  document.getElementById('profile-modal-cancel') ?.addEventListener('click', closeProfileModal);
+  document.getElementById('profile-modal-backdrop')?.addEventListener('click', closeProfileModal);
+
+  // Copy-to-clipboard for OCID/fingerprint fields
+  document.getElementById('profile-modal')?.addEventListener('click', async e => {
+    const copyBtn = e.target.closest('.profile-input-copy');
+    if (!copyBtn) return;
+    const targetId = copyBtn.dataset.target;
+    if (targetId) {
+      const el = document.getElementById(targetId);
+      const val = el?.value?.trim();
+      if (val) {
+        try {
+          await navigator.clipboard.writeText(val);
+          const orig = copyBtn.innerHTML;
+          copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+          copyBtn.style.color = 'var(--accent)';
+          setTimeout(() => { copyBtn.innerHTML = orig; copyBtn.style.color = ''; }, 1500);
+        } catch {}
+      }
+    }
+  });
+
+  // PEM paste handled by initPemUI() below
+
+  // PEM file picker handled by initPemUI() below — old duplicate removed
+
+  document.getElementById('admin-create-profile-btn')?.addEventListener('click', () => openProfileModal(null));
+
+  document.getElementById('profile-modal-save')?.addEventListener('click', async () => {
+    const name        = document.getElementById('profile-field-name')?.value.trim();
+    const authMethod  = document.getElementById('profile-field-auth-method')?.value;
+    const region      = document.getElementById('profile-field-region')?.value.trim();
+    const tenancyOcid = document.getElementById('profile-field-tenancy')?.value.trim();
+    const userOcid    = document.getElementById('profile-field-user')?.value.trim();
+    const fingerprint = document.getElementById('profile-field-fingerprint')?.value.trim();
+    const privateKey  = document.getElementById('profile-field-key')?.value.trim();
+    const isPublic    = document.getElementById('profile-field-public')?.checked;
+
+    const visibility  = _getVisibility();
+
+    if (!name) { showToast(t('validation.name_required'), 'error'); return; }
+
+    const tenancyName = document.getElementById('profile-field-tenancy-name')?.value.trim() || '';
+
+    const body = { name, auth_method: authMethod, region, is_public: isPublic, visibility,
+                   tenancy_name: tenancyName,
+                   tenancy_ocid: tenancyOcid, user_ocid: userOcid, fingerprint };
+    if (privateKey) body.private_key_pem = privateKey;
+
+    try {
+      let res, savedId;
+      if (_editingProfileId) {
+        res = await fetch(`${API_BASE_URL}/api/admin/profiles/${_editingProfileId}`, {
+          method: 'PATCH', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        savedId = _editingProfileId;
+      } else {
+        res = await fetch(`${API_BASE_URL}/api/admin/profiles`, {
+          method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) { const d = await res.json(); savedId = d.id; }
+      }
+      if (!res.ok) {
+        const d = await res.json();
+        showToast(d.detail || 'Erro ao salvar profile.', 'error');
+        return;
+      }
+      // Save user assignments if visibility = by_user
+      if (visibility === 'by_user' && savedId) {
+        const checkboxes = document.querySelectorAll('#profile-user-assignments-wrap input[type=checkbox]');
+        const userIds = [...checkboxes].filter(c => c.checked).map(c => parseInt(c.dataset.uid));
+        await fetch(`${API_BASE_URL}/api/admin/profiles/${savedId}/users`, {
+          method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_ids: userIds }),
+        });
+      }
+      showToast(_editingProfileId ? t('toast.profile_updated') : t('toast.profile_created'), 'success');
+      closeProfileModal();
+      loadAdminProfiles();
+      // Reload the generator selector so newly created profiles appear immediately
+      loadProfileSelector();
+    } catch(e) {
+      showToast(e.message, 'error');
+    }
+  });
+
   async function loadAdminGroups() {
     const wrap = document.getElementById('admin-groups-table-wrap');
     if (!wrap) return;
@@ -4069,22 +4580,41 @@ document.addEventListener('DOMContentLoaded', () => {
               <td>
                 <div class="admin-groups-cell">
                   ${groupChips}
-                  <button class="admin-btn-icon admin-manage-groups" data-uid="${u.id}" data-uname="${u.username}" title="Gerenciar grupos">
+                  <button class="admin-btn-icon admin-manage-groups" data-uid="${u.id}" data-uname="${u.username}" title="${t('action.manage_groups')}">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
                 </div>
               </td>
               <td class="admin-cell-count">${u.doc_count || 0}</td>
-              <td class="admin-cell-muted">${created}</td>
+              <td class="admin-cell-muted">${new Date(u.created_at).toLocaleDateString(currentLanguage === 'pt' ? 'pt-BR' : 'en-US')}</td>
               <td>
-                <button class="admin-btn-danger admin-delete-user" data-uid="${u.id}" title="Deletar usuário">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                <div style="display:flex;gap:6px;align-items:center">
+                <button class="admin-btn-icon admin-edit-user" data-uid="${u.id}" data-uname="${u.username}" title="${t('action.edit_user') || 'Editar usuário'}">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
+                ${u.username === 'admin'
+                  ? `<button class="admin-btn-icon admin-delete-user" data-uid="${u.id}" disabled title="Usuário admin não pode ser removido" style="opacity:0.3;cursor:not-allowed;pointer-events:none">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>`
+                  : `<button class="admin-btn-danger admin-delete-user" data-uid="${u.id}" title="${t('action.delete_user')}">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>`
+                }
+                </div>
               </td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>`;
+
+    // Bind edit user buttons
+    wrap.querySelectorAll('.admin-edit-user').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const uid  = parseInt(btn.dataset.uid);
+        const udat = users.find(u => u.id === uid);
+        openAdminUserModal(uid, udat);
+      });
+    });
 
     // Bind role toggles
     wrap.querySelectorAll('.admin-role-toggle').forEach(cb => {
@@ -4156,7 +4686,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <td class="admin-cell-count">${g.member_count || 0}</td>
               <td><div class="admin-perm-row">${typeChecks}</div></td>
               <td>
-                <button class="admin-btn-danger admin-delete-group" data-gid="${g.id}" title="Deletar grupo">
+                <button class="admin-btn-danger admin-delete-group" data-gid="${g.id}" title="${t('action.delete_group')}">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
                 </button>
               </td>
@@ -4218,8 +4748,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const name = tab.dataset.tab;
       document.getElementById('admin-panel-users')    && document.getElementById('admin-panel-users').classList.toggle('hidden',    name !== 'users');
       document.getElementById('admin-panel-groups')   && document.getElementById('admin-panel-groups').classList.toggle('hidden',   name !== 'groups');
+      document.getElementById('admin-panel-profiles') && document.getElementById('admin-panel-profiles').classList.toggle('hidden', name !== 'profiles');
       document.getElementById('admin-panel-feedback') && document.getElementById('admin-panel-feedback').classList.toggle('hidden', name !== 'feedback');
       if (name === 'groups')   loadAdminGroups();
+      if (name === 'profiles') loadAdminProfiles();
       if (name === 'feedback') loadAdminFeedback();
     });
   });
@@ -4286,17 +4818,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // 2. Fetch permissions (now currentUser is set correctly)
-    await fetchAndApplyPermissions();
-
-    // 3. Fetch regions in parallel with language load
-    await Promise.all([
-      setLanguage(savedLang),
-      fetchRegions(),
-    ]);
+    // 2. Load language first so t() is ready before any UI rendering
+    await setLanguage(savedLang);
 
     // Re-apply theme AFTER translations are loaded so the label renders correctly
     applyTheme(savedTheme);
+
+    // 3. Fetch permissions (now translations are loaded, t() will work in loadProfileSelector)
+    await fetchAndApplyPermissions();
 
     updateSidebarAuthState();
     renderSidebarHistory();
@@ -4332,8 +4861,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
-  // PT-BR: Registros de Event Listeners
-  // EN: Event Listener Registrations
+  // Event Listener Registrations
   // ===========================================================================
   fetchBtn.addEventListener('click', fetchAllDetails);
   generateBtn.addEventListener('click', generateDocument);
@@ -4361,8 +4889,349 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ===========================================================================
-  // PT-BR: Inicialização da Aplicação
-  // EN: Application Initialization
+  // PEM Key UI — create vs edit state machine
+  // ===========================================================================
+  (function initPemUI() {
+    const choosePnl  = document.getElementById('pem-choose-panel');
+    const filePnl    = document.getElementById('pem-file-panel');
+    const textPnl    = document.getElementById('pem-text-panel');
+    const editPnl    = document.getElementById('pem-edit-panel');
+    const hiddenKey  = document.getElementById('profile-field-key');
+    const textInput  = document.getElementById('pem-text-input');
+    const fileInput  = document.getElementById('profile-pem-file-input');
+
+    function showPanel(name) {
+      [choosePnl, filePnl, textPnl, editPnl].forEach(p => { if(p) p.style.display = 'none'; });
+      const map = { choose: choosePnl, file: filePnl, text: textPnl, edit: editPnl };
+      if (map[name]) map[name].style.display = '';
+    }
+
+    // Expose so openProfileModal can call it
+    window._pemShowMode = showPanel;
+    window._pemGetKey = () => {
+      if (textInput && textPnl && textPnl.style.display !== 'none') return textInput.value.trim();
+      if (hiddenKey) return hiddenKey.value.trim();
+      return '';
+    };
+    window._pemReset = () => {
+      if (hiddenKey) hiddenKey.value = '';
+      if (textInput) textInput.value = '';
+      if (fileInput) fileInput.value = '';
+      showPanel('choose');
+    };
+
+    // File button → trigger file picker
+    document.getElementById('pem-btn-file')?.addEventListener('click', () => fileInput?.click());
+
+    // Text button → show text panel
+    document.getElementById('pem-btn-text')?.addEventListener('click', () => showPanel('text'));
+
+    // Back button in text panel
+    document.getElementById('pem-text-back')?.addEventListener('click', () => {
+      if (textInput) textInput.value = '';
+      if (hiddenKey) hiddenKey.value = '';
+      showPanel('choose');
+    });
+
+    // File selected
+    fileInput?.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        if (hiddenKey) hiddenKey.value = e.target.result.trim();
+        const nameEl = document.getElementById('pem-file-name-label');
+        const metaEl = document.getElementById('pem-file-meta-label');
+        if (nameEl) nameEl.textContent = file.name;
+        if (metaEl) metaEl.textContent = `${(file.size / 1024).toFixed(1)} KB — carregada`;
+        showToast(t('pem_loaded') || 'Chave PEM carregada.', 'success');
+        showPanel('file');
+      };
+      reader.readAsText(file);
+      fileInput.value = '';
+    });
+
+    // Clear file
+    document.getElementById('pem-file-clear')?.addEventListener('click', () => {
+      if (hiddenKey) hiddenKey.value = '';
+      showPanel('choose');
+    });
+
+    // Clipboard paste in text panel
+    document.getElementById('profile-pem-paste-btn')?.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (textInput) { textInput.value = text; textInput.focus(); }
+      } catch { showToast(t('clipboard_error') || 'Não foi possível acessar a área de transferência.', 'error'); }
+    });
+
+    // Edit mode → delete button (replaces key, goes to choose)
+    document.getElementById('pem-edit-delete')?.addEventListener('click', () => {
+      if (hiddenKey) hiddenKey.value = '__DELETE__'; // sentinel to clear on backend
+      showPanel('choose');
+      showToast('Chave removida. Salve para confirmar.', 'success');
+    });
+
+    // Edit mode → preview button (fetch and show key in modal)
+    document.getElementById('pem-edit-preview')?.addEventListener('click', async () => {
+      const modal  = document.getElementById('pem-preview-modal');
+      const area   = document.getElementById('pem-preview-content');
+      if (!modal || !area) return;
+      // Try to fetch the key from current editing profile
+      if (window._pemEditingProfileId) {
+        area.value = 'Carregando…';
+        modal.style.display = 'flex';
+        try {
+          const r = await fetch(`${API_BASE_URL}/api/admin/profiles/${window._pemEditingProfileId}/key`, { headers: getAuthHeaders() });
+          if (r.ok) {
+            const d = await r.json();
+            area.value = d.private_key_pem || '— Chave não disponível —';
+          } else {
+            area.value = '— Não foi possível carregar a chave —';
+          }
+        } catch { area.value = '— Erro ao carregar —'; }
+      } else {
+        area.value = '— Nenhuma chave carregada —';
+        modal.style.display = 'flex';
+      }
+    });
+
+    // PEM preview modal close buttons
+    const _closePemPreview = () => {
+      const m = document.getElementById('pem-preview-modal');
+      if (m) m.style.display = 'none';
+    };
+    document.getElementById('pem-preview-close')?.addEventListener('click', _closePemPreview);
+    document.getElementById('pem-preview-close-btn')?.addEventListener('click', _closePemPreview);
+    document.getElementById('pem-preview-backdrop')?.addEventListener('click', _closePemPreview);
+    document.getElementById('pem-preview-copy')?.addEventListener('click', async () => {
+      const area = document.getElementById('pem-preview-content');
+      if (!area?.value) return;
+      try {
+        await navigator.clipboard.writeText(area.value);
+        const btn = document.getElementById('pem-preview-copy');
+        if (btn) {
+          const orig = btn.innerHTML;
+          btn.innerHTML = '✓ Copiado';
+          btn.style.color = 'var(--s-running)';
+          btn.style.borderColor = 'var(--s-running)';
+          setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; btn.style.borderColor = ''; }, 1500);
+        }
+      } catch { showToast('Não foi possível copiar.', 'error'); }
+    });
+  })();
+
+  // openProfileModal updated directly — no override needed
+
+  // Patch save button to include tenancy_name and new PEM key source
+  document.getElementById('profile-modal-save')?.addEventListener('click', function patchedSave() {}, { capture: true });
+  // Override via new listener that fires first; existing one still fires but we prevent bad key reads
+  // We just patch _pemGetKey into the save handler by monkey-patching getElementById for profile-field-key
+  const _origSaveListener = document.getElementById('profile-modal-save')?._patchedSave;
+
+  // Simpler: listen on the save button at capture phase, update hidden field before save runs
+  document.getElementById('profile-modal-save')?.addEventListener('click', () => {
+    // sync text panel into hidden field
+    const textPnl  = document.getElementById('pem-text-panel');
+    const textInput = document.getElementById('pem-text-input');
+    const hiddenKey = document.getElementById('profile-field-key');
+    if (textPnl && textPnl.style.display !== 'none' && textInput && hiddenKey) {
+      hiddenKey.value = textInput.value.trim();
+    }
+    // include tenancy_name in body — handled by patching the PATCH/POST payload
+    // (We'll store it on the modal element for the original handler to read)
+    const tnVal = document.getElementById('profile-field-tenancy-name')?.value.trim() || '';
+    document.getElementById('profile-modal')?.setAttribute('data-tenancy-name', tnVal);
+  }, true /* capture */);
+
+  // ===========================================================================
+  // Validation helper — highlight missing required step selectors
+  // ===========================================================================
+  function highlightMissingField(containerId, labelText) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.classList.add('field-error');
+    let hint = el.querySelector('.field-error-label');
+    if (!hint) {
+      hint = document.createElement('span');
+      hint.className = 'field-error-label';
+      el.appendChild(hint);
+    }
+    hint.textContent = labelText ? `${labelText} é obrigatório` : 'Campo obrigatório';
+    setTimeout(() => {
+      el.classList.remove('field-error');
+      if (hint.parentNode) hint.remove();
+    }, 3500);
+  }
+
+  function clearFieldError(containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.classList.remove('field-error');
+    el.querySelector('.field-error-label')?.remove();
+  }
+
+  // Wrap fetchAllDetails to add validation with visual highlights
+  const _origFetchAllDetails = fetchAllDetails;
+  window.fetchAllDetailsWrapped = async function() {
+    let hasError = false;
+    if (!selectedRegion) {
+      highlightMissingField('region-step', t('step1_label') || 'Região');
+      hasError = true;
+    }
+    if (!selectedDocType) {
+      highlightMissingField('doc-type-step', t('step2_label') || 'Tipo de Documentação');
+      hasError = true;
+    }
+    if (!selectedCompartmentId) {
+      highlightMissingField('compartment-step', t('step3_label') || 'Compartimento');
+      hasError = true;
+    }
+    if (hasError) {
+      const missing = [];
+      if (!selectedRegion) missing.push(t('step1_label') || 'Região');
+      if (!selectedDocType) missing.push(t('step2_label') || 'Tipo');
+      if (!selectedCompartmentId) missing.push(t('step3_label') || 'Compartimento');
+      showToast(`${t('toast.required_fields') || 'Campos obrigatórios'}: ${missing.join(', ')}`, 'error');
+      return;
+    }
+    return _origFetchAllDetails();
+  };
+
+  // Re-bind fetch button to wrapped version
+  fetchBtn?.removeEventListener('click', fetchAllDetails);
+  fetchBtn?.addEventListener('click', window.fetchAllDetailsWrapped);
+
+  // Clear errors when fields are selected
+  ['region-step','doc-type-step','compartment-step'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', () => clearFieldError(id), true);
+  });
+
+  // ===========================================================================
+  // Admin User Modal — create & edit
+  // ===========================================================================
+  let _editingUserId = null;
+
+  function openAdminUserModal(userId = null, userData = null) {
+    _editingUserId = userId;
+    const modal = document.getElementById('admin-user-modal');
+    const title = document.getElementById('admin-user-modal-title');
+    if (!modal) return;
+
+    // Reset
+    ['aum-first-name','aum-last-name','aum-username','aum-email','aum-phone','aum-notes','aum-password','aum-confirm-pw','aum-current-pw'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+
+    const currentPwRow = document.getElementById('aum-current-pw-row');
+    const userNameField = document.getElementById('aum-username');
+    const pwLabel = document.getElementById('aum-pw-label');
+
+    if (userId && userData) {
+      // Edit mode
+      if (title) title.textContent = t('admin.modal.edit_user') || 'Editar Usuário';
+      if (userNameField) { userNameField.value = userData.username || ''; userNameField.readOnly = true; userNameField.style.opacity = '0.6'; }
+      // load profile info
+      fetch(`${API_BASE_URL}/api/admin/users/${userId}/profile`, { headers: getAuthHeaders() })
+        .then(r => r.ok ? r.json() : {})
+        .then(p => {
+          document.getElementById('aum-first-name').value = p.first_name || '';
+          document.getElementById('aum-last-name').value  = p.last_name  || '';
+          document.getElementById('aum-email').value      = p.email      || '';
+          document.getElementById('aum-phone').value      = p.phone      || '';
+          document.getElementById('aum-notes').value      = p.notes      || '';
+        }).catch(() => {});
+      if (currentPwRow) currentPwRow.style.display = 'none';
+      if (pwLabel) pwLabel.innerHTML = (t('profile_new_password') || 'Nova senha') + ' <small style="color:var(--text-muted);font-weight:400">(opcional)</small>';
+    } else {
+      // Create mode
+      if (title) title.textContent = t('admin.modal.create_user') || 'Novo Usuário';
+      if (userNameField) { userNameField.readOnly = false; userNameField.style.opacity = ''; }
+      if (currentPwRow) currentPwRow.style.display = 'none';
+      if (pwLabel) pwLabel.innerHTML = (t('profile_new_password') || 'Nova senha') + ' <span style="color:var(--s-stopped)">*</span>';
+    }
+
+    modal.classList.remove('hidden');
+  }
+
+  function closeAdminUserModal() {
+    document.getElementById('admin-user-modal')?.classList.add('hidden');
+    _editingUserId = null;
+  }
+
+  document.getElementById('admin-user-modal-close')?.addEventListener('click', closeAdminUserModal);
+  document.getElementById('admin-user-modal-cancel')?.addEventListener('click', closeAdminUserModal);
+  document.getElementById('admin-user-modal-backdrop')?.addEventListener('click', closeAdminUserModal);
+
+  document.getElementById('admin-create-user-btn')?.addEventListener('click', () => openAdminUserModal(null, null));
+
+  document.getElementById('admin-user-modal-save')?.addEventListener('click', async () => {
+    const username  = document.getElementById('aum-username')?.value.trim();
+    const password  = document.getElementById('aum-password')?.value || '';
+    const confirmPw = document.getElementById('aum-confirm-pw')?.value || '';
+    const firstName = document.getElementById('aum-first-name')?.value.trim() || '';
+    const lastName  = document.getElementById('aum-last-name')?.value.trim()  || '';
+    const email     = document.getElementById('aum-email')?.value.trim()      || '';
+    const phone     = document.getElementById('aum-phone')?.value.trim()      || '';
+    const notes     = document.getElementById('aum-notes')?.value.trim()      || '';
+
+    if (!_editingUserId && !username) {
+      showToast(t('auth.error.fill_fields') || 'Preencha usuário e senha.', 'error'); return;
+    }
+    if (!_editingUserId && !password) {
+      showToast(t('toast.password_required') || 'Senha é obrigatória.', 'error'); return;
+    }
+    if (password && password !== confirmPw) {
+      showToast(t('toast.passwords_mismatch') || 'As senhas não coincidem.', 'error'); return;
+    }
+
+    try {
+      if (_editingUserId) {
+        // Edit: update profile info
+        await fetch(`${API_BASE_URL}/api/admin/users/${_editingUserId}/profile`, {
+          method: 'PUT',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ first_name: firstName, last_name: lastName, email, phone, notes }),
+        });
+        // Optionally reset password
+        if (password) {
+          const r = await fetch(`${API_BASE_URL}/api/admin/users/${_editingUserId}/password`, {
+            method: 'PATCH',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+          });
+          if (!r.ok) { const d = await r.json(); throw new Error(d.detail); }
+        }
+        showToast(t('admin.toast.user_updated') || 'Usuário atualizado.', 'success');
+      } else {
+        // Create: register
+        const regRes = await fetch(`${API_BASE_URL}/api/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        if (!regRes.ok) { const d = await regRes.json(); throw new Error(d.detail); }
+        const created = await regRes.json();
+        // Save profile info
+        if (firstName || lastName || email || phone || notes) {
+          await fetch(`${API_BASE_URL}/api/users/profile`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${created.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ first_name: firstName, last_name: lastName, email, phone, notes }),
+          });
+        }
+        showToast(t('toast.account_created')?.replace('{name}', username) || `Usuário ${username} criado.`, 'success');
+      }
+      closeAdminUserModal();
+      loadAdminUsers();
+    } catch(e) {
+      showToast(e.message, 'error');
+    }
+  });
+
+  // ===========================================================================
+  // Application Initialization
   // ===========================================================================
   initializeApp();
 });
