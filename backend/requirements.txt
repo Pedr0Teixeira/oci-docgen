@@ -1,6 +1,7 @@
 # OCI DocGen Python Dependencies
 
 aiofiles
+cryptography
 fastapi
 oci
 python-docx

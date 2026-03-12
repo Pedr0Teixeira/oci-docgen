@@ -1,7 +1,7 @@
 # ==============================================================================
 # doc_generator.py — .docx document generation module for OCI DocGen.
-#     Converts collected infrastructure data into formatted Word documents,
-#     with support for multiple documentation types and languages (PT-BR / EN).
+#     Converts collected infrastructure data into formatted Word documents.
+#     Supports multiple document types and bilingual output (PT-BR / EN).
 # ==============================================================================
 
 import os
@@ -548,13 +548,9 @@ DOC_STRINGS = {
 
 def t(key: str, lang: str) -> str:
     """Fetches a translation string based on the key and language."""
-    # Default to 'pt' if the language is not supported
+    # Fallback chain: requested lang → "pt" → the key itself.
     lang_to_use = lang if lang in DOC_STRINGS else "pt"
-    
-    # Get the translations for the chosen language
     strings = DOC_STRINGS.get(lang_to_use, {})
-    
-    # Get the string, or fall back to 'pt' translation, or finally to the key itself
     return strings.get(key, DOC_STRINGS.get("pt", {}).get(key, key))
 
 
@@ -678,11 +674,10 @@ def _shade_cell(cell, color="4472C4"):
 
 
 # Row background color by lifecycle state (hex without '#').
-# TERMINATED       → light red    (critical: resource deleted)
-# STOPPED/PARADO   → light orange (warning: resource stopped)
-# PENDING_DELETION → light yellow (warning: scheduled for removal)
-# Other active states → no color (default white background)
-#     Other active states → no color (default white background).
+# TERMINATED       → light red    (resource deleted)
+# STOPPED          → light orange (resource stopped)
+# PENDING_DELETION → light yellow (scheduled for removal)
+# All other states → no highlight
 _STATE_ROW_COLORS: Dict[str, Optional[str]] = {
     "TERMINATED":      "FADBD8",   # light red
     "TERMINATING":     "FADBD8",   # light red
@@ -1712,7 +1707,7 @@ def _add_network_resource_details(
                 cells[4].text = rule.description or ""
             else:  # route
                 target_str = rule.target
-                # Traduz caso o backend não consiga resolver o nome real e envie o OCID cru
+                # If the backend could not resolve the display name, the raw OCID is sent — label it generically.
                 if target_str and target_str.startswith("ocid1."):
                     target_lower = target_str.lower()
                     if "internetgateway" in target_lower:
@@ -1831,7 +1826,7 @@ def generate_documentation(
     toc_placeholder = document.add_paragraph(t("doc.common.toc", lang), style="Heading 1")
     document.add_page_break()
 
-    # Insert "start" image sections before infra content
+    # Image sections positioned at "start" are injected before infrastructure content.
     _insert_image_sections(document, image_sections or [], "start", headings_for_toc, numbering_counters, lang)
 
     if doc_type == "kubernetes":
@@ -1849,7 +1844,7 @@ def generate_documentation(
         _add_vcn_details_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
 
     elif doc_type == "waf_report":
-        # 1. Filtra apenas Políticas Ativas
+        # 1. Filter active WAF policies only.
         active_waf_policies = []
         if hasattr(infra_data, "waf_policies") and infra_data.waf_policies:
             active_waf_policies = [p for p in infra_data.waf_policies if getattr(p, "lifecycle_state", "").upper() == "ACTIVE"]
@@ -1860,8 +1855,8 @@ def generate_documentation(
         target_vcn_names = set()
         target_lbs = []
 
-        # 2. Extract LBs and network references tied to each Firewall.
-        # Iterate over ALL policy integrations (one policy may bind multiple LBs).
+        # 2. Extract LBs and network references tied to each firewall.
+        # Iterate over all policy integrations (one policy may bind multiple LBs).
         for policy in active_waf_policies:
             all_integrations = getattr(policy, "integrations", []) or []
             if not all_integrations and getattr(policy, "integration", None):
@@ -1877,7 +1872,7 @@ def generate_documentation(
                         for subnet_id in getattr(lb, "subnet_ids", []):
                             target_subnet_ids.add(subnet_id)
 
-            # Use network_infrastructure as a last-resort source for VCN/subnet names.
+            # Fall back to network_infrastructure when direct LB data is unavailable.
             net = getattr(policy, "network_infrastructure", None)
             if net:
                 if getattr(net, "subnet_name", "N/A") != "N/A":
@@ -1885,7 +1880,7 @@ def generate_documentation(
                 if getattr(net, "vcn_name", "N/A") != "N/A":
                     target_vcn_names.add(net.vcn_name)
 
-        # 3. Filter VCNs to only those relevant to the WAF/LB scope.
+        # 3. Filter VCNs to only those referenced by the WAF/LB scope.
         filtered_vcns = []
         if target_subnet_ids or target_subnet_names or target_vcn_names:
             for vcn in getattr(infra_data, "vcns", []):
@@ -1922,7 +1917,7 @@ def generate_documentation(
                     filtered_vcn.lpgs = []
                     filtered_vcns.append(filtered_vcn)
 
-        # 4. Isolated payload so section numbering is clean and consistent.
+        # 4. Build an isolated payload so document section numbering is clean.
         filtered_infra_data = infra_data.copy(deep=True)
         filtered_infra_data.instances = []
         filtered_infra_data.drgs = []
@@ -1933,12 +1928,11 @@ def generate_documentation(
         filtered_infra_data.load_balancers = target_lbs
         filtered_infra_data.vcns = filtered_vcns
         filtered_infra_data.waf_policies = active_waf_policies
-        # Preserve certificates in the filtered payload — the deep copy already
-        # carries them from infra_data; ensure they were not accidentally cleared.
+        # Preserve certificates — the deep copy carries them from infra_data.
         if not getattr(filtered_infra_data, "certificates", None):
             filtered_infra_data.certificates = getattr(infra_data, "certificates", []) or []
 
-        # 5. Render sections in order: VCN → LB → WAF → Certificates
+        # 5. Render sections: VCN → LB → WAF → Certificates.
         if target_lbs or filtered_vcns:
             _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
             if filtered_vcns:
@@ -1951,10 +1945,9 @@ def generate_documentation(
             else:
                 document.add_paragraph(t("doc.messages.no_lb_association", lang))
 
-        # WAF section
         _add_waf_report_section(document, filtered_infra_data, headings_for_toc, numbering_counters, lang)
 
-        # Certificates section — shows ACTIVE and PENDING_DELETION, identical to the full_infra flow.
+        # Certificates section — shows ACTIVE and PENDING_DELETION states.
         waf_active_certs = [
             c for c in (getattr(filtered_infra_data, "certificates", []) or [])
             if isinstance(c, dict)
@@ -2005,19 +1998,19 @@ def generate_documentation(
             
     else:  # 'full_infra'
         _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
-        # 1. Instâncias
+        # 1. Compute instances
         _add_and_bookmark_heading(document, t("doc.headings.compute_instances", lang), 2, headings_for_toc, numbering_counters)
         _add_instances_table(document, infra_data.instances, lang)
-        # 2. Armazenamento / Volumes
+        # 2. Storage and volumes
         _add_volume_and_backup_section(document, infra_data, headings_for_toc, numbering_counters, lang)
         if hasattr(infra_data, "volume_groups") and infra_data.volume_groups:
             _add_volume_groups_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        # 3. VCN
+        # 3. VCN topology
         _add_vcn_details_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        # 4. Load Balancers
+        # 4. Load balancers
         if hasattr(infra_data, "load_balancers") and infra_data.load_balancers:
             _add_load_balancers_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        # 5. Certificados
+        # 5. Certificates
         active_certs = [
             c for c in (getattr(infra_data, "certificates", []) or [])
             if isinstance(c, dict)
@@ -2032,21 +2025,21 @@ def generate_documentation(
             _add_compartment_certificates_section(
                 document, infra_data, headings_for_toc, numbering_counters, lang
             )
-        # 6. WAF
+        # 6. WAF policies
         _add_waf_report_section(
             document, infra_data, headings_for_toc, numbering_counters, lang
         )
-        # 7. Conectividade (DRG → CPE → VPN)
+        # 7. External connectivity (DRG → CPE → VPN)
         _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        # 8. Kubernetes (se existir)
+        # 8. Kubernetes (OKE) — only rendered when clusters are present.
         _add_kubernetes_section(document, infra_data, headings_for_toc, numbering_counters, lang)
 
-    # Insert "end" image sections after infra content, before responsible
+    # Image sections positioned at "end" are injected after infrastructure content.
     _insert_image_sections(document, image_sections or [], "end", headings_for_toc, numbering_counters, lang)
 
     _add_responsible_section(document, headings_for_toc, numbering_counters, responsible_name, lang)
 
-    # --- Finalize Document (Generate TOC and Save) ---
+    # Finalize: generate the Table of Contents field and save to disk.
     for text, bookmark, level in reversed(headings_for_toc):
         style_name = f"TOC {level}" if f"TOC {level}" in document.styles else "TOC 1"
         p = document.add_paragraph(style=style_name)
@@ -2085,7 +2078,7 @@ def _add_waf_report_section(
             2, toc_list, counters,
         )
 
-        # ── 1. Visão Geral ────────────────────────────────────────────────────
+        # 1. Overview section
         _add_and_bookmark_heading(document, t("doc.headings.overview", lang), 3, toc_list, counters)
         _create_titled_key_value_table(document, t("doc.headings.general_info", lang), {
             t("doc.common.name",        lang): policy.display_name,
