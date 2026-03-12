@@ -136,6 +136,16 @@ def init_db() -> None:
             FOREIGN KEY (user_id)    REFERENCES users(id),
             FOREIGN KEY (profile_id) REFERENCES tenancy_profiles(id)
         )""",
+        """CREATE TABLE IF NOT EXISTS announcements (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            title       TEXT NOT NULL,
+            message     TEXT NOT NULL DEFAULT '',
+            type        TEXT NOT NULL DEFAULT 'info',
+            expires_at  TEXT,
+            created_by  INTEGER,
+            created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+            is_active   INTEGER NOT NULL DEFAULT 1
+        )""",
     ]
     for stmt in create_stmts:
         try:
@@ -947,7 +957,7 @@ def delete_tenancy_profile(profile_id: int) -> bool:
     return True
 
 
-def get_profiles_for_user(user_id: int, is_admin: bool) -> list:
+def get_profiles_for_user(user_id: int, is_admin: bool, include_inactive: bool = False) -> list:
     """
     Returns profiles accessible to a user based on visibility tier:
     - admin_only  → only admins
@@ -955,28 +965,43 @@ def get_profiles_for_user(user_id: int, is_admin: bool) -> list:
     - by_group    → users in assigned groups
     - by_user     → users explicitly assigned
     Admins always see all active profiles.
+
+    When include_inactive=True the is_active filter is removed so that inactive
+    profiles are also returned (still marked with is_active=0). Used by the
+    generator endpoint so the frontend can show them as locked/disabled items.
     """
+    active_filter = "" if include_inactive else "WHERE is_active = 1"
     conn = _conn()
     if is_admin:
         rows = conn.execute(
-            """SELECT id, name, auth_method, tenancy_name, tenancy_ocid, region, is_active, is_public, visibility
-                 FROM tenancy_profiles WHERE is_active = 1 ORDER BY name"""
+            f"""SELECT id, name, auth_method, tenancy_name, tenancy_ocid, region, is_active, is_public, visibility
+                  FROM tenancy_profiles {active_filter} ORDER BY name"""
         ).fetchall()
     else:
+        where_clause = (
+            """WHERE tp.visibility != 'admin_only'
+                 AND (
+                     tp.visibility = 'all_users'
+                     OR (tp.visibility = 'by_group'  AND ug.user_id = ?)
+                     OR (tp.visibility = 'by_user'   AND ua.user_id = ?)
+                 )"""
+            if include_inactive else
+            """WHERE tp.is_active = 1
+                 AND tp.visibility != 'admin_only'
+                 AND (
+                     tp.visibility = 'all_users'
+                     OR (tp.visibility = 'by_group'  AND ug.user_id = ?)
+                     OR (tp.visibility = 'by_user'   AND ua.user_id = ?)
+                 )"""
+        )
         rows = conn.execute(
-            """SELECT DISTINCT tp.id, tp.name, tp.auth_method, tp.tenancy_name, tp.tenancy_ocid, tp.region,
+            f"""SELECT DISTINCT tp.id, tp.name, tp.auth_method, tp.tenancy_name, tp.tenancy_ocid, tp.region,
                                tp.is_active, tp.is_public, tp.visibility
                  FROM tenancy_profiles tp
                  LEFT JOIN group_profiles gp          ON tp.id = gp.profile_id
                  LEFT JOIN user_groups ug             ON gp.group_id = ug.group_id
                  LEFT JOIN user_profile_assignments ua ON tp.id = ua.profile_id
-                WHERE tp.is_active = 1
-                  AND tp.visibility != 'admin_only'
-                  AND (
-                      tp.visibility = 'all_users'
-                      OR (tp.visibility = 'by_group'  AND ug.user_id = ?)
-                      OR (tp.visibility = 'by_user'   AND ua.user_id = ?)
-                  )
+                {where_clause}
                 ORDER BY tp.name""",
             (user_id, user_id),
         ).fetchall()
@@ -1012,6 +1037,34 @@ def get_user_profile_assignments(profile_id: int) -> list:
     return [dict(r) for r in rows]
 
 
+def get_profile_groups(profile_id: int) -> list:
+    """Returns all groups that have access to a given tenancy profile."""
+    conn = _conn()
+    rows = conn.execute(
+        """SELECT g.id, g.name
+             FROM groups g
+             JOIN group_profiles gp ON g.id = gp.group_id
+            WHERE gp.profile_id = ?
+            ORDER BY g.name""",
+        (profile_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def set_profile_groups(profile_id: int, group_ids: list) -> None:
+    """Replaces all group assignments for a profile with the given list."""
+    conn = _conn()
+    conn.execute("DELETE FROM group_profiles WHERE profile_id = ?", (profile_id,))
+    for gid in group_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO group_profiles (group_id, profile_id) VALUES (?, ?)",
+            (int(gid), profile_id),
+        )
+    conn.commit()
+    conn.close()
+
+
 def set_group_profiles(group_id: int, profile_ids: list) -> None:
     """Replaces all profile assignments for a group."""
     conn = _conn()
@@ -1037,3 +1090,72 @@ def get_group_profiles(group_id: int) -> list:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+# ==============================================================================
+# Announcements (system-wide pinned notifications)
+# ==============================================================================
+
+def list_announcements(active_only: bool = False) -> list:
+    """Returns all announcements, newest first. Optionally filter to active & non-expired."""
+    conn = _conn()
+    if active_only:
+        rows = conn.execute(
+            """SELECT * FROM announcements
+                WHERE is_active = 1
+                  AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+                ORDER BY created_at DESC"""
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM announcements ORDER BY created_at DESC"
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def create_announcement(title: str, message: str, type_: str,
+                        expires_at: str | None, created_by: int) -> dict:
+    """Creates a new announcement and returns it."""
+    conn = _conn()
+    cur = conn.execute(
+        """INSERT INTO announcements (title, message, type, expires_at, created_by)
+           VALUES (?, ?, ?, ?, ?)""",
+        (title, message, type_, expires_at, created_by),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM announcements WHERE id = ?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def update_announcement(ann_id: int, **kwargs) -> dict | None:
+    """Updates fields of an announcement. Accepts title, message, type, expires_at, is_active."""
+    allowed = {"title", "message", "type", "expires_at", "is_active"}
+    fields  = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
+    if not fields:
+        return get_announcement(ann_id)
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    conn = _conn()
+    conn.execute(
+        f"UPDATE announcements SET {set_clause} WHERE id = ?",
+        list(fields.values()) + [ann_id],
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM announcements WHERE id = ?", (ann_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_announcement(ann_id: int) -> bool:
+    conn = _conn()
+    cur = conn.execute("DELETE FROM announcements WHERE id = ?", (ann_id,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def get_announcement(ann_id: int) -> dict | None:
+    conn = _conn()
+    row = conn.execute("SELECT * FROM announcements WHERE id = ?", (ann_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None

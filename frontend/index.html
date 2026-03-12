@@ -290,6 +290,23 @@
     <!-- ── Main ── -->
     <div id="app-main">
 
+      <!-- ── Top bar: Announcements + Notification bell ── -->
+      <div id="app-topbar">
+        <!-- Announcements megaphone (admin broadcasts — visible when logged in) -->
+        <button id="ann-topbar-btn" class="topbar-icon-btn hidden" aria-label="Avisos" title="Comunicados do sistema">
+          <!-- Megaphone icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 5.882V19.24a1.76 1.76 0 0 1-3.417.592l-2.147-6.15M18 13a3 3 0 0 0 0-6M5.436 13.683A4.001 4.001 0 0 1 7 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 0 1-1.564-.317z"/>
+          </svg>
+          <span id="ann-topbar-badge" class="topbar-badge hidden">0</span>
+        </button>
+        <!-- Notification bell (transient toast history) -->
+        <button id="notif-bell-btn" class="topbar-icon-btn notif-bell-btn" aria-label="Notificações" title="Notificações">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span id="notif-badge" class="topbar-badge hidden">0</span>
+        </button>
+      </div>
+
       <!-- ── GENERATOR VIEW ── -->
       <div id="view-generator" class="app-content">
 
@@ -300,7 +317,8 @@
 
         <main class="content-card wizard-card">
 
-          <!-- No-profile guard: shown when the user has no accessible profiles -->
+          <!-- No-profile guard: shown when user has no available profiles -->
+          <!-- No-profile guard: shown when user has no available profiles -->
           <div id="no-profile-block" class="hidden no-profile-block">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="no-profile-icon"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <p class="no-profile-msg" id="no-profile-msg-text"></p>
@@ -586,6 +604,10 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
             <span data-i18n="admin_tab_profiles">Tenancy Profiles</span>
           </button>
+          <button class="admin-tab" data-tab="notifications">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span data-i18n="admin_tab_notifications">Avisos</span>
+          </button>
           <button class="admin-tab" data-tab="feedback">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             <span data-i18n="admin_tab_feedback">Feedback</span>
@@ -633,6 +655,19 @@
             </button>
           </div>
           <div id="admin-profiles-table-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+        <!-- Notifications / Announcements panel (admin only) -->
+        <div id="admin-panel-notifications" class="admin-panel hidden">
+          <div class="admin-panel-toolbar">
+            <button class="button-primary" id="admin-create-announcement-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span data-i18n="action.new_announcement">Novo Aviso</span>
+            </button>
+          </div>
+          <div id="admin-announcements-wrap" class="admin-table-wrap">
             <p class="no-data-message">Carregando…</p>
           </div>
         </div>
@@ -728,7 +763,9 @@
           <div class="profile-form-row">
             <div class="profile-form-group profile-form-group--full">
               <label class="profile-form-label">Private Key PEM</label>
+              <!-- hidden file input always present -->
               <input type="file" id="profile-pem-file-input" accept=".pem,.key,.txt" style="display:none">
+              <!-- hidden textarea holds the value -->
               <textarea id="profile-field-key" style="display:none" spellcheck="false"></textarea>
 
               <!-- CREATE mode: two big choice buttons -->
@@ -828,7 +865,7 @@
                   <span class="profile-vis-label">Todos os usuários</span>
                 </label>
                 <label class="profile-vis-card" data-value="by_group">
-                  <input type="radio" name="profile-visibility" value="by_group" class="profile-vis-radio" checked>
+                  <input type="radio" name="profile-visibility" value="by_group" class="profile-vis-radio">
                   <div class="profile-vis-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
                   </div>
@@ -867,9 +904,16 @@
             </div>
           </div>
 
+          <div id="profile-group-assignments-section" style="display:none">
+            <div class="profile-form-group profile-form-group--full">
+              <label class="profile-form-label" data-i18n="label.groups_with_access">Grupos com acesso</label>
+              <div id="profile-group-assignments-wrap" class="profile-user-list"></div>
+            </div>
+          </div>
+
           <div id="profile-user-assignments-section" style="display:none">
             <div class="profile-form-group profile-form-group--full">
-              <label class="profile-form-label">Usuários com acesso direto</label>
+              <label class="profile-form-label" data-i18n="label.users_with_access">Usuários com acesso direto</label>
               <div id="profile-user-assignments-wrap" class="profile-user-list"></div>
             </div>
           </div>
@@ -877,8 +921,14 @@
 
       </div>
       <div class="profile-modal-footer">
-        <button class="button-secondary" id="profile-modal-cancel">Cancelar</button>
-        <button class="button-primary"   id="profile-modal-save">Salvar</button>
+        <button class="button-secondary" id="profile-modal-cancel" data-i18n="action.cancel">Cancelar</button>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="button-secondary profile-validate-btn" id="profile-modal-validate" data-i18n="action.test_connection">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            Testar Conexão
+          </button>
+          <button class="button-primary" id="profile-modal-save" data-i18n="action.save">Salvar</button>
+        </div>
       </div>
     </div>
   </div>
@@ -901,6 +951,117 @@
   </div>
 
   <div id="toast-container"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Announcement Modal (admin)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="announcement-modal" class="hidden">
+    <div class="group-modal-backdrop" id="announcement-modal-backdrop"></div>
+    <div class="group-modal-card" style="max-width:520px;width:100%">
+      <div class="group-modal-header">
+        <h3 class="group-modal-title" id="announcement-modal-title" data-i18n="action.new_announcement">Novo Aviso</h3>
+        <button class="auth-modal-close" id="announcement-modal-close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="group-modal-body" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+
+        <!-- Type selector -->
+        <div>
+          <label class="profile-form-label" data-i18n="ann.type">Tipo</label>
+          <div class="ann-type-grid" id="ann-type-grid">
+            <label class="ann-type-card" data-value="info">
+              <input type="radio" name="ann-type" value="info" class="ann-type-radio" checked>
+              <div class="ann-type-icon ann-type-icon--info"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><polyline points="11 12 12 12 12 16"/></svg></div>
+              <span class="ann-type-label" data-i18n="ann.type.info">Informativo</span>
+            </label>
+            <label class="ann-type-card" data-value="warning">
+              <input type="radio" name="ann-type" value="warning" class="ann-type-radio">
+              <div class="ann-type-icon ann-type-icon--warning"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+              <span class="ann-type-label" data-i18n="ann.type.warning">Manutenção</span>
+            </label>
+            <label class="ann-type-card" data-value="error">
+              <input type="radio" name="ann-type" value="error" class="ann-type-radio">
+              <div class="ann-type-icon ann-type-icon--error"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+              <span class="ann-type-label" data-i18n="ann.type.error">Urgente</span>
+            </label>
+            <label class="ann-type-card" data-value="success">
+              <input type="radio" name="ann-type" value="success" class="ann-type-radio">
+              <div class="ann-type-icon ann-type-icon--success"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+              <span class="ann-type-label" data-i18n="ann.type.success">Novidade</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Title -->
+        <div>
+          <label class="profile-form-label">
+            <span data-i18n="ann.title">Título</span>
+            <span class="profile-form-required">*</span>
+          </label>
+          <input id="ann-field-title" class="profile-form-input" placeholder="ex: Manutenção programada amanhã">
+        </div>
+
+        <!-- Message -->
+        <div>
+          <label class="profile-form-label" data-i18n="ann.message">Mensagem</label>
+          <textarea id="ann-field-message" class="profile-form-input" rows="3" style="resize:vertical;min-height:70px" placeholder="Detalhes adicionais (opcional)"></textarea>
+        </div>
+
+        <!-- Expiry -->
+        <div>
+          <label class="profile-form-label" data-i18n="ann.expires_at">Expirar em (opcional)</label>
+          <input id="ann-field-expires" type="datetime-local" class="profile-form-input">
+          <span class="profile-form-hint" data-i18n="ann.expires_hint">Deixe em branco para exibir indefinidamente</span>
+        </div>
+
+      </div>
+      <div class="profile-modal-footer">
+        <button class="button-secondary" id="announcement-modal-cancel" data-i18n="action.cancel">Cancelar</button>
+        <button class="button-primary" id="announcement-modal-save" data-i18n="action.save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Notification Center
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="notif-panel" class="notif-panel hidden">
+    <div class="notif-panel-header">
+      <span class="notif-panel-title" data-i18n="notif.title">Notificações</span>
+      <div class="notif-panel-actions">
+        <button id="notif-clear-btn" class="notif-clear-btn" data-i18n="notif.clear_all">Limpar tudo</button>
+        <button id="notif-panel-close" class="notif-panel-close-btn" aria-label="Fechar">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="notif-list" class="notif-list">
+      <div class="notif-empty" data-i18n="notif.empty">Nenhuma notificação</div>
+    </div>
+  </div>
+  <div id="notif-panel-backdrop" class="notif-panel-backdrop hidden"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Announcements Panel (admin broadcasts — separate from bell)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="ann-panel" class="ann-panel hidden">
+    <div class="ann-panel-header">
+      <div class="ann-panel-title-row">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ann-panel-icon">
+            <path d="M11 5.882V19.24a1.76 1.76 0 0 1-3.417.592l-2.147-6.15M18 13a3 3 0 0 0 0-6M5.436 13.683A4.001 4.001 0 0 1 7 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 0 1-1.564-.317z"/>
+          </svg>
+        <span class="ann-panel-title" data-i18n="ann.panel.title">Avisos do Sistema</span>
+      </div>
+      <button id="ann-panel-close" class="ann-panel-close-btn" aria-label="Fechar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="ann-panel-list" class="ann-panel-list">
+      <div class="ann-panel-empty" data-i18n="ann.panel.empty">Nenhum aviso ativo</div>
+    </div>
+  </div>
+  <div id="ann-panel-backdrop" class="ann-panel-backdrop hidden"></div>
 
   <!-- Lightbox -->
   <div id="lightbox-overlay">

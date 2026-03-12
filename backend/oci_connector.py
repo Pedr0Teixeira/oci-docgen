@@ -307,7 +307,7 @@ def list_regions(profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, str
     auth = _auth_from_profile(profile)
     tenancy_id = auth.get("tenancy_id")
     if not tenancy_id:
-        raise ConnectionError("Tenancy ID not found. Please select a valid Tenancy Profile.")
+        raise ConnectionError("OCI_ERR:tenancy_id_not_found")
     if auth.get("signer"):
         identity_client = oci.identity.IdentityClient(
             config={}, signer=auth["signer"], retry_strategy=retry_strategy
@@ -326,10 +326,10 @@ def list_compartments(region: str, profile: Optional[Dict[str, Any]] = None) -> 
     auth = _auth_from_profile(profile)
     tenancy_id = auth.get("tenancy_id")
     if not tenancy_id:
-        raise ConnectionError("Tenancy ID not found. Please select a valid Tenancy Profile.")
+        raise ConnectionError("OCI_ERR:tenancy_id_not_found")
     identity_client = get_client(oci.identity.IdentityClient, region, profile)
     if not identity_client:
-        raise ConnectionError("OCI Identity Client could not be initialized.")
+        raise ConnectionError("OCI_ERR:identity_client_init_failed")
     all_compartments = oci.pagination.list_call_get_all_results(
         identity_client.list_compartments,
         tenancy_id,
@@ -365,7 +365,7 @@ def list_instances_in_compartment(region: str, compartment_id: str, profile: Opt
     """Returns RUNNING and STOPPED compute instances from the specified compartment."""
     compute_client = get_client(oci.core.ComputeClient, region, profile)
     if not compute_client:
-        raise ConnectionError("OCI Compute Client could not be initialized.")
+        raise ConnectionError("OCI_ERR:compute_client_init_failed")
     all_instances = oci.pagination.list_call_get_all_results(
         compute_client.list_instances,
         compartment_id=compartment_id,
