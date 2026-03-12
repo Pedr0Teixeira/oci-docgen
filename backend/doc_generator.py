@@ -1779,10 +1779,14 @@ def generate_documentation(
     responsible_name: str,
     image_sections: Optional[List[dict]] = None,
     lang: str = "pt",
+    compartment_name: Optional[str] = None,
 ) -> str:
     """Main function to generate a .docx file.
 
     image_sections: list of dicts {name, position ("start"|"end"), images: List[bytes]}
+    compartment_name: explicit compartment name passed from the API request; used as the
+                      primary source for the "Cliente" field so it is always populated
+                      regardless of which resources exist in the collected data.
     """
     document = Document()
     style = document.styles["Normal"]
@@ -1791,8 +1795,11 @@ def generate_documentation(
     font.size = Pt(11)
     _define_toc_styles(document)
 
-    client_name = "N/A"
-    if infra_data.instances:
+    # Prefer the explicit compartment_name from the API request (always populated).
+    # Fall back to deriving it from collected data for backwards compatibility.
+    if compartment_name and compartment_name.strip() not in ("", "N/A"):
+        client_name = compartment_name.strip()
+    elif infra_data.instances:
         client_name = infra_data.instances[0].compartment_name.replace("SERVERS-", "")
     elif infra_data.kubernetes_clusters:
         client_name = "Compartimento_OKE"
