@@ -61,6 +61,7 @@
 }
 
 /* ── Light Mode ─────────────────────────────────────────────────────────────── */
+/* ── Light mode: softer, warmer whites ── */
 body.light-mode {
   --sb-bg:       #1e2b3a;
   --sb-bg-hover: rgba(255,255,255,0.07);
@@ -104,6 +105,7 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   transition: background 0.2s, color 0.2s;
+  overflow-x: clip;
 }
 
 input[type="text"], input[type="password"], textarea {
@@ -456,10 +458,25 @@ body.light-mode #language-selector { color: rgba(255,255,255,0.55); }
   min-width: 0;
 }
 
+/* ── Top bar (notification bell area) ── */
+#app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 20px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-muted);
+  min-height: 48px;
+}
+
 .app-content {
   max-width: 960px;
   margin: 0 auto;
-  padding: 32px 40px 80px;
+  padding: 28px 40px 80px;
 }
 
 /* ── Page intro ── */
@@ -1078,33 +1095,536 @@ body.light-mode .multi-select-chip { color: #4338ca; }
    9. TOAST
    ============================================================================= */
 #toast-container {
-  position: fixed; bottom: 20px; right: 20px; z-index: 9999;
-  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10500;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  max-width: 400px;
+  width: calc(100vw - 40px);
 }
 
 .toast {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  min-width: 260px;
-  max-width: 380px;
-  padding: 12px 16px;
-  border-radius: var(--r);
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border-muted);
-  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  border-left: 4px solid transparent;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.15);
   pointer-events: all;
-  animation: slideIn 0.3s ease forwards;
   opacity: 0;
-  transform: translateX(100%);
+  transform: translateX(24px);
+  animation: toastSlideIn 0.28s cubic-bezier(0.22,1,0.36,1) forwards;
+  position: relative;
 }
 
-.toast svg { width: 18px; height: 18px; flex-shrink: 0; }
-.toast-message { flex: 1; font-size: 13px; font-weight: 500; }
-.toast.toast-success { border-left: 3px solid var(--s-running); }
-.toast.toast-error   { border-left: 3px solid var(--s-stopped); }
-.toast.toast-info    { border-left: 3px solid var(--s-prov); }
-.toast.fade-out      { animation: fadeOut 0.4s ease forwards; }
+@keyframes toastSlideIn {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Icon wrapper — colored per type */
+.toast-icon-wrap {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.toast-icon-wrap svg { width: 16px; height: 16px; stroke-width: 2.2; }
+
+/* Text block */
+.toast-body { flex: 1; min-width: 0; }
+.toast-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.toast-msg {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* Close button */
+.toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+  margin-top: 1px;
+}
+.toast-close:hover { opacity: 1; background: var(--bg-hover); }
+.toast-close svg { width: 14px; height: 14px; stroke-width: 2.5; }
+
+/* Per-type accent colors */
+.toast.success { border-left-color: #22c55e; }
+.toast.success .toast-icon-wrap { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
+
+.toast.error { border-left-color: #ef4444; }
+.toast.error .toast-icon-wrap { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+
+.toast.warning { border-left-color: #f59e0b; }
+.toast.warning .toast-icon-wrap { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+
+.toast.info { border-left-color: #3b82f6; }
+.toast.info .toast-icon-wrap { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
+
+/* Light mode adjustments */
+[data-theme="light"] .toast {
+  background: #ffffff;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08);
+}
+
+/* =============================================================================
+   9b. NOTIFICATION BELL + PANEL
+   ============================================================================= */
+
+/* ── Topbar icon buttons (bell + announcements) ── */
+.topbar-icon-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.topbar-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.topbar-icon-btn svg { width: 16px; height: 16px; }
+.topbar-icon-btn.has-unread { color: var(--accent); border-color: var(--accent); }
+/* Announcements button — amber accent when active */
+#ann-topbar-btn.has-ann { color: #f59e0b; border-color: #f59e0b; }
+#ann-topbar-btn.has-ann:hover { background: rgba(245,158,11,0.08); }
+/* Badge shared by both buttons */
+.topbar-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+  border: 2px solid var(--bg-primary);
+}
+#ann-topbar-btn .topbar-badge { background: #f59e0b; }
+.topbar-badge.hidden { display: none; }
+/* Keep old notif-bell-btn name working */
+.notif-bell-btn { /* inherits from topbar-icon-btn */ }
+
+.notif-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  padding: 0 3px;
+  pointer-events: none;
+}
+
+/* =============================================================================
+   Announcements Panel (topbar — separate from notification bell)
+   ============================================================================= */
+.ann-panel {
+  position: fixed;
+  top: 54px;
+  right: 60px; /* offset left of the bell */
+  z-index: 9300;
+  width: 380px;
+  max-height: 480px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.38);
+  overflow: hidden;
+  animation: notifPanelIn 0.2s cubic-bezier(0.22,1,0.36,1) forwards;
+}
+.ann-panel.hidden { display: none; }
+
+.ann-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px 11px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-shrink: 0;
+}
+.ann-panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ann-panel-icon {
+  width: 15px;
+  height: 15px;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+.ann-panel-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+.ann-panel-close-btn {
+  width: 24px; height: 24px;
+  border: none; background: none;
+  cursor: pointer; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  transition: background 0.14s, color 0.14s;
+  flex-shrink: 0;
+}
+.ann-panel-close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.ann-panel-close-btn svg   { width: 14px; height: 14px; }
+
+.ann-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ann-panel-empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Individual announcement card in the panel */
+.ann-panel-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background 0.12s;
+  cursor: default;
+}
+.ann-panel-item.ann-pi-info    { background: rgba(59,130,246,0.07);  border-color: rgba(59,130,246,0.18);  }
+.ann-panel-item.ann-pi-warning { background: rgba(245,158,11,0.07);  border-color: rgba(245,158,11,0.18);  }
+.ann-panel-item.ann-pi-error   { background: rgba(239,68,68,0.07);   border-color: rgba(239,68,68,0.18);   }
+.ann-panel-item.ann-pi-success { background: rgba(34,197,94,0.07);   border-color: rgba(34,197,94,0.18);   }
+.ann-panel-item:hover { filter: brightness(1.07); }
+
+.ann-pi-icon {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.ann-pi-icon svg { width: 15px; height: 15px; stroke-width: 2; }
+.ann-panel-item.ann-pi-info    .ann-pi-icon { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.ann-panel-item.ann-pi-warning .ann-pi-icon { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.ann-panel-item.ann-pi-error   .ann-pi-icon { background: rgba(239,68,68,0.15);  color: #ef4444; }
+.ann-panel-item.ann-pi-success .ann-pi-icon { background: rgba(34,197,94,0.15);  color: #22c55e; }
+
+.ann-pi-body { flex: 1; min-width: 0; }
+.ann-pi-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ann-pi-msg {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  word-break: break-word;
+}
+.ann-pi-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+.ann-pi-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 99px;
+}
+.ann-panel-item.ann-pi-info    .ann-pi-type-badge { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.ann-panel-item.ann-pi-warning .ann-pi-type-badge { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.ann-panel-item.ann-pi-error   .ann-pi-type-badge { background: rgba(239,68,68,0.15);  color: #ef4444; }
+.ann-panel-item.ann-pi-success .ann-pi-type-badge { background: rgba(34,197,94,0.15);  color: #22c55e; }
+.ann-pi-expiry {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+/* Backdrop for ann panel */
+.ann-panel-backdrop {
+  position: fixed; inset: 0;
+  z-index: 9100;
+  background: transparent;
+}
+.ann-panel-backdrop.hidden { display: none; }
+
+.notif-panel {
+  position: fixed;
+  top: 54px;
+  right: 16px;
+  z-index: 9300;
+  width: 360px;
+  max-height: 520px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  overflow: hidden;
+  animation: notifPanelIn 0.22s cubic-bezier(0.22,1,0.36,1) forwards;
+}
+.notif-panel.hidden { display: none; }
+@keyframes notifPanelIn {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.notif-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.notif-panel-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.notif-panel-actions { display: flex; align-items: center; gap: 8px; }
+.notif-clear-btn {
+  background: none; border: none; cursor: pointer; font-size: 12px;
+  color: var(--text-muted); padding: 3px 6px; border-radius: 4px;
+  transition: background 0.12s, color 0.12s;
+}
+.notif-clear-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.notif-panel-close-btn {
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  display: flex; align-items: center; padding: 3px; border-radius: 4px;
+  transition: background 0.12s;
+}
+.notif-panel-close-btn:hover { background: var(--bg-hover); }
+.notif-panel-close-btn svg { width: 14px; height: 14px; stroke-width: 2.5; }
+
+.notif-list { overflow-y: auto; flex: 1; padding: 8px 0; }
+.notif-empty { padding: 32px 16px; text-align: center; font-size: 13px; color: var(--text-muted); }
+
+.notif-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border-muted);
+  transition: background 0.12s; cursor: default;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: var(--bg-hover); }
+.notif-item.unread { background: rgba(59,130,246,0.04); }
+.notif-item.pinned {
+  border-left: 3px solid var(--pinned-border, #3b82f6);
+  padding-left: 13px;
+}
+.notif-item.pinned.info    { --pinned-border: #3b82f6; background: rgba(59,130,246,0.06); }
+.notif-item.pinned.warning { --pinned-border: #f59e0b; background: rgba(245,158,11,0.06); }
+.notif-item.pinned.error   { --pinned-border: #ef4444; background: rgba(239,68,68,0.06);  }
+.notif-item.pinned.success { --pinned-border: #22c55e; background: rgba(34,197,94,0.06);  }
+.notif-item.pinned:hover   { filter: brightness(1.08); }
+
+.notif-item-icon {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; margin-top: 1px;
+}
+.notif-item-icon svg { width: 14px; height: 14px; stroke-width: 2.2; }
+.notif-item.success .notif-item-icon { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.notif-item.error   .notif-item-icon { background: rgba(239,68,68,0.12);   color: #ef4444; }
+.notif-item.warning .notif-item-icon { background: rgba(245,158,11,0.12);  color: #f59e0b; }
+.notif-item.info    .notif-item-icon { background: rgba(59,130,246,0.12);  color: #3b82f6; }
+
+.notif-item-body { flex: 1; min-width: 0; }
+.notif-item-title { font-size: 13px; font-weight: 600; color: var(--text-primary); line-height: 1.3; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Small "Aviso" pill badge on pinned announcement notifications */
+.notif-pin-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: #fff;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.notif-item-msg { font-size: 12px; color: var(--text-muted); line-height: 1.45; word-break: break-word; }
+.notif-item-time { font-size: 11px; color: var(--text-muted); opacity: 0.7; margin-top: 4px; }
+
+.notif-panel-backdrop { position: fixed; inset: 0; z-index: 9100; background: transparent; }
+.notif-panel-backdrop.hidden { display: none; }
+
+[data-theme="light"] .notif-panel { box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
+[data-theme="light"] .notif-item.unread { background: rgba(59,130,246,0.05); }
+
+/* =============================================================================
+   9c. ANNOUNCEMENT TYPE SELECTOR (admin modal)
+   ============================================================================= */
+.ann-type-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+.ann-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border-radius: 8px;
+  border: 2px solid var(--border-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: center;
+  user-select: none;
+}
+.ann-type-card:hover { background: var(--bg-hover); }
+.ann-type-card:has(.ann-type-radio:checked) { border-color: var(--accent); background: rgba(59,130,246,0.07); }
+.ann-type-radio { display: none; }
+.ann-type-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.ann-type-icon svg { width: 16px; height: 16px; stroke-width: 2; }
+.ann-type-icon--info    { background: rgba(59,130,246,0.12); color: #3b82f6; }
+.ann-type-icon--warning { background: rgba(245,158,11,0.12); color: #f59e0b; }
+.ann-type-icon--error   { background: rgba(239,68,68,0.12);  color: #ef4444; }
+.ann-type-icon--success { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.ann-type-card:has(.ann-type-radio:checked) .ann-type-icon--info    { background: rgba(59,130,246,0.20); }
+.ann-type-card:has(.ann-type-radio:checked) .ann-type-icon--warning { background: rgba(245,158,11,0.20); }
+.ann-type-card:has(.ann-type-radio:checked) .ann-type-icon--error   { background: rgba(239,68,68,0.20); }
+.ann-type-card:has(.ann-type-radio:checked) .ann-type-icon--success { background: rgba(34,197,94,0.20); }
+.ann-type-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; }
+.ann-type-card:has(.ann-type-radio:checked) .ann-type-label { color: var(--text-primary); }
+
+/* ── Announcement table — status chip ── */
+.admin-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.admin-status-chip svg { flex-shrink: 0; }
+/* Active */
+.admin-status-chip.s-active {
+  background: rgba(34,197,94,0.12);
+  color: #22c55e;
+  border: 1px solid rgba(34,197,94,0.22);
+}
+/* Inactive (manually disabled) */
+.admin-status-chip.s-inactive {
+  background: rgba(148,163,184,0.10);
+  color: #94a3b8;
+  border: 1px solid rgba(148,163,184,0.20);
+}
+/* Expired (past expires_at date) */
+.admin-status-chip.s-expired {
+  background: rgba(245,158,11,0.10);
+  color: #f59e0b;
+  border: 1px solid rgba(245,158,11,0.20);
+}
+
+/* ── Row-level visual highlight based on status ── */
+tr.ann-row-s-inactive {
+  opacity: 0.55;
+}
+tr.ann-row-s-inactive:hover {
+  opacity: 0.75;
+}
+tr.ann-row-s-expired td:first-child::before {
+  content: '';
+}
+tr.ann-row-s-expired {
+  background: rgba(245,158,11,0.03);
+}
+tr.ann-row-s-active {
+  /* no extra treatment — full opacity default */
+}
+
+/* Announcement row in admin table */
+.ann-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ann-type-badge svg { width: 12px; height: 12px; flex-shrink: 0; stroke-width: 2.2; }
+.ann-type-badge.info    { background: rgba(59,130,246,0.12); color: #3b82f6; }
+.ann-type-badge.warning { background: rgba(245,158,11,0.12);  color: #f59e0b; }
+.ann-type-badge.error   { background: rgba(239,68,68,0.12);   color: #ef4444; }
+.ann-type-badge.success { background: rgba(34,197,94,0.12);   color: #22c55e; }
 
 /* =============================================================================
    10. DETAILS CONTAINER + FIELDSETS
@@ -1605,7 +2125,7 @@ input.info-value:focus {
 .img-section-remove-btn svg { width: 14px; height: 14px; stroke: currentColor; }
 .img-section-remove-btn:hover { background: rgba(248,81,73,0.12); color: #f85149; }
 
-/* ── Text fields above/below image sections ── */
+/* ── Text fields ABOVE/BELOW (FIXED: label on top, textarea below) ── */
 .img-section-texts {
   padding: 14px 14px 0;
   display: grid;
@@ -1761,6 +2281,7 @@ input.info-value:focus {
 }
 .img-thumb-wrap:hover .img-thumb-remove { opacity: 1; }
 
+/* Legacy compatibility */
 .section-text-row { margin-top: 10px; }
 .section-text-row label {
   display: block;
@@ -2307,6 +2828,88 @@ body.light-mode .cert-assoc-type-badge { background: #dbeafe; color: #2563eb; bo
 /* =============================================================================
    20. RESPONSIVE
    ============================================================================= */
+/* =============================================================================
+   Custom Tooltips — shown on [title] hover for action icon buttons
+   Uses a CSS-only approach: we progressively enhance via JS to data-tooltip
+   so we can control timing and style independently from the browser default.
+   ============================================================================= */
+[data-tooltip] {
+  position: relative;
+}
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--bg-elevated, #1e2433);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border-muted);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  z-index: 9999;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* Arrow pointing down toward the button */
+[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  border: 5px solid transparent;
+  border-top-color: var(--border-muted);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  z-index: 9999;
+}
+[data-tooltip]:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* Variant: tooltip below the element */
+[data-tooltip-pos="bottom"]::after {
+  bottom: auto;
+  top: calc(100% + 6px);
+  transform: translateX(-50%) translateY(-4px);
+}
+[data-tooltip-pos="bottom"]:hover::after {
+  transform: translateX(-50%) translateY(0);
+}
+[data-tooltip-pos="bottom"]::before {
+  bottom: auto;
+  top: calc(100% + 1px);
+  transform: translateX(-50%) translateY(-4px);
+  border-top-color: transparent;
+  border-bottom-color: var(--border-muted);
+}
+[data-tooltip-pos="bottom"]:hover::before {
+  transform: translateX(-50%) translateY(0);
+}
+/* Light mode adjustments */
+body.light-mode [data-tooltip]::after {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-color: rgba(255,255,255,0.08);
+}
+body.light-mode [data-tooltip]::before {
+  border-top-color: rgba(255,255,255,0.08);
+}
+
+
 @media (max-width: 900px) {
   :root { --sb-width: 200px; }
   .app-content { padding: 24px 24px 60px; }
@@ -2783,7 +3386,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
    ADDITIONAL FIXES — Multiselect tags, Connectivity chips, CIDR, Admin, Chart
    ============================================================================= */
 
-/* ── Multiselect: instance tag chips ── */
+/* ── Issue 1: Multiselect instance tags ── */
 .selected-items-container {
   display: flex;
   flex-wrap: wrap;
@@ -2819,7 +3422,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   flex-shrink: 0;
 }
 
-/* ── Network Connectivity Summary chips ── */
+/* ── Issue 2: Network Connectivity Summary chips ── */
 .summary-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -2868,7 +3471,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   font-style: italic;
 }
 
-/* ── Loading icon animation ── */
+/* ── Issue 3: Loading icon — replace ring+SVG with cleaner animation ── */
 .progress-icon-ring {
   position: relative;
   width: 72px; height: 72px;
@@ -2899,7 +3502,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   50%       { opacity: 0.9; transform: scale(1); }
 }
 
-/* ── VCN CIDR column alignment ── */
+/* ── Issue 4: VCN CIDR column alignment ── */
 .resource-table th:last-child,
 .resource-table td:last-child {
   text-align: right;
@@ -2914,7 +3517,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   color: var(--text-code, #79b8ff);
 }
 
-/* ── Admin panel ── */
+/* ── Issue 5: Admin panel styles ── */
 .admin-tabs {
   display: flex;
   gap: 4px;
@@ -3113,7 +3716,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
    FIXES ROUND 3 — Cloud→Check, Net Summary, Admin Modal, Spline Chart
    ============================================================================= */
 
-/* ── Progress icon: cloud-to-checkmark transition ── */
+/* ── Fix 1: Progress cloud→check icon transition ── */
 .progress-check-hidden {
   opacity: 0 !important;
   transform: scale(0.4) !important;
@@ -3144,7 +3747,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
   to { border-top-color: #3fb950; opacity: 0.6; }
 }
 
-/* ── Network connectivity card ── */
+/* ── Fix 2: Network connectivity card redesign ── */
 .net-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3226,7 +3829,7 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
 .net-chip-teal   { background: rgba(63,185,80,0.1);   border-color: rgba(63,185,80,0.3);   color: #56d364; }
 .net-chip-empty  { background: transparent; border-color: var(--border-muted); color: var(--text-muted); font-style: italic; font-size: 11.5px; }
 
-/* ── Group management modal ── */
+/* ── Fix 3: Group management modal ── */
 .group-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -3438,7 +4041,27 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
 .admin-btn-icon:hover { background: var(--hover-bg); color: var(--accent); border-color: var(--accent); }
 .admin-btn-icon svg   { width: 13px; height: 13px; stroke: currentColor; }
 
-/* ── Spline chart and period filters ── */
+/* ── Admin icon button (used in announcements table) ── */
+.admin-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.admin-icon-btn:hover { background: var(--bg-hover); color: var(--accent); border-color: var(--accent); }
+.admin-icon-btn svg   { width: 13px; height: 13px; stroke: currentColor; }
+/* Danger variant */
+.admin-icon-btn--danger { color: var(--text-muted); }
+.admin-icon-btn--danger:hover { color: #ef4444; border-color: #ef4444; background: rgba(239,68,68,0.08); }
+
+/* ── Fix 4: Spline chart & filters ── */
 .metrics-card-header {
   display: flex;
   align-items: center;
@@ -4387,11 +5010,43 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
 .profile-modal-footer {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
   padding: 14px 22px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+/* Testar Conexão button — outlined style within the footer */
+.profile-validate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: var(--r);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.profile-validate-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(59,130,246,0.06);
+}
+.profile-validate-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.profile-validate-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  stroke-width: 2;
 }
 
 .profile-form-section {
@@ -4498,15 +5153,57 @@ body.light-mode .sidebar-guest-text { color: rgba(255,255,255,0.35); }
 }
 
 .profile-user-list {
-  max-height: 130px;
+  max-height: 160px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--r);
-  padding: 8px 10px;
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+}
+.profile-user-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-muted);
+  transition: background 0.12s;
+  user-select: none;
+}
+.profile-user-list label:last-child { border-bottom: none; }
+.profile-user-list label:hover { background: var(--bg-hover); }
+/* Custom checkbox matching design system */
+.profile-user-list input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-card);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.profile-user-list input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.profile-user-list input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
 }
 
 /* =============================================================================
@@ -4946,28 +5643,7 @@ button.sidebar-brand {
   width: 100%;
   font: inherit;
 }
-/* =============================================================================
-   PATCH — Toast position top-right
-   ============================================================================= */
-#toast-container {
-  position: fixed !important;
-  top: 20px !important;
-  bottom: auto !important;
-  right: 20px !important;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  pointer-events: none;
-}
-.toast {
-  animation: toastSlideDown 0.3s ease forwards;
-  opacity: 0;
-  transform: translateY(-20px) translateX(20px);
-}
-@keyframes toastSlideDown {
-  to { opacity: 1; transform: translateY(0) translateX(0); }
-}
+/* Toast styles consolidated in section 9. */
 
 /* =============================================================================
    PATCH — Sidebar brand alignment fix (definitive)
@@ -5189,7 +5865,7 @@ button.sidebar-brand {
   transition: background 0.12s, color 0.12s, padding-left 0.1s !important;
 }
 @keyframes toastSlideOut {
-  to { opacity: 0; transform: translateY(-10px) translateX(20px); }
+  to { opacity: 0; transform: translateX(32px); }
 }
 
 /* =============================================================================
@@ -5462,4 +6138,90 @@ textarea[readonly] {
    ============================================================================= */
 #feedback-fab {
   z-index: 9050 !important;
+}
+
+/* =============================================================================
+   PATCH — Fix horizontal scrollbar on admin tables caused by icon hover effects
+   (v2 — tooltip visible, no scrollbar)
+
+   Root cause (two combined issues):
+   1. transform: scale(1.1) on .admin-btn-icon/.admin-btn-danger — Chromium
+      includes transformed paint bounds in the overflow scroll calculation of
+      .admin-table-wrap (overflow-x: auto), triggering a scrollbar.
+   2. The tooltip ::after (position: absolute, white-space: nowrap) is anchored
+      at left:50% of the button. When the button is near the right edge of the
+      table, the centered tooltip overflows right and also triggers the scrollbar.
+
+   Fix strategy:
+   a) SCALE → replaced with a box-shadow glow + brightness effect on the action
+      buttons. box-shadow does NOT affect layout bounds, so it never triggers the
+      overflow scroll calculation. transform: scale() is explicitly cancelled.
+   b) TOOLTIP → re-anchored to the right edge of the button (opens leftward) so
+      it always stays within the table bounds regardless of column position.
+      overflow: hidden was intentionally NOT used on the td because it would clip
+      the absolutely-positioned tooltip pseudo-element.
+   ============================================================================= */
+
+/* (a) Replace scale() with a layout-safe glow effect on admin action buttons */
+.admin-btn-icon:hover,
+.admin-btn-danger:hover {
+  transform: none !important;
+  filter: brightness(1.18) !important;
+  box-shadow: 0 0 0 2px var(--accent-border) !important;
+}
+.admin-btn-danger:hover {
+  box-shadow: 0 0 0 2px rgba(248, 81, 73, 0.35) !important;
+}
+
+/* (b) Re-anchor tooltip to the right edge of action buttons so it opens leftward */
+.admin-btn-icon[data-tooltip]::after,
+.admin-btn-danger[data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: translateX(0) translateY(4px);
+}
+.admin-btn-icon[data-tooltip]:hover::after,
+.admin-btn-danger[data-tooltip]:hover::after {
+  transform: translateX(0) translateY(0);
+}
+
+/* Arrow: re-anchor to right as well */
+.admin-btn-icon[data-tooltip]::before,
+.admin-btn-danger[data-tooltip]::before {
+  left: auto;
+  right: 11px;
+  transform: translateX(0) translateY(4px);
+}
+.admin-btn-icon[data-tooltip]:hover::before,
+.admin-btn-danger[data-tooltip]:hover::before {
+  transform: translateX(0) translateY(0);
+}
+/* =============================================================================
+   PATCH — Topbar tooltip direction (open downward to avoid top-edge clipping)
+   Buttons inside #app-topbar sit at the top of the viewport. The default tooltip
+   opens above (bottom: calc(100% + 6px)) and gets clipped by the screen edge.
+   These rules mirror the [data-tooltip-pos="bottom"] variant and are applied
+   automatically by applyTooltips() via data-tooltip-pos="bottom" on topbar btns.
+   ============================================================================= */
+
+/* The JS already tags topbar buttons with data-tooltip-pos="bottom" via
+   applyTooltips, so the existing [data-tooltip-pos="bottom"] CSS handles it.
+   This rule is a belt-and-suspenders fallback targeting the class directly. */
+#app-topbar [data-tooltip]::after {
+  bottom: auto;
+  top: calc(100% + 6px);
+  transform: translateX(-50%) translateY(-4px);
+}
+#app-topbar [data-tooltip]:hover::after {
+  transform: translateX(-50%) translateY(0);
+}
+#app-topbar [data-tooltip]::before {
+  bottom: auto;
+  top: calc(100% + 1px);
+  transform: translateX(-50%) translateY(-4px);
+  border-top-color: transparent;
+  border-bottom-color: var(--border-muted);
+}
+#app-topbar [data-tooltip]:hover::before {
+  transform: translateX(-50%) translateY(0);
 }

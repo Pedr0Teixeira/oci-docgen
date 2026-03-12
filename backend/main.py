@@ -34,6 +34,32 @@ logging.basicConfig(level=logging.INFO)
 # App + CORS
 # ==============================================================================
 
+# ==============================================================================
+# Helper functions
+# ==============================================================================
+
+# Map OCI error substrings to i18n keys so the frontend can translate them.
+# Patterns are checked in order; first match wins.
+_OCI_ERROR_MAP = [
+    ("OCI_ERR:tenancy_id_not_found",          "OCI_ERR:tenancy_id_not_found"),
+    ("OCI_ERR:identity_client_init_failed",   "OCI_ERR:identity_client_init_failed"),
+    ("OCI_ERR:compute_client_init_failed",    "OCI_ERR:compute_client_init_failed"),
+    ("not a private key",                     "OCI_ERR:invalid_private_key"),
+    ("passphrase is incorrect",               "OCI_ERR:invalid_passphrase"),
+    ("Could not deserialize key data",        "OCI_ERR:invalid_key_format"),
+    ("AuthenticationError",                   "OCI_ERR:auth_failed"),
+    ("404",                                   "OCI_ERR:not_found"),
+    ("401",                                   "OCI_ERR:unauthorized"),
+    ("403",                                   "OCI_ERR:forbidden"),
+]
+
+def _translate_oci_error(msg: str) -> str:
+    """Returns an OCI_ERR: key if the message matches a known pattern, else the raw message."""
+    for pattern, key in _OCI_ERROR_MAP:
+        if pattern in msg:
+            return key
+    return msg
+
 app = FastAPI(
     title="OCI DocGen API",
     version="2.3.0",
@@ -73,6 +99,10 @@ def _optional_user(request: Request) -> Optional[dict]:
     token = _get_token(request)
     return auth.get_session_user(token) if token else None
 
+
+# ==============================================================================
+# Auth Pydantic models
+# ==============================================================================
 
 class AuthRequest(BaseModel):
     username: str
@@ -254,7 +284,7 @@ async def get_my_permissions(request: Request):
 
     allowed = auth.get_user_allowed_doc_types(user["id"])
     if allowed is None:
-        # No group membership means no doc-type restrictions.
+        # In no groups → no restrictions
         return {"allowed": ALL_TYPES, "is_admin": False, "is_anonymous": False}
 
     return {"allowed": allowed, "is_admin": False, "is_anonymous": False}
@@ -278,7 +308,9 @@ async def list_profiles(request: Request):
     user = _optional_user(request)
     is_admin = user.get("is_admin", False) if user else False
     if user:
-        profiles = auth.get_profiles_for_user(user["id"], is_admin)
+        # include_inactive=True so the frontend can show inactive profiles as
+        # locked/disabled items in the selector instead of silently hiding them.
+        profiles = auth.get_profiles_for_user(user["id"], is_admin, include_inactive=True)
     else:
         # Anonymous users: only public profiles
         all_profiles = auth.list_tenancy_profiles()
@@ -310,6 +342,7 @@ async def admin_create_profile(request: Request):
         created_by=user["id"],
         is_public=bool(body.get("is_public", False)),
         visibility=body.get("visibility", "by_group"),
+        tenancy_name=body.get("tenancy_name"),
         tenancy_ocid=body.get("tenancy_ocid"),
         user_ocid=body.get("user_ocid"),
         fingerprint=body.get("fingerprint"),
@@ -331,6 +364,7 @@ async def admin_update_profile(profile_id: int, request: Request):
         name=body.get("name"),
         auth_method=body.get("auth_method"),
         region=body.get("region"),
+        tenancy_name=body.get("tenancy_name"),
         is_public=body.get("is_public"),
         is_active=body.get("is_active"),
         visibility=body.get("visibility"),
@@ -348,6 +382,21 @@ async def admin_update_profile(profile_id: int, request: Request):
 async def admin_delete_profile(profile_id: int, request: Request):
     _require_admin(request)
     auth.delete_tenancy_profile(profile_id)
+    return {"ok": True}
+
+
+@app.get("/api/admin/profiles/{profile_id}/groups", summary="Grupos com acesso ao profile (admin)")
+async def admin_get_profile_groups(profile_id: int, request: Request):
+    _require_admin(request)
+    return auth.get_profile_groups(profile_id)
+
+
+@app.put("/api/admin/profiles/{profile_id}/groups", summary="Definir grupos com acesso ao profile (admin)")
+async def admin_set_profile_groups(profile_id: int, request: Request):
+    _require_admin(request)
+    body = await request.json()
+    group_ids = body.get("group_ids", [])
+    auth.set_profile_groups(profile_id, group_ids)
     return {"ok": True}
 
 
@@ -402,6 +451,118 @@ async def get_metrics(request: Request):
 
 
 # ==============================================================================
+# Announcements (system-wide pinned notifications)
+# ==============================================================================
+
+@app.get("/api/announcements", summary="Listar avisos ativos (todos os usuarios)")
+async def get_active_announcements(request: Request):
+    # Accessible to all authenticated users (admins included)
+    user = _optional_user(request)
+    if not user:
+        raise HTTPException(401, "Nao autenticado.")
+    return auth.list_announcements(active_only=True)
+
+
+@app.get("/api/admin/announcements", summary="Listar todos os avisos (admin)")
+async def admin_list_announcements(request: Request):
+    _require_admin(request)
+    return auth.list_announcements(active_only=False)
+
+
+@app.post("/api/admin/announcements", summary="Criar aviso (admin)")
+async def admin_create_announcement(request: Request):
+    user = _require_admin(request)
+    body = await request.json()
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(400, "Titulo e obrigatorio.")
+    ann = auth.create_announcement(
+        title=title,
+        message=body.get("message", ""),
+        type_=body.get("type", "info"),
+        expires_at=body.get("expires_at") or None,
+        created_by=user["id"],
+    )
+    return ann
+
+
+@app.patch("/api/admin/announcements/{ann_id}", summary="Atualizar aviso (admin)")
+async def admin_update_announcement(ann_id: int, request: Request):
+    _require_admin(request)
+    body = await request.json()
+    updated = auth.update_announcement(
+        ann_id,
+        title=body.get("title"),
+        message=body.get("message"),
+        type=body.get("type"),
+        expires_at=body.get("expires_at"),
+        is_active=body.get("is_active"),
+    )
+    if not updated:
+        raise HTTPException(404, "Aviso nao encontrado.")
+    return updated
+
+
+@app.delete("/api/admin/announcements/{ann_id}", summary="Excluir aviso (admin)")
+async def admin_delete_announcement(ann_id: int, request: Request):
+    _require_admin(request)
+    if not auth.delete_announcement(ann_id):
+        raise HTTPException(404, "Aviso nao encontrado.")
+    return {"ok": True}
+
+
+# ==============================================================================
+# Profile connection validation (inline credentials, nothing saved to DB)
+# ==============================================================================
+
+@app.post("/api/admin/profiles/validate", summary="Validar credenciais de um Tenancy Profile (admin)")
+async def validate_profile_credentials(request: Request):
+    """
+    Validates OCI credentials inline or from an existing saved profile.
+    When profile_id is supplied without an inline private_key_pem, the saved
+    (decrypted) key is loaded from the database. This covers the edit-mode
+    case where the PEM is stored but not re-transmitted to the browser.
+    Returns {"ok": true, "region_count": N} on success, or raises HTTP 422/503.
+    """
+    _require_admin(request)
+    body = await request.json()
+
+    auth_method = (body.get("auth_method") or "API_KEY").upper()
+
+    # Resolve private key: inline takes priority; fall back to saved profile key
+    private_key_pem = body.get("private_key_pem") or ""
+    profile_id = body.get("profile_id")
+    if not private_key_pem and profile_id:
+        saved = auth.get_tenancy_profile(int(profile_id), decrypt_key=True)
+        if saved:
+            private_key_pem = saved.get("private_key_pem") or ""
+
+    profile = {
+        "auth_method":     auth_method,
+        "tenancy_ocid":    body.get("tenancy_ocid") or "",
+        "user_ocid":       body.get("user_ocid") or "",
+        "fingerprint":     body.get("fingerprint") or "",
+        "private_key_pem": private_key_pem,
+        "region":          body.get("region") or "",
+        "name":            body.get("name") or "validate",
+    }
+
+    if auth_method == "API_KEY":
+        missing = [f for f in ("tenancy_ocid", "user_ocid", "fingerprint", "private_key_pem")
+                   if not profile.get(f)]
+        if missing:
+            raise HTTPException(422, f"Campos obrigatórios ausentes: {', '.join(missing)}")
+
+    try:
+        regions = oci_connector.list_regions(profile)
+        return {"ok": True, "region_count": len(regions)}
+    except ConnectionError as e:
+        raise HTTPException(503, _translate_oci_error(str(e)))
+    except Exception as e:
+        raise HTTPException(503, _translate_oci_error(str(e)))
+
+
+# ==============================================================================
 # Query endpoints
 # ==============================================================================
 
@@ -415,7 +576,7 @@ async def get_regions(profile_id: Optional[int] = None, request: Request = None)
     try:
         return oci_connector.list_regions(profile)
     except ConnectionError as e:
-        raise HTTPException(503, str(e))
+        raise HTTPException(503, _translate_oci_error(str(e)))
 
 
 @app.get("/api/{region}/compartments", summary="Listar Compartimentos em uma Região")
@@ -457,6 +618,16 @@ async def start_data_collection(payload: dict = Body(...)):
 
     try:
         profile_id = payload.get("profile_id") or None
+
+        # Guard: if a profile_id was provided, ensure it exists and is active
+        # before dispatching the Celery task. Prevents collection using a profile
+        # that was deactivated after the user loaded the generator page.
+        if profile_id is not None:
+            profile_check = auth.get_tenancy_profile(int(profile_id))
+            if not profile_check:
+                raise HTTPException(404, "Tenancy Profile não encontrado.")
+            if not profile_check.get("is_active"):
+                raise HTTPException(403, "Tenancy Profile desativado. Ative-o antes de iniciar a coleta.")
 
         if collection_type == "full_infra":
             compartment_id = payload.get("compartment_id")
@@ -548,6 +719,7 @@ async def create_document(
             responsible_name=request_data.responsible_name,
             image_sections=resolved_sections,
             lang=request_data.lang,
+            compartment_name=request_data.compartment_name,
         )
 
         if not os.path.exists(file_path):

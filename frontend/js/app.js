@@ -1,18 +1,26 @@
 // =============================================================================
-// OCI DocGen — Frontend Application
-// Manages the full UI flow: region/compartment selection, async data collection,
-// infrastructure summary rendering, and .docx generation/download.
+// PT-BR: Aplicação frontend do OCI DocGen.
+//        Gerencia o fluxo completo da interface: seleção de região/compartimento,
+//        inicio de coletas assíncronas, exibição do resumo de infraestrutura
+//        e geração/download de documentos .docx.
+// EN: OCI DocGen frontend application.
+//     Manages the complete UI flow: region/compartment selection,
+//     async collection start, infrastructure summary display,
+//     and .docx document generation/download.
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
 
   // ===========================================================================
-  // Settings and Constants
+  // PT-BR: Configurações e Constantes
+  // EN: Settings and Constants
   // ===========================================================================
+  //const API_BASE_URL = 'http://127.0.0.1:8000'; // Local dev (sem Docker)
   const API_BASE_URL = ''; // Docker / produção (nginx proxy)
 
   // ===========================================================================
-  // DOM Element Selectors
+  // PT-BR: Seletores de Elementos do DOM
+  // EN: DOM Element Selectors
   // ===========================================================================
   const mainAppContainer = document.getElementById('app-shell');
   const profileContainer = document.getElementById('profile-select-container');
@@ -83,7 +91,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const metricsLoginCta    = document.getElementById('metrics-login-cta');
 
   // ===========================================================================
-  // Inline SVG Icon Definitions
+  // PT-BR: Definições de Ícones SVG inline
+  // EN: Inline SVG Icon Definitions
   // ===========================================================================
   const ICONS = {
     WAF:          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>`,
@@ -104,7 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // ===========================================================================
-  // Lifecycle State Label Normalizer
+  // PT-BR: Helper para normalizar labels de estado de ciclo de vida
+  // EN: Helper to normalize lifecycle state display labels
   // ===========================================================================
   function getStateLabel(state) {
     const s = (state || '').toUpperCase();
@@ -121,7 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
-  // Global Application State
+  // PT-BR: Estado Global da Aplicação
+  // EN: Global Application State
   // ===========================================================================
   let selectedRegion = null;
   let selectedDocType = null;
@@ -142,7 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let allInstancesData = [];
 
   // ===========================================================================
-  // Internationalization (i18n)
+  // PT-BR: Funções de Internacionalização (i18n)
+  // EN: Internationalization (i18n) Functions
   // ===========================================================================
 
   const loadTranslations = async (lang) => {
@@ -305,26 +317,226 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // User Interface Functions
+  // PT-BR: Funções de Interface do Usuário
+  // EN: User Interface Functions
   // ===========================================================================
 
-  function showToast(message, type = 'success') {
-    if (!toastContainer) return;
+  // SVG icons per toast/notification type
+  const _TOAST_ICONS = {
+    success: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+    error:   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    warning: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    info:    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><polyline points="11 12 12 12 12 16"/></svg>`,
+  };
 
+  /**
+   * Copies the native `title` attribute to `data-tooltip` on every icon button
+   * inside `root` (defaults to document). This lets our CSS tooltip replace
+   * the slow browser default while keeping the semantic title for accessibility.
+   */
+  function applyTooltips(root = document) {
+    root.querySelectorAll(
+      '.admin-btn-icon[title], .admin-icon-btn[title], .topbar-icon-btn[title], ' +
+      '.notif-bell-btn[title], .ann-panel-close-btn[title], .notif-panel-close-btn[title], ' +
+      '.profile-validate-btn[title], button.admin-btn-danger[title]'
+    ).forEach(el => {
+      const tip = el.getAttribute('title');
+      if (tip) {
+        el.setAttribute('data-tooltip', tip);
+        el.removeAttribute('title'); // prevent double tooltip
+      }
+      // Topbar buttons sit at the very top of the viewport — open tooltip downward
+      // so it is never clipped by the top edge of the screen.
+      if (el.closest('#app-topbar') && !el.hasAttribute('data-tooltip-pos')) {
+        el.setAttribute('data-tooltip-pos', 'bottom');
+      }
+    });
+  }
+
+  // Maps OCI_ERR: keys from the backend to frontend i18n translation keys
+  const _OCI_ERR_MAP = {
+    'OCI_ERR:tenancy_id_not_found':        'oci_err.tenancy_id_not_found',
+    'OCI_ERR:identity_client_init_failed': 'oci_err.identity_client_init_failed',
+    'OCI_ERR:compute_client_init_failed':  'oci_err.compute_client_init_failed',
+    'OCI_ERR:invalid_private_key':         'oci_err.invalid_private_key',
+    'OCI_ERR:invalid_passphrase':          'oci_err.invalid_passphrase',
+    'OCI_ERR:invalid_key_format':          'oci_err.invalid_key_format',
+    'OCI_ERR:auth_failed':                 'oci_err.auth_failed',
+    'OCI_ERR:not_found':                   'oci_err.not_found',
+    'OCI_ERR:unauthorized':                'oci_err.unauthorized',
+    'OCI_ERR:forbidden':                   'oci_err.forbidden',
+  };
+
+  /** Translates an OCI_ERR: key to the current language, or returns the raw string. */
+  function translateOciError(msg) {
+    if (!msg) return msg;
+    const key = _OCI_ERR_MAP[msg.trim()];
+    if (key) return t(key) || msg;
+    // Also scan for English substrings coming through untagged
+    if (msg.includes('not a private key') || msg.includes('passphrase is incorrect'))
+      return t('oci_err.invalid_private_key') || msg;
+    if (msg.includes('Tenancy ID not found'))
+      return t('oci_err.tenancy_id_not_found') || msg;
+    return msg;
+  }
+
+  // ===========================================================================
+  // Notification Center
+  // ===========================================================================
+  let _notifications = [];   // { id, type, title, message, time, unread }
+  let _notifUnread   = 0;
+
+  function _notifFormatTime(date) {
+    const now  = new Date();
+    const diff = Math.floor((now - date) / 1000);
+    if (diff < 60)   return t('notif.just_now') || 'Agora';
+    if (diff < 3600) return `${Math.floor(diff / 60)} min`;
+    if (diff < 86400) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' +
+           date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function _renderNotifList() {
+    const list = document.getElementById('notif-list');
+    if (!list) return;
+    if (_notifications.length === 0) {
+      list.innerHTML = `<div class="notif-empty">${t('notif.empty') || 'Nenhuma notificação'}</div>`;
+      return;
+    }
+    list.innerHTML = _notifications.map(n => `
+      <div class="notif-item ${n.type}${n.unread ? ' unread' : ''}" data-id="${n.id}">
+        <div class="notif-item-icon">${_TOAST_ICONS[n.type] || _TOAST_ICONS.info}</div>
+        <div class="notif-item-body">
+          <div class="notif-item-title">${n.title || ''}</div>
+          ${n.message ? `<div class="notif-item-msg">${n.message}</div>` : ''}
+          <div class="notif-item-time">${_notifFormatTime(n.time)}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  function _updateBadge() {
+    const badge = document.getElementById('notif-badge');
+    const bellBtn = document.getElementById('notif-bell-btn');
+    if (!badge) return;
+    if (_notifUnread > 0) {
+      badge.textContent = _notifUnread > 99 ? '99+' : _notifUnread;
+      badge.classList.remove('hidden');
+      if (bellBtn) bellBtn.classList.add('has-unread');
+    } else {
+      badge.classList.add('hidden');
+      if (bellBtn) bellBtn.classList.remove('has-unread');
+    }
+  }
+
+  function _addNotification(type, title, message) {
+    const entry = {
+      id:      Date.now() + Math.random(),
+      type,
+      title,
+      message,
+      time:    new Date(),
+      unread:  true,
+    };
+    // Pinned items go to top; others prepend (newest first)
+    _notifications.unshift(entry);
+    // Keep max 50 items
+    if (_notifications.length > 50) _notifications.length = 50;
+    _notifUnread++;
+    _updateBadge();
+    // If panel is open, re-render
+    const panel = document.getElementById('notif-panel');
+    if (panel && !panel.classList.contains('hidden')) _renderNotifList();
+  }
+
+  // Bell button toggle
+  document.getElementById('notif-bell-btn')?.addEventListener('click', () => {
+    const panel    = document.getElementById('notif-panel');
+    const backdrop = document.getElementById('notif-panel-backdrop');
+    if (!panel) return;
+    const isHidden = panel.classList.contains('hidden');
+    // Close ann panel if open
+    document.getElementById('ann-panel')?.classList.add('hidden');
+    document.getElementById('ann-panel-backdrop')?.classList.add('hidden');
+    panel.classList.toggle('hidden', !isHidden);
+    backdrop?.classList.toggle('hidden', !isHidden);
+    if (isHidden) {
+      _notifications.forEach(n => { n.unread = false; });
+      _notifUnread = 0;
+      _updateBadge();
+      _renderNotifList();
+    }
+  });
+
+  document.getElementById('notif-panel-close')?.addEventListener('click', () => {
+    document.getElementById('notif-panel')?.classList.add('hidden');
+    document.getElementById('notif-panel-backdrop')?.classList.add('hidden');
+  });
+
+  document.getElementById('notif-panel-backdrop')?.addEventListener('click', () => {
+    document.getElementById('notif-panel')?.classList.add('hidden');
+    document.getElementById('notif-panel-backdrop')?.classList.add('hidden');
+  });
+
+  document.getElementById('notif-clear-btn')?.addEventListener('click', () => {
+    _notifications = [];
+    _notifUnread = 0;
+    _updateBadge();
+    _renderNotifList();
+  });
+
+  // window.addSystemAnnouncement removed — announcements have their own panel now
+  window.addSystemAnnouncement = function(title, message) {
+    _addNotification('warning', title, message);
+  };
+
+  /**
+   * Shows a toast notification in the top-right corner AND records it in the
+   * notification center.
+   * @param {string}  message   - Main text (or subtitle when title is provided).
+   * @param {string}  type      - 'success' | 'error' | 'warning' | 'info'
+   * @param {string}  [title]   - Optional bold heading above the message.
+   * @param {number}  [duration]- Auto-dismiss in ms. Defaults: success=5000, error/warning=8000.
+   */
+  function showToast(message, type = 'success', title = '', duration = -1) {
+    // Translate OCI backend error codes before display
+    message = translateOciError(message);
+    title   = title ? translateOciError(title) : title;
+
+    // Default duration depends on severity
+    if (duration === -1) {
+      duration = (type === 'error' || type === 'warning') ? 8000 : 5000;
+    }
+
+    // Record in notification center
+    _addNotification(type, title || message, title ? message : '', false);
+
+    if (!toastContainer) return;
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
 
-    const icon = type === 'success' ?
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toast-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>` :
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toast-icon"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>`;
+    const icon   = _TOAST_ICONS[type] || _TOAST_ICONS.info;
+    const titleHtml = title ? `<div class="toast-title">${title}</div>` : '';
+    const msgHtml   = message ? `<div class="toast-msg">${message}</div>` : '';
+    const bodyHtml  = title
+      ? `<div class="toast-body">${titleHtml}${msgHtml}</div>`
+      : `<div class="toast-body"><div class="toast-title">${message}</div></div>`;
 
-    toast.innerHTML = `${icon}<span>${message}</span>`;
+    const closeBtn = `<button class="toast-close" aria-label="Fechar">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>`;
+
+    toast.innerHTML = `<div class="toast-icon-wrap">${icon}</div>${bodyHtml}${closeBtn}`;
     toastContainer.appendChild(toast);
 
-    setTimeout(() => {
-      toast.style.animation = 'toastSlideOut 0.3s ease forwards';
-      setTimeout(() => toast.remove(), 310);
-    }, 4500);
+    const dismiss = () => {
+      toast.style.animation = 'toastSlideOut 0.28s ease forwards';
+      setTimeout(() => toast.remove(), 290);
+    };
+
+    toast.querySelector('.toast-close').addEventListener('click', dismiss);
+    if (duration > 0) setTimeout(dismiss, duration);
   }
 
   const showProgress = () => {
@@ -659,12 +871,48 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
-  // Backend API Calls
+  // PT-BR: Funções de Chamadas à API Backend
+  // EN: Backend API Call Functions
   // ===========================================================================
 
   /**
    * Fetches the list of available OCI regions and populates the selector.
    */
+  /**
+   * Enables or disables all wizard steps downstream of the profile selector
+   * (region, doc-type, compartment) and the fetch button.
+   * Called whenever the selected profile changes or the page loads.
+   * @param {boolean} enabled
+   */
+  function setDownstreamStepsState(enabled) {
+    const containers = [regionContainer, docTypeContainer, compartmentContainer];
+    containers.forEach(c => {
+      if (!c) return;
+      const sel = c.querySelector('.select-selected, .custom-select-selected');
+      if (!sel) return;
+      if (enabled) {
+        sel.classList.remove('disabled');
+      } else {
+        sel.classList.add('disabled');
+        // Reset display back to placeholder
+        const disp = sel.querySelector('.selected-item-display');
+        const placeholders = {
+          [regionContainer]:      t('step1_placeholder'),
+          [docTypeContainer]:     t('step2_placeholder'),
+          [compartmentContainer]: t('step3_placeholder'),
+        };
+        if (disp) disp.innerHTML = `<span class="placeholder-text">${placeholders[c] || '—'}</span>`;
+        // Close dropdown if open
+        const dd = c.querySelector('.custom-select-dropdown, .select-items');
+        if (dd) { dd.classList.remove('open'); dd.classList.add('select-hide'); }
+      }
+    });
+    // Also lock the fetch button when no valid profile
+    if (!enabled) {
+      if (fetchBtn) fetchBtn.disabled = true;
+    }
+  }
+
   const fetchRegions = async () => {
     if (!selectedProfileId) return;
     try {
@@ -845,7 +1093,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // Async Data Collection Flow
+  // PT-BR: Fluxo Assíncrono e Coleta de Dados
+  // EN: Asynchronous Flow and Data Collection
   // ===========================================================================
 
   /**
@@ -912,6 +1161,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!response.ok) {
         const err = await response.json();
+        // If the profile was deactivated after the page loaded, refresh the
+        // profile selector so the UI immediately reflects the current state.
+        if (response.status === 403 || response.status === 404) {
+          sessionStorage.removeItem('selectedProfileId');
+          selectedProfileId = null;
+          await loadProfileSelector();
+        }
         throw new Error(err.detail || 'Falha ao iniciar a tarefa de coleta.');
       }
 
@@ -999,7 +1255,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ===========================================================================
-  // Infrastructure Summary and Document Generation
+  // PT-BR: Geração de Resumo de Infraestrutura e Documentos
+  // EN: Infrastructure Summary and Document Generation
   // ===========================================================================
 
   /**
@@ -1008,8 +1265,10 @@ document.addEventListener('DOMContentLoaded', () => {
    * @returns {string} The generated HTML string.
    */
   // ===========================================================================
-  // WAF Policy HTML Builder
-  // Extracted from the main summary builder to avoid nested backtick conflicts.
+  // PT-BR: Constrói o HTML das políticas WAF para o resumo de infraestrutura completa.
+  //        Separado para evitar backticks aninhados em template literals.
+  // EN: Builds WAF policy HTML for the full infrastructure summary.
+  //     Extracted to avoid nested backtick issues inside template literals.
   // ===========================================================================
   function buildWafInfraSectionHtml(policies, createTable) {
     let html = '';
@@ -1020,7 +1279,8 @@ document.addEventListener('DOMContentLoaded', () => {
       let wafCardContent   = '';
 
       if (!isDeleted) {
-        // Iterate over all bound firewalls (integrations) with fallback to singular integration.
+        // PT-BR: Itera sobre todos os firewalls vinculados (integrations) com fallback para integration singular.
+        // EN: Iterate over all bound firewalls (integrations) with fallback to singular integration.
         const integrations = (policy.integrations && policy.integrations.length > 0)
           ? policy.integrations
           : (policy.integration ? [policy.integration] : []);
@@ -1092,7 +1352,8 @@ document.addEventListener('DOMContentLoaded', () => {
             p.lifecycle_state?.toUpperCase() !== 'DELETED'
         );
         activePolicies.forEach(policy => {
-            // Iterate over all policy firewalls to populate all bound LBs.
+            // PT-BR: Itera sobre todos os firewalls da política para popular todos os LBs.
+            // EN: Iterate over all policy firewalls to populate all LBs.
             const integrations = (policy.integrations && policy.integrations.length > 0)
                 ? policy.integrations
                 : (policy.integration ? [policy.integration] : []);
@@ -1575,7 +1836,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isDeleted) {
             wafCardContent = `<p class="no-data-message">${t('doc.messages.resource_deleted_info') || 'Recurso deletado.'}</p>`;
         } else {
-            // Use `integrations` (all firewalls) with fallback to singular `integration`.
+            // PT-BR: Usa `integrations` (todos os firewalls) com fallback para `integration` singular.
+            // EN: Use `integrations` (all firewalls) with fallback to singular `integration`.
             const integrations = (policy.integrations && policy.integrations.length > 0)
                 ? policy.integrations
                 : (policy.integration ? [policy.integration] : []);
@@ -1886,7 +2148,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('doc.messages.no_network_found')}</p>`}</div></fieldset>
       `;
     } else { // Full Infra
-      // Active WAF: merge policies into the full infrastructure summary.
+      // PT-BR: WAF ativo: integra políticas ao resumo de infraestrutura completa.
+      // EN: Active WAF: merges policies into the full infrastructure summary.
       const activeWafPolicies = (waf_policies || []).filter(p =>
           p.lifecycle_state?.toUpperCase() !== 'DELETED'
       );
@@ -1895,8 +2158,12 @@ document.addEventListener('DOMContentLoaded', () => {
           ['ACTIVE','PENDING_DELETION'].includes((c.lifecycle_state || '').toUpperCase())
       ).length > 0;
 
-      // If WAF policies exist, inject the WAF and Certificates sections.
-      // Reuses `wafHtml` computed above — same rendering as the WAF Report view.
+      // PT-BR: Se há políticas WAF no compartimento, injeta a seção de WAF e Certificados.
+      //        Reutiliza `wafHtml` — já calculado acima com o UX idêntico ao WAF Report
+      //        (tabela de Firewall com Attachment State, grid de regras, etc.).
+      // EN: If WAF policies exist, inject WAF and Certificates sections.
+      //     Reuses `wafHtml` — already computed above with the same UX as the WAF Report
+      //     (Firewall table with Attachment State, rules grid, etc.).
       const wafInfraSection  = hasWaf  ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.WAF + t('summary.waf_policies') + '</legend><div class="instances-container">' + wafHtml + '</div></fieldset>' : '';
       const certInfraSection = hasCerts ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.CERTIFICATES + (t('summary.section.certificates') || 'Certificados TLS/SSL') + '</legend><div class="instances-container">' + renderCertificates(certificates) + '</div></fieldset>' : '';
 
@@ -3030,7 +3297,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Always show the profile step — consistent with other wizard steps
     step.style.display = '';
-    const profileOptions = availableProfiles.map(p => ({ key: p.id, id: p.id, name: p.name, display_name: p.name }));
+
+    // Separate active from inactive so inactive ones appear at the bottom as locked items
+    const activeProfiles   = availableProfiles.filter(p => p.is_active);
+    const inactiveProfiles = availableProfiles.filter(p => !p.is_active);
+
+    // Auto-select only among active profiles
+    const savedId2 = parseInt(sessionStorage.getItem('selectedProfileId'), 10);
+    const activeMatch = activeProfiles.find(p => p.id === savedId2);
+    selectedProfileId = activeMatch ? savedId2 : (activeProfiles[0]?.id ?? null);
+
+    const profileOptions = [
+      ...activeProfiles.map(p => ({
+        key: p.id, id: p.id,
+        name: p.name, display_name: p.name,
+      })),
+      ...inactiveProfiles.map(p => ({
+        key: p.id, id: p.id,
+        name: p.name,
+        display_name: `${p.name} — Inativo`,
+        locked: true,
+      })),
+    ];
 
     // Add "create profile" action for admins at bottom of list
     if (currentUser?.is_admin) {
@@ -3053,19 +3341,24 @@ document.addEventListener('DOMContentLoaded', () => {
       selectedDocType = null;
       selectedCompartmentId = null;
       selectedCompartmentName = null;
-      // Reset all downstream selects visually
-      const _placeholders = [
-        [regionContainer, t('step1_placeholder')],
-        [docTypeContainer, t('step2_placeholder')],
-        [compartmentContainer, t('step3_placeholder')],
-      ];
-      _placeholders.forEach(([c, ph]) => {
-        if (!c) return;
-        const disp = c.querySelector('.selected-item-display');
-        if (disp) disp.innerHTML = `<span class="placeholder-text">${ph}</span>`;
-        const dd = c.querySelector('.custom-select-dropdown');
-        if (dd) dd.classList.remove('open');
-      });
+
+      // Check if the selected profile is active before enabling downstream steps
+      const _chosenProfile = availableProfiles.find(p => p.id === selectedProfileId);
+      const _profileIsActive = _chosenProfile && _chosenProfile.is_active;
+
+      // Disable downstream steps immediately while we reset, then re-enable if active
+      setDownstreamStepsState(false);
+
+      if (!_profileIsActive) {
+        // Profile is inactive — keep steps locked, clear state, do not fetch
+        selectedProfileId = null;
+        sessionStorage.removeItem('selectedProfileId');
+        showToast('Tenancy Profile desativado. Selecione um profile ativo para continuar.', 'error');
+        return;
+      }
+
+      // Profile is active — re-enable steps and fetch regions
+      setDownstreamStepsState(true);
       fetchRegions();
     }, true, false);
 
@@ -3078,7 +3371,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    await fetchRegions();
+    // Enable/disable downstream steps based on whether a valid active profile
+    // is pre-selected on page load (selectedProfileId is null when all profiles
+    // are inactive or none matched the saved session value).
+    if (selectedProfileId) {
+      setDownstreamStepsState(true);
+      await fetchRegions();
+    } else {
+      setDownstreamStepsState(false);
+    }
   }
 
   function updateProfileBadge() {
@@ -3130,6 +3431,10 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Authorization': `Bearer ${session.token}` },
       });
     } catch(e) { /* silent */ }
+    // Hide megaphone on logout
+    const annBtn = document.getElementById('ann-topbar-btn');
+    if (annBtn) annBtn.classList.add('hidden');
+    _activeAnns = [];
   }
 
   // ── Login submit ─────────────────────────────────────────────────────────────
@@ -3154,6 +3459,9 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchAndApplyPermissions();
         renderSidebarHistory();
         showToast((t('toast.welcome') || 'Bem-vindo, {name}!').replace('{name}', data.username), 'success');
+        // Load active announcements now that the user is authenticated
+        _showAnnBtn();
+        fetchActiveAnnouncements();
         // Force password change for first admin login
         if (data.force_password_change) {
           setTimeout(() => showForcePwModal(), 400);
@@ -3970,7 +4278,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadAdminFeedback() {
     const wrap = document.getElementById('admin-feedback-wrap');
     if (!wrap) return;
-    wrap.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    wrap.innerHTML = `<p class="no-data-message">${t('loading') || 'Loading…'}</p>`;
     try {
       const res = await fetch(`${API_BASE_URL}/api/feedback`, { headers: getAuthHeaders() });
       const items = await res.json();
@@ -4097,7 +4405,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadAdminUsers() {
     const wrap = document.getElementById('admin-users-table-wrap');
     if (!wrap) return;
-    wrap.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    wrap.innerHTML = `<p class="no-data-message">${t('loading') || 'Loading…'}</p>`;
     try {
       const res = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Falha ao carregar usuários.');
@@ -4115,7 +4423,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadAdminProfiles() {
     const wrap = document.getElementById('admin-profiles-table-wrap');
     if (!wrap) return;
-    wrap.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    wrap.innerHTML = `<p class="no-data-message">${t('loading') || 'Loading…'}</p>`;
     try {
       const res = await fetch(`${API_BASE_URL}/api/admin/profiles`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Erro ao carregar profiles.');
@@ -4166,6 +4474,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </tbody>
       </table>`;
 
+      applyTooltips(wrap);
       wrap.querySelectorAll('.admin-edit-profile').forEach(btn => {
         btn.addEventListener('click', () => openProfileModal(parseInt(btn.dataset.pid)));
       });
@@ -4213,8 +4522,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pubEl) pubEl.checked = false;
     const authEl = document.getElementById('profile-field-auth-method');
     if (authEl) { authEl.value = 'API_KEY'; toggleApiKeyFields('API_KEY'); }
-    // Reset visibility radio cards to default
-    _setVisibility('by_group');
+    // Reset visibility — no pre-selection for new profiles
+    _setVisibility(null);
     // Reset user assignments panel
     const uaWrap = document.getElementById('profile-user-assignments-wrap');
     if (uaWrap) uaWrap.innerHTML = '';
@@ -4242,15 +4551,20 @@ document.addEventListener('DOMContentLoaded', () => {
           _setVisibility(p.visibility || 'by_group');
           // Toggle user assignments panel visibility
           const uaSection = document.getElementById('profile-user-assignments-section');
-          if (uaSection) uaSection.style.display = p.visibility === 'by_user' ? '' : 'none';
+          const gaSection = document.getElementById('profile-group-assignments-section');
+          if (uaSection) uaSection.style.display = p.visibility === 'by_user'  ? '' : 'none';
+          if (gaSection) gaSection.style.display = p.visibility === 'by_group' ? '' : 'none';
           // Load assigned users
-          if (p.visibility === 'by_user') loadProfileUserAssignments(profileId);
+          if (p.visibility === 'by_user')  loadProfileUserAssignments(profileId);
+          if (p.visibility === 'by_group') loadProfileGroupAssignments(profileId);
         });
     } else {
       title.textContent = t('tenancy_modal.new');
       window._pemEditingProfileId = null;
       const uaSection = document.getElementById('profile-user-assignments-section');
+      const gaSection = document.getElementById('profile-group-assignments-section');
       if (uaSection) uaSection.style.display = 'none';
+      if (gaSection) gaSection.style.display = 'none';
       // Show PEM mode chooser for new profiles
       window._pemShowMode?.('choose');
     }
@@ -4270,13 +4584,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Visibility radio card helpers
   function _getVisibility() {
     const checked = document.querySelector('input[name="profile-visibility"]:checked');
-    return checked ? checked.value : 'by_group';
+    return checked ? checked.value : null;
   }
   function _setVisibility(val) {
     const radios = document.querySelectorAll('input[name="profile-visibility"]');
     radios.forEach(r => {
-      r.checked = r.value === val;
-      r.closest('.profile-vis-card')?.classList.toggle('profile-vis-card--active', r.value === val);
+      r.checked = val ? r.value === val : false;
+      r.closest('.profile-vis-card')?.classList.toggle('profile-vis-card--active', val ? r.value === val : false);
     });
     _toggleAnonCheckbox(val);
   }
@@ -4286,26 +4600,31 @@ document.addEventListener('DOMContentLoaded', () => {
     if (anonRow) anonRow.style.display = val === 'all_users' ? '' : 'none';
   }
 
-  // Show/hide user assignment section when visibility radio changes
+  // Show/hide user/group assignment sections when visibility radio changes
   document.getElementById('profile-vis-grid')?.addEventListener('change', e => {
     if (e.target.name === 'profile-visibility') {
+      const val = e.target.value;
       const uaSection = document.getElementById('profile-user-assignments-section');
-      if (uaSection) uaSection.style.display = e.target.value === 'by_user' ? '' : 'none';
-      if (e.target.value === 'by_user' && _editingProfileId) {
-        loadProfileUserAssignments(_editingProfileId);
-      }
-      _setVisibility(e.target.value);
+      const gaSection = document.getElementById('profile-group-assignments-section');
+      if (uaSection) uaSection.style.display = val === 'by_user'  ? '' : 'none';
+      if (gaSection) gaSection.style.display = val === 'by_group' ? '' : 'none';
+      // Always load — functions handle null profileId (new profile) gracefully
+      if (val === 'by_user')  loadProfileUserAssignments(_editingProfileId);
+      if (val === 'by_group') loadProfileGroupAssignments(_editingProfileId);
+      _setVisibility(val);
     }
   });
 
   async function loadProfileUserAssignments(profileId) {
     const wrap = document.getElementById('profile-user-assignments-wrap');
     if (!wrap) return;
-    wrap.innerHTML = '<span style="color:var(--text-muted);font-size:12px">Carregando usuários…</span>';
+    wrap.innerHTML = `<span style="color:var(--text-muted);font-size:12px">${t('loading') || 'Carregando…'}</span>`;
     try {
       const [usersRes, assignedRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/admin/users`, { headers: getAuthHeaders() }),
-        fetch(`${API_BASE_URL}/api/admin/profiles/${profileId}/users`, { headers: getAuthHeaders() }),
+        profileId
+          ? fetch(`${API_BASE_URL}/api/admin/profiles/${profileId}/users`, { headers: getAuthHeaders() })
+          : Promise.resolve({ ok: true, json: async () => [] }),
       ]);
       const allUsers    = usersRes.ok    ? await usersRes.json()    : [];
       const assignedRaw = assignedRes.ok ? await assignedRes.json() : [];
@@ -4314,7 +4633,31 @@ document.addEventListener('DOMContentLoaded', () => {
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:3px 0">
           <input type="checkbox" data-uid="${u.id}" ${assignedIds.has(u.id) ? 'checked' : ''}>
           ${u.username}${u.is_admin ? ' <span class="admin-badge" style="font-size:9px">Admin</span>' : ''}
-        </label>`).join('') || '<span style="color:var(--text-muted);font-size:12px">Nenhum usuário cadastrado.</span>';
+        </label>`).join('') || `<span style="color:var(--text-muted);font-size:12px">${t('label.no_users') || 'Nenhum usuário cadastrado.'}</span>`;
+    } catch(e) {
+      wrap.innerHTML = `<span style="color:var(--danger);font-size:12px">${e.message}</span>`;
+    }
+  }
+
+  async function loadProfileGroupAssignments(profileId) {
+    const wrap = document.getElementById('profile-group-assignments-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = `<span style="color:var(--text-muted);font-size:12px">${t('loading') || 'Carregando…'}</span>`;
+    try {
+      const [groupsRes, assignedRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/admin/groups`, { headers: getAuthHeaders() }),
+        profileId
+          ? fetch(`${API_BASE_URL}/api/admin/profiles/${profileId}/groups`, { headers: getAuthHeaders() })
+          : Promise.resolve({ ok: true, json: async () => [] }),
+      ]);
+      const allGroups   = groupsRes.ok   ? await groupsRes.json()   : [];
+      const assignedRaw = assignedRes.ok ? await assignedRes.json() : [];
+      const assignedIds = new Set(assignedRaw.map(g => g.id));
+      wrap.innerHTML = allGroups.map(g => `
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:3px 0">
+          <input type="checkbox" data-gid="${g.id}" ${assignedIds.has(g.id) ? 'checked' : ''}>
+          ${g.name}
+        </label>`).join('') || `<span style="color:var(--text-muted);font-size:12px">${t('label.no_groups') || 'Nenhum grupo cadastrado.'}</span>`;
     } catch(e) {
       wrap.innerHTML = `<span style="color:var(--danger);font-size:12px">${e.message}</span>`;
     }
@@ -4356,6 +4699,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('admin-create-profile-btn')?.addEventListener('click', () => openProfileModal(null));
 
+  // ── Validate connection helper (calls backend before save) ─────────────────
+  async function _validateProfileConnection(body) {
+    const validateBtn = document.getElementById('profile-modal-validate');
+    const saveBtn     = document.getElementById('profile-modal-save');
+    if (validateBtn) { validateBtn.disabled = true; validateBtn.textContent = t('toast.profile_validating'); }
+    if (saveBtn)     saveBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/profiles/validate`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        showToast(
+          t('toast.profile_validate_ok').replace('{count}', d.region_count),
+          'success',
+          t('toast.profile_validate_ok_title')
+        );
+        return true;
+      } else {
+        showToast(
+          d.detail || t('toast.profile_validate_error'),
+          'error',
+          t('toast.profile_validate_error_title'),
+          0  // no auto-dismiss on errors so user can read
+        );
+        return false;
+      }
+    } catch (e) {
+      showToast(e.message || t('toast.network_error'), 'error', t('toast.profile_validate_error_title'), 0);
+      return false;
+    } finally {
+      if (validateBtn) { validateBtn.disabled = false; validateBtn.textContent = t('action.test_connection'); }
+      if (saveBtn)     saveBtn.disabled = false;
+    }
+  }
+
+  // ── Validate button ───────────────────────────────────────────────────────
+  document.getElementById('profile-modal-validate')?.addEventListener('click', async () => {
+    const authMethod  = document.getElementById('profile-field-auth-method')?.value;
+    const region      = document.getElementById('profile-field-region')?.value.trim();
+    const tenancyOcid = document.getElementById('profile-field-tenancy')?.value.trim();
+    const userOcid    = document.getElementById('profile-field-user')?.value.trim();
+    const fingerprint = document.getElementById('profile-field-fingerprint')?.value.trim();
+    // Use _pemGetKey() to read from whichever panel is active (text, file, or hidden)
+    const privateKey  = window._pemGetKey ? window._pemGetKey() : (document.getElementById('profile-field-key')?.value.trim() || '');
+
+    if (authMethod === 'API_KEY' && (!tenancyOcid || !userOcid || !fingerprint)) {
+      showToast(t('toast.profile_validate_missing_fields'), 'warning');
+      return;
+    }
+    // In edit mode the key may already be saved in DB — no inline key required
+    if (authMethod === 'API_KEY' && !privateKey && !_editingProfileId) {
+      showToast(t('toast.profile_validate_missing_pem'), 'warning');
+      return;
+    }
+    const body = { auth_method: authMethod, region, tenancy_ocid: tenancyOcid,
+                   user_ocid: userOcid, fingerprint };
+    if (privateKey) body.private_key_pem = privateKey;
+    // Pass profile_id so the backend can load the saved key when no inline key provided
+    if (_editingProfileId && !privateKey) body.profile_id = _editingProfileId;
+    await _validateProfileConnection(body);
+  });
+
+  // ── Save button ───────────────────────────────────────────────────────────
   document.getElementById('profile-modal-save')?.addEventListener('click', async () => {
     const name        = document.getElementById('profile-field-name')?.value.trim();
     const authMethod  = document.getElementById('profile-field-auth-method')?.value;
@@ -4363,20 +4772,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const tenancyOcid = document.getElementById('profile-field-tenancy')?.value.trim();
     const userOcid    = document.getElementById('profile-field-user')?.value.trim();
     const fingerprint = document.getElementById('profile-field-fingerprint')?.value.trim();
-    const privateKey  = document.getElementById('profile-field-key')?.value.trim();
+    // Use _pemGetKey() — reads from whichever PEM panel is currently active
+    const privateKey  = window._pemGetKey ? window._pemGetKey() : (document.getElementById('profile-field-key')?.value.trim() || '');
     const isPublic    = document.getElementById('profile-field-public')?.checked;
-
+    const tenancyName = document.getElementById('profile-field-tenancy-name')?.value.trim() || '';
     const visibility  = _getVisibility();
 
     if (!name) { showToast(t('validation.name_required'), 'error'); return; }
-
-    const tenancyName = document.getElementById('profile-field-tenancy-name')?.value.trim() || '';
 
     const body = { name, auth_method: authMethod, region, is_public: isPublic, visibility,
                    tenancy_name: tenancyName,
                    tenancy_ocid: tenancyOcid, user_ocid: userOcid, fingerprint };
     if (privateKey) body.private_key_pem = privateKey;
 
+    // Auto-validate before saving when API Key credentials are present
+    if (authMethod === 'API_KEY' && tenancyOcid && userOcid && fingerprint &&
+        (privateKey || _editingProfileId)) {
+      const validateBody = { auth_method: authMethod, region, tenancy_ocid: tenancyOcid,
+                             user_ocid: userOcid, fingerprint };
+      if (privateKey) validateBody.private_key_pem = privateKey;
+      // Pass profile_id when editing so backend uses saved key if no inline key
+      if (_editingProfileId && !privateKey) validateBody.profile_id = _editingProfileId;
+      const valid = await _validateProfileConnection(validateBody);
+      if (!valid) {
+        // Show warning but allow user to force-save
+        showToast(t('toast.profile_validate_save_anyway'), 'warning');
+        // Re-enable save for the user to decide
+        return;
+      }
+    }
+
+    const saveBtn = document.getElementById('profile-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
     try {
       let res, savedId;
       if (_editingProfileId) {
@@ -4393,8 +4820,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.ok) { const d = await res.json(); savedId = d.id; }
       }
       if (!res.ok) {
-        const d = await res.json();
-        showToast(d.detail || 'Erro ao salvar profile.', 'error');
+        const d = await res.json().catch(() => ({}));
+        showToast(d.detail || t('toast.server_error'), 'error', t('toast.profile_save_error_title'), 0);
         return;
       }
       // Save user assignments if visibility = by_user
@@ -4406,20 +4833,31 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ user_ids: userIds }),
         });
       }
+      // Save group assignments if visibility = by_group
+      if (visibility === 'by_group' && savedId) {
+        const checkboxes = document.querySelectorAll('#profile-group-assignments-wrap input[type=checkbox]');
+        const groupIds = [...checkboxes].filter(c => c.checked).map(c => parseInt(c.dataset.gid));
+        await fetch(`${API_BASE_URL}/api/admin/profiles/${savedId}/groups`, {
+          method: 'PUT', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ group_ids: groupIds }),
+        });
+      }
       showToast(_editingProfileId ? t('toast.profile_updated') : t('toast.profile_created'), 'success');
       closeProfileModal();
       loadAdminProfiles();
       // Reload the generator selector so newly created profiles appear immediately
       loadProfileSelector();
     } catch(e) {
-      showToast(e.message, 'error');
+      showToast(e.message || t('toast.network_error'), 'error');
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
     }
   });
 
   async function loadAdminGroups() {
     const wrap = document.getElementById('admin-groups-table-wrap');
     if (!wrap) return;
-    wrap.innerHTML = '<p class="no-data-message">Carregando…</p>';
+    wrap.innerHTML = `<p class="no-data-message">${t('loading') || 'Loading…'}</p>`;
     try {
       const res = await fetch(`${API_BASE_URL}/api/admin/groups`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Falha ao carregar grupos.');
@@ -4607,6 +5045,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </tbody>
       </table>`;
 
+    applyTooltips(wrap);
     // Bind edit user buttons
     wrap.querySelectorAll('.admin-edit-user').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -4695,6 +5134,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </tbody>
       </table>`;
 
+    applyTooltips(wrap);
     // Bind permission checkboxes
     wrap.querySelectorAll('.admin-perm-cb').forEach(cb => {
       cb.addEventListener('change', async () => {
@@ -4740,19 +5180,292 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ===========================================================================
+  // Admin Announcements Management
+  // ===========================================================================
+
+  // SVG icons for announcement type badges (no emoji)
+  const _ANN_ICONS = {
+    info:    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><polyline points="11 12 12 12 12 16"/></svg>',
+    warning: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+    error:   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  };
+  let _editingAnnId = null;
+
+  async function loadAdminAnnouncements() {
+    const wrap = document.getElementById('admin-announcements-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = `<p class="no-data-message">${t('loading') || 'Carregando…'}</p>`;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/announcements`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Erro ao carregar avisos.');
+      const anns = await res.json();
+      if (!anns.length) {
+        wrap.innerHTML = `<p class="no-data-message">${t('ann.none') || 'Nenhum aviso criado ainda.'}</p>`;
+        return;
+      }
+      wrap.innerHTML = `<table class="admin-table">
+        <thead><tr>
+          <th>${t('ann.type') || 'Tipo'}</th>
+          <th>${t('ann.title') || 'Título'}</th>
+          <th>${t('ann.message') || 'Mensagem'}</th>
+          <th>${t('ann.expires_at') || 'Expira em'}</th>
+          <th>${t('ann.status') || 'Status'}</th>
+          <th style="text-align:right">${t('table.actions') || 'Ações'}</th>
+        </tr></thead>
+        <tbody>${anns.map(a => {
+          const annIcon = _ANN_ICONS[a.type] || _ANN_ICONS.info;
+          const expiry = a.expires_at
+            ? new Date(a.expires_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+            : (t('ann.no_expiry') || '—');
+          const now = new Date();
+          const expired = a.expires_at && new Date(a.expires_at) < now;
+          // Status chip label with leading SVG dot indicator
+          const _iconDot = (col) => `<svg width="7" height="7" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="${col}"/></svg>`;
+          const statusLabel = !a.is_active
+            ? `${_iconDot('#94a3b8')} ${t('ann.inactive') || 'Inativo'}`
+            : expired
+            ? `${_iconDot('#f59e0b')} ${t('ann.expired')  || 'Expirado'}`
+            : `${_iconDot('#22c55e')} ${t('ann.active')   || 'Ativo'}`;
+          const statusCls   = !a.is_active ? 's-inactive' : expired ? 's-expired' : 's-active';
+          return `<tr class="ann-row-${statusCls}">
+            <td><span class="ann-type-badge ${a.type}">${annIcon} ${t('ann.type.' + a.type) || a.type}</span></td>
+            <td style="font-weight:600">${a.title}</td>
+            <td style="color:var(--text-muted);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.message || '—'}</td>
+            <td style="font-size:12px;color:var(--text-muted)">${expiry}</td>
+            <td><span class="admin-status-chip ${statusCls}">${statusLabel}</span></td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="admin-icon-btn" data-action="toggle-ann" data-id="${a.id}" data-active="${a.is_active}" title="${a.is_active ? (t('action.deactivate') || 'Desativar') : (t('action.activate') || 'Ativar')}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M10 15l5-3-5-3v6z"/></svg>
+              </button>
+              <button class="admin-icon-btn" data-action="edit-ann" data-id="${a.id}" title="${t('action.edit') || 'Editar'}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="admin-icon-btn admin-icon-btn--danger" data-action="delete-ann" data-id="${a.id}" title="${t('action.delete') || 'Excluir'}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              </button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+      applyTooltips(wrap);
+    } catch(e) {
+      wrap.innerHTML = `<p class="no-data-message">${e.message}</p>`;
+    }
+  }
+
+  // Announcement table action delegation
+  document.getElementById('admin-announcements-wrap')?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const id     = parseInt(btn.dataset.id);
+    const action = btn.dataset.action;
+    if (action === 'delete-ann') {
+      if (!confirm(t('confirm.delete_announcement') || 'Excluir este aviso?')) return;
+      const res = await fetch(`${API_BASE_URL}/api/admin/announcements/${id}`, {
+        method: 'DELETE', headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        showToast(t('ann.toast.deleted') || 'Aviso excluído.', 'success');
+        loadAdminAnnouncements();
+        await fetchActiveAnnouncements();
+      }
+      else        { showToast(t('toast.server_error'), 'error'); }
+    } else if (action === 'toggle-ann') {
+      const isActive = btn.dataset.active === '1' || btn.dataset.active === 'true';
+      const res = await fetch(`${API_BASE_URL}/api/admin/announcements/${id}`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: isActive ? 0 : 1 }),
+      });
+      if (res.ok) {
+        showToast(isActive ? (t('ann.toast.deactivated') || 'Aviso desativado.') : (t('ann.toast.activated') || 'Aviso ativado.'), 'info');
+        loadAdminAnnouncements();
+        await fetchActiveAnnouncements();
+      }
+    } else if (action === 'edit-ann') {
+      openAnnouncementModal(id);
+    }
+  });
+
+  // Open/close announcement modal
+  function openAnnouncementModal(annId = null) {
+    _editingAnnId = annId;
+    const modal = document.getElementById('announcement-modal');
+    const titleEl = document.getElementById('announcement-modal-title');
+    if (titleEl) titleEl.textContent = annId ? (t('ann.modal.edit') || 'Editar Aviso') : (t('action.new_announcement') || 'Novo Aviso');
+    // Reset form
+    document.getElementById('ann-field-title').value   = '';
+    document.getElementById('ann-field-message').value = '';
+    document.getElementById('ann-field-expires').value = '';
+    document.querySelectorAll('[name="ann-type"]').forEach(r => r.checked = r.value === 'info');
+    // If editing, load data
+    if (annId) {
+      fetch(`${API_BASE_URL}/api/admin/announcements`, { headers: getAuthHeaders() })
+        .then(r => r.json()).then(anns => {
+          const a = anns.find(x => x.id === annId);
+          if (!a) return;
+          document.getElementById('ann-field-title').value   = a.title;
+          document.getElementById('ann-field-message').value = a.message || '';
+          const expEl = document.getElementById('ann-field-expires');
+          if (a.expires_at) expEl.value = a.expires_at.slice(0,16); // datetime-local format
+          document.querySelectorAll('[name="ann-type"]').forEach(r => r.checked = r.value === a.type);
+        });
+    }
+    modal?.classList.remove('hidden');
+  }
+
+  function closeAnnouncementModal() {
+    document.getElementById('announcement-modal')?.classList.add('hidden');
+    _editingAnnId = null;
+  }
+
+  document.getElementById('admin-create-announcement-btn')?.addEventListener('click', () => openAnnouncementModal(null));
+  document.getElementById('announcement-modal-close')?.addEventListener('click',  closeAnnouncementModal);
+  document.getElementById('announcement-modal-cancel')?.addEventListener('click', closeAnnouncementModal);
+  document.getElementById('announcement-modal-backdrop')?.addEventListener('click', closeAnnouncementModal);
+
+  document.getElementById('announcement-modal-save')?.addEventListener('click', async () => {
+    const title   = document.getElementById('ann-field-title')?.value.trim();
+    const message = document.getElementById('ann-field-message')?.value.trim();
+    const type    = document.querySelector('[name="ann-type"]:checked')?.value || 'info';
+    const expiresRaw = document.getElementById('ann-field-expires')?.value;
+    // Convert datetime-local to ISO string if set
+    const expires_at = expiresRaw ? new Date(expiresRaw).toISOString() : null;
+    if (!title) { showToast(t('validation.name_required'), 'error'); return; }
+    const body = { title, message, type, expires_at };
+    const url    = _editingAnnId
+      ? `${API_BASE_URL}/api/admin/announcements/${_editingAnnId}`
+      : `${API_BASE_URL}/api/admin/announcements`;
+    const method = _editingAnnId ? 'PATCH' : 'POST';
+    try {
+      const res = await fetch(url, {
+        method, headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); showToast(d.detail || t('toast.server_error'), 'error'); return; }
+      showToast(_editingAnnId ? (t('ann.toast.updated') || 'Aviso atualizado.') : (t('ann.toast.created') || 'Aviso criado.'), 'success');
+      closeAnnouncementModal();
+      loadAdminAnnouncements();
+      // Re-fetch active announcements so admin sees them in their own bell
+      await fetchActiveAnnouncements();
+    } catch(e) {
+      showToast(e.message, 'error');
+    }
+  });
+
+  // ── Announcements Panel (separate from notification bell) ─────────────────
+
+  let _activeAnns = []; // Active announcements from the backend
+
+  const _ANN_TYPE_LABELS = { info: 'Informativo', warning: 'Manutenção', error: 'Urgente', success: 'Novidade' };
+
+  function _renderAnnPanel() {
+    const list = document.getElementById('ann-panel-list');
+    if (!list) return;
+    if (!_activeAnns.length) {
+      list.innerHTML = `<div class="ann-panel-empty">${t('ann.panel.empty') || 'Nenhum aviso ativo'}</div>`;
+      return;
+    }
+    list.innerHTML = _activeAnns.map(a => {
+      const icon = _ANN_ICONS[a.type] || _ANN_ICONS.info;
+      const typeLabel = t('ann.type.' + a.type) || _ANN_TYPE_LABELS[a.type] || a.type;
+      const expiryStr = a.expires_at
+        ? `<span class="ann-pi-expiry">Expira em ${new Date(a.expires_at).toLocaleDateString([], {day:'2-digit',month:'2-digit',year:'2-digit'})}</span>`
+        : '';
+      return `<div class="ann-panel-item ann-pi-${a.type}">
+        <div class="ann-pi-icon">${icon}</div>
+        <div class="ann-pi-body">
+          <div class="ann-pi-title">${a.title}</div>
+          ${a.message ? `<div class="ann-pi-msg">${a.message}</div>` : ''}
+          <div class="ann-pi-meta">
+            <span class="ann-pi-type-badge">${typeLabel}</span>
+            ${expiryStr}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function _updateAnnBadge() {
+    const btn   = document.getElementById('ann-topbar-btn');
+    const badge = document.getElementById('ann-topbar-badge');
+    if (!btn || !badge) return;
+    const count = _activeAnns.length;
+    // Show the megaphone whenever there are active announcements; hide when none
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.classList.remove('hidden');
+      btn.classList.remove('hidden');
+      btn.classList.add('has-ann');
+    } else {
+      badge.classList.add('hidden');
+      btn.classList.add('hidden');
+      btn.classList.remove('has-ann');
+    }
+  }
+
+  /**
+   * Called after login and on init (when a session exists) to show the megaphone.
+   * Reveals the button immediately, then populates once the fetch completes.
+   */
+  function _showAnnBtn() {
+    const btn = document.getElementById('ann-topbar-btn');
+    if (btn) btn.classList.remove('hidden');
+  }
+
+  async function fetchActiveAnnouncements() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/announcements`, { headers: getAuthHeaders() });
+      if (!res.ok) return;
+      _activeAnns = await res.json();
+      _updateAnnBadge();
+      // Re-render if ann panel is open
+      const panel = document.getElementById('ann-panel');
+      if (panel && !panel.classList.contains('hidden')) _renderAnnPanel();
+    } catch(_) {}
+  }
+
+  // Ann panel — open/close
+  document.getElementById('ann-topbar-btn')?.addEventListener('click', () => {
+    const panel    = document.getElementById('ann-panel');
+    const backdrop = document.getElementById('ann-panel-backdrop');
+    if (!panel) return;
+    const isHidden = panel.classList.contains('hidden');
+    // Close notif panel if open
+    document.getElementById('notif-panel')?.classList.add('hidden');
+    document.getElementById('notif-panel-backdrop')?.classList.add('hidden');
+    panel.classList.toggle('hidden', !isHidden);
+    backdrop?.classList.toggle('hidden', !isHidden);
+    if (isHidden) _renderAnnPanel();
+  });
+  document.getElementById('ann-panel-close')?.addEventListener('click', () => {
+    document.getElementById('ann-panel')?.classList.add('hidden');
+    document.getElementById('ann-panel-backdrop')?.classList.add('hidden');
+  });
+  document.getElementById('ann-panel-backdrop')?.addEventListener('click', () => {
+    document.getElementById('ann-panel')?.classList.add('hidden');
+    document.getElementById('ann-panel-backdrop')?.classList.add('hidden');
+  });
+
+  // ===========================================================================
+  // Admin tab switching
   // Admin tab switching
   document.querySelectorAll('.admin-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       const name = tab.dataset.tab;
-      document.getElementById('admin-panel-users')    && document.getElementById('admin-panel-users').classList.toggle('hidden',    name !== 'users');
-      document.getElementById('admin-panel-groups')   && document.getElementById('admin-panel-groups').classList.toggle('hidden',   name !== 'groups');
-      document.getElementById('admin-panel-profiles') && document.getElementById('admin-panel-profiles').classList.toggle('hidden', name !== 'profiles');
-      document.getElementById('admin-panel-feedback') && document.getElementById('admin-panel-feedback').classList.toggle('hidden', name !== 'feedback');
-      if (name === 'groups')   loadAdminGroups();
-      if (name === 'profiles') loadAdminProfiles();
-      if (name === 'feedback') loadAdminFeedback();
+      document.getElementById('admin-panel-users')         && document.getElementById('admin-panel-users').classList.toggle('hidden',         name !== 'users');
+      document.getElementById('admin-panel-groups')        && document.getElementById('admin-panel-groups').classList.toggle('hidden',        name !== 'groups');
+      document.getElementById('admin-panel-profiles')      && document.getElementById('admin-panel-profiles').classList.toggle('hidden',      name !== 'profiles');
+      document.getElementById('admin-panel-notifications') && document.getElementById('admin-panel-notifications').classList.toggle('hidden', name !== 'notifications');
+      document.getElementById('admin-panel-feedback')      && document.getElementById('admin-panel-feedback').classList.toggle('hidden',      name !== 'feedback');
+      if (name === 'groups')        loadAdminGroups();
+      if (name === 'profiles')      loadAdminProfiles();
+      if (name === 'notifications') loadAdminAnnouncements();
+      if (name === 'feedback')      loadAdminFeedback();
     });
   });
 
@@ -4827,6 +5540,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // 3. Fetch permissions (now translations are loaded, t() will work in loadProfileSelector)
     await fetchAndApplyPermissions();
 
+    // 4. Load active announcements — show button immediately if logged in
+    if (_loadSession()) _showAnnBtn();
+    await fetchActiveAnnouncements();
+    // Apply custom tooltips to static elements in the topbar
+    applyTooltips(document.getElementById('app-topbar') || document);
+
     updateSidebarAuthState();
     renderSidebarHistory();
   };
@@ -4861,7 +5580,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===========================================================================
-  // Event Listener Registrations
+  // PT-BR: Registros de Event Listeners
+  // EN: Event Listener Registrations
   // ===========================================================================
   fetchBtn.addEventListener('click', fetchAllDetails);
   generateBtn.addEventListener('click', generateDocument);
@@ -5075,6 +5795,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const _origFetchAllDetails = fetchAllDetails;
   window.fetchAllDetailsWrapped = async function() {
     let hasError = false;
+
+    // Guard: profile must be selected and active before allowing collection
+    if (!selectedProfileId) {
+      highlightMissingField('profile-step', 'Tenancy Profile');
+      hasError = true;
+    } else {
+      const chosenProfile = availableProfiles.find(p => p.id === selectedProfileId);
+      if (chosenProfile && !chosenProfile.is_active) {
+        highlightMissingField('profile-step', 'Tenancy Profile');
+        showToast('Tenancy Profile desativado. Selecione um profile ativo para continuar.', 'error');
+        return;
+      }
+    }
+
     if (!selectedRegion) {
       highlightMissingField('region-step', t('step1_label') || 'Região');
       hasError = true;
@@ -5089,6 +5823,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (hasError) {
       const missing = [];
+      if (!selectedProfileId) missing.push('Tenancy Profile');
       if (!selectedRegion) missing.push(t('step1_label') || 'Região');
       if (!selectedDocType) missing.push(t('step2_label') || 'Tipo');
       if (!selectedCompartmentId) missing.push(t('step3_label') || 'Compartimento');
@@ -5231,7 +5966,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ===========================================================================
-  // Application Initialization
+  // PT-BR: Inicialização da Aplicação
+  // EN: Application Initialization
   // ===========================================================================
   initializeApp();
 });
