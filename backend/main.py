@@ -40,9 +40,11 @@ app = FastAPI(
     description="API para automatizar a coleta de dados da OCI e gerar documentação de infraestrutura.",
 )
 
+_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,10 +73,6 @@ def _optional_user(request: Request) -> Optional[dict]:
     token = _get_token(request)
     return auth.get_session_user(token) if token else None
 
-
-# ==============================================================================
-# Auth Pydantic models
-# ==============================================================================
 
 class AuthRequest(BaseModel):
     username: str
@@ -256,7 +254,7 @@ async def get_my_permissions(request: Request):
 
     allowed = auth.get_user_allowed_doc_types(user["id"])
     if allowed is None:
-        # In no groups → no restrictions
+        # No group membership means no doc-type restrictions.
         return {"allowed": ALL_TYPES, "is_admin": False, "is_anonymous": False}
 
     return {"allowed": allowed, "is_admin": False, "is_anonymous": False}
@@ -268,6 +266,127 @@ async def admin_set_group_permissions(group_id: int, request: Request):
     body = await request.json()
     doc_types = body.get("doc_types", [])
     auth.set_group_doc_permissions(group_id, doc_types)
+    return {"ok": True}
+
+
+# ==============================================================================
+# Tenancy Profile endpoints
+# ==============================================================================
+
+@app.get("/api/profiles", summary="Listar Tenancy Profiles disponíveis para o usuário")
+async def list_profiles(request: Request):
+    user = _optional_user(request)
+    is_admin = user.get("is_admin", False) if user else False
+    if user:
+        profiles = auth.get_profiles_for_user(user["id"], is_admin)
+    else:
+        # Anonymous users: only public profiles
+        all_profiles = auth.list_tenancy_profiles()
+        profiles = [p for p in all_profiles if p.get("is_public")]
+    return profiles
+
+
+@app.get("/api/admin/profiles", summary="Listar todos os Tenancy Profiles (admin)")
+async def admin_list_profiles(request: Request):
+    _require_admin(request)
+    return auth.list_tenancy_profiles(include_inactive=True)
+
+
+@app.post("/api/admin/profiles", summary="Criar Tenancy Profile (admin)")
+async def admin_create_profile(request: Request):
+    user = _require_admin(request)
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    auth_method = (body.get("auth_method") or "API_KEY").upper()
+    if not name:
+        raise HTTPException(400, "Nome é obrigatório.")
+    if auth_method not in ("API_KEY", "INSTANCE_PRINCIPAL"):
+        raise HTTPException(400, "auth_method deve ser API_KEY ou INSTANCE_PRINCIPAL.")
+
+    profile, err = auth.create_tenancy_profile(
+        name=name,
+        auth_method=auth_method,
+        region=body.get("region", ""),
+        created_by=user["id"],
+        is_public=bool(body.get("is_public", False)),
+        visibility=body.get("visibility", "by_group"),
+        tenancy_ocid=body.get("tenancy_ocid"),
+        user_ocid=body.get("user_ocid"),
+        fingerprint=body.get("fingerprint"),
+        private_key_pem=body.get("private_key_pem"),
+    )
+    if err == "duplicate":
+        raise HTTPException(409, "Já existe um profile com esse nome.")
+    if err or not profile:
+        raise HTTPException(500, "Erro ao criar profile.")
+    return profile
+
+
+@app.patch("/api/admin/profiles/{profile_id}", summary="Atualizar Tenancy Profile (admin)")
+async def admin_update_profile(profile_id: int, request: Request):
+    _require_admin(request)
+    body = await request.json()
+    updated = auth.update_tenancy_profile(
+        profile_id=profile_id,
+        name=body.get("name"),
+        auth_method=body.get("auth_method"),
+        region=body.get("region"),
+        is_public=body.get("is_public"),
+        is_active=body.get("is_active"),
+        visibility=body.get("visibility"),
+        tenancy_ocid=body.get("tenancy_ocid"),
+        user_ocid=body.get("user_ocid"),
+        fingerprint=body.get("fingerprint"),
+        private_key_pem=body.get("private_key_pem"),
+    )
+    if not updated:
+        raise HTTPException(404, "Profile não encontrado.")
+    return auth.get_tenancy_profile(profile_id)
+
+
+@app.delete("/api/admin/profiles/{profile_id}", summary="Remover Tenancy Profile (admin)")
+async def admin_delete_profile(profile_id: int, request: Request):
+    _require_admin(request)
+    auth.delete_tenancy_profile(profile_id)
+    return {"ok": True}
+
+
+@app.get("/api/admin/groups/{group_id}/profiles", summary="Profiles de um grupo (admin)")
+async def admin_get_group_profiles(group_id: int, request: Request):
+    _require_admin(request)
+    return auth.get_group_profiles(group_id)
+
+
+@app.put("/api/admin/groups/{group_id}/profiles", summary="Definir profiles de um grupo (admin)")
+async def admin_set_group_profiles(group_id: int, request: Request):
+    _require_admin(request)
+    body = await request.json()
+    profile_ids = body.get("profile_ids", [])
+    auth.set_group_profiles(group_id, profile_ids)
+    return {"ok": True}
+
+@app.get("/api/admin/profiles/{profile_id}/key", summary="Obter chave PEM decriptada (admin)")
+async def admin_get_profile_key(profile_id: int, request: Request):
+    _require_admin(request)
+    profile = auth.get_tenancy_profile(profile_id, decrypt_key=True)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile não encontrado.")
+    key = profile.get("private_key_pem") or ""
+    return {"private_key_pem": key}
+
+
+@app.get("/api/admin/profiles/{profile_id}/users", summary="Usuários atribuídos diretamente ao profile")
+async def admin_get_profile_users(profile_id: int, request: Request):
+    _require_admin(request)
+    return auth.get_user_profile_assignments(profile_id)
+
+
+@app.put("/api/admin/profiles/{profile_id}/users", summary="Definir usuários diretos do profile")
+async def admin_set_profile_users(profile_id: int, request: Request):
+    _require_admin(request)
+    body = await request.json()
+    user_ids = body.get("user_ids", [])
+    auth.set_user_profile_assignments(profile_id, user_ids)
     return {"ok": True}
 
 
@@ -287,18 +406,35 @@ async def get_metrics(request: Request):
 # ==============================================================================
 
 @app.get("/api/regions", summary="Listar Regiões Disponíveis")
-async def get_regions():
-    return oci_connector.list_regions()
+async def get_regions(profile_id: Optional[int] = None, request: Request = None):
+    if not profile_id:
+        raise HTTPException(400, "profile_id é obrigatório.")
+    profile = auth.get_tenancy_profile(profile_id, decrypt_key=True)
+    if not profile:
+        raise HTTPException(404, "Profile não encontrado.")
+    try:
+        return oci_connector.list_regions(profile)
+    except ConnectionError as e:
+        raise HTTPException(503, str(e))
 
 
 @app.get("/api/{region}/compartments", summary="Listar Compartimentos em uma Região")
-async def get_compartments(region: str):
-    return oci_connector.list_compartments(region)
+async def get_compartments(region: str, profile_id: Optional[int] = None):
+    if not profile_id:
+        raise HTTPException(400, "profile_id é obrigatório.")
+    profile = auth.get_tenancy_profile(profile_id, decrypt_key=True)
+    if not profile:
+        raise HTTPException(404, "Profile não encontrado.")
+    try:
+        return oci_connector.list_compartments(region, profile)
+    except ConnectionError as e:
+        raise HTTPException(503, str(e))
 
 
 @app.get("/api/{region}/instances/{compartment_id}", summary="Listar Instâncias em um Compartimento")
-async def get_instances(region: str, compartment_id: str):
-    return oci_connector.list_instances_in_compartment(region, compartment_id)
+async def get_instances(region: str, compartment_id: str, profile_id: Optional[int] = None):
+    profile = auth.get_tenancy_profile(profile_id, decrypt_key=True) if profile_id else None
+    return oci_connector.list_instances_in_compartment(region, compartment_id, profile)
 
 
 # ==============================================================================
@@ -320,25 +456,27 @@ async def start_data_collection(payload: dict = Body(...)):
         raise HTTPException(400, "Campos obrigatórios ausentes: 'type', 'doc_type' ou 'region'.")
 
     try:
+        profile_id = payload.get("profile_id") or None
+
         if collection_type == "full_infra":
             compartment_id = payload.get("compartment_id")
             if not compartment_id:
                 raise HTTPException(400, "Falta 'compartment_id' para full_infra.")
             include_standalone = payload.get("include_standalone", True)
-            task = collect_full_infrastructure_task.delay(region, compartment_id, doc_type, include_standalone)
+            task = collect_full_infrastructure_task.delay(region, compartment_id, doc_type, include_standalone, profile_id)
 
         elif collection_type == "new_host":
             details = payload.get("details")
             if not details:
                 raise HTTPException(400, "Falta 'details' para new_host.")
-            task = collect_new_host_task.delay(region, details, doc_type)
+            task = collect_new_host_task.delay(region, details, doc_type, profile_id)
 
         elif collection_type == "waf_report":
             compartment_id   = payload.get("compartment_id")
             compartment_name = payload.get("compartment_name", "N/A")
             if not compartment_id:
                 raise HTTPException(400, "Falta 'compartment_id' para waf_report.")
-            task = collect_waf_report_task.delay(region, compartment_id, compartment_name)
+            task = collect_waf_report_task.delay(region, compartment_id, compartment_name, profile_id)
 
         else:
             raise HTTPException(400, f"Tipo inválido: {collection_type}")

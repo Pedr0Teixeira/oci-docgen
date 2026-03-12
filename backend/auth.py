@@ -4,6 +4,7 @@
 #             user_profiles, feedback
 # ==============================================================================
 
+import base64
 import hashlib
 import logging
 import os
@@ -12,7 +13,35 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oci_docgen.db")
+from cryptography.fernet import Fernet
+
+_data_dir = os.environ.get("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(_data_dir, "oci_docgen.db")
+
+
+# ==============================================================================
+# Encryption helpers for sensitive credential storage
+# ==============================================================================
+
+def _get_fernet() -> Fernet:
+    """
+    Returns a Fernet instance keyed from the SECRET_KEY environment variable.
+    The key is SHA-256 hashed and base64url-encoded to always produce a valid
+    32-byte Fernet key regardless of the raw SECRET_KEY length.
+    """
+    raw = os.environ.get("SECRET_KEY", "dev-insecure-change-in-production")
+    derived = base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest())
+    return Fernet(derived)
+
+
+def encrypt_value(plaintext: str) -> str:
+    """Encrypts a string and returns a base64-encoded ciphertext string."""
+    return _get_fernet().encrypt(plaintext.encode()).decode()
+
+
+def decrypt_value(ciphertext: str) -> str:
+    """Decrypts a base64-encoded ciphertext string back to plaintext."""
+    return _get_fernet().decrypt(ciphertext.encode()).decode()
 
 
 # ==============================================================================
@@ -25,7 +54,7 @@ def init_db() -> None:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=30000")
 
-    # --- Table creation (idempotent) ---
+    # All CREATE TABLE statements are idempotent (IF NOT EXISTS).
     create_stmts = [
         """CREATE TABLE IF NOT EXISTS users (
             id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +107,35 @@ def init_db() -> None:
             status     TEXT DEFAULT 'open',
             created_at TEXT NOT NULL
         )""",
+        """CREATE TABLE IF NOT EXISTS tenancy_profiles (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            name                  TEXT UNIQUE NOT NULL,
+            auth_method           TEXT NOT NULL DEFAULT 'API_KEY',
+            tenancy_ocid          TEXT,
+            user_ocid             TEXT,
+            fingerprint           TEXT,
+            private_key_encrypted TEXT,
+            region                TEXT,
+            is_active             INTEGER DEFAULT 1,
+            is_public             INTEGER DEFAULT 0,
+            created_by            INTEGER,
+            created_at            TEXT NOT NULL,
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS group_profiles (
+            group_id   INTEGER NOT NULL,
+            profile_id INTEGER NOT NULL,
+            PRIMARY KEY (group_id, profile_id),
+            FOREIGN KEY (group_id)   REFERENCES groups(id),
+            FOREIGN KEY (profile_id) REFERENCES tenancy_profiles(id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS user_profile_assignments (
+            user_id    INTEGER NOT NULL,
+            profile_id INTEGER NOT NULL,
+            PRIMARY KEY (user_id, profile_id),
+            FOREIGN KEY (user_id)    REFERENCES users(id),
+            FOREIGN KEY (profile_id) REFERENCES tenancy_profiles(id)
+        )""",
     ]
     for stmt in create_stmts:
         try:
@@ -85,12 +143,15 @@ def init_db() -> None:
         except Exception:
             pass
 
-    # --- Column migrations for pre-existing databases ---
-    # Each ALTER is wrapped individually so one failure doesn't block the rest.
+    # Schema migrations — each ALTER is wrapped individually so a column-already-exists
+    # error on one statement does not prevent the remaining migrations from running.
     migrations = [
         "ALTER TABLE users ADD COLUMN is_admin              INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0",
         "ALTER TABLE groups ADD COLUMN allowed_doc_types    TEXT    DEFAULT ''",
+        # visibility: admin_only | all_users | by_group | by_user
+        "ALTER TABLE tenancy_profiles ADD COLUMN visibility TEXT DEFAULT 'by_group'",
+        "ALTER TABLE tenancy_profiles ADD COLUMN tenancy_name TEXT DEFAULT ''",
     ]
     for migration in migrations:
         try:
@@ -103,6 +164,31 @@ def init_db() -> None:
     finally:
         conn.close()
     logging.info("OCI DocGen DB initialised at %s", DB_PATH)
+
+    # Seed the default admin account only when the database is new.
+    _seed_default_admin()
+
+
+def _seed_default_admin() -> None:
+    """Creates the default admin user if no users exist in the database."""
+    conn = _conn()
+    count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    conn.close()
+    if count > 0:
+        return
+    conn = _conn()
+    try:
+        conn.execute(
+            """INSERT INTO users (username, password_hash, created_at, is_admin, force_password_change)
+               VALUES (?, ?, ?, 1, 1)""",
+            ("admin", _hash("Admin@1234!"), datetime.utcnow().isoformat() + "Z"),
+        )
+        conn.commit()
+        logging.info("Default admin created (username: admin). Change the password on first login.")
+    except Exception as e:
+        logging.error("Failed to seed default admin: %s", e)
+    finally:
+        conn.close()
 
 
 def _conn() -> sqlite3.Connection:
@@ -138,7 +224,7 @@ def create_user(username: str, password: str) -> Optional[dict]:
         conn.close()
         return dict(row) if row else None
     except sqlite3.IntegrityError:
-        return None  # Username taken
+        return None
 
 
 def authenticate_user(username: str, password: str) -> Optional[dict]:
@@ -206,6 +292,26 @@ def delete_session(token: str) -> None:
 # Password management
 # ==============================================================================
 
+def _validate_password_complexity(password: str) -> Optional[str]:
+    """
+    Returns an error message if the password does not meet complexity requirements,
+    or None if it is valid.
+    Requirements: 8+ chars, 1 uppercase, 1 lowercase, 1 digit, 1 special character.
+    """
+    import re
+    if len(password) < 8:
+        return "Senha deve ter pelo menos 8 caracteres."
+    if not re.search(r"[A-Z]", password):
+        return "Senha deve conter pelo menos uma letra maiuscula."
+    if not re.search(r"[a-z]", password):
+        return "Senha deve conter pelo menos uma letra minuscula."
+    if not re.search(r"\d", password):
+        return "Senha deve conter pelo menos um numero."
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return "Senha deve conter pelo menos um caractere especial."
+    return None
+
+
 def change_password(
     user_id: int,
     current_password: str,
@@ -217,8 +323,9 @@ def change_password(
     Returns (True, None) on success or (False, error_message) on failure.
     skip_verify=True skips the current-password check (used on first login).
     """
-    if len(new_password) < 6:
-        return False, "Senha precisa ter pelo menos 6 caracteres."
+    err = _validate_password_complexity(new_password)
+    if err:
+        return False, err
 
     conn = _conn()
     if not skip_verify:
@@ -331,7 +438,6 @@ def get_metrics(user_id: Optional[int] = None) -> dict:
         args,
     ).fetchall()
 
-    # Build a lookup dict from the sparse results
     sparse_map = {r["day"]: dict(r) for r in sparse_rows}
 
     # Build a complete dense array: today back 89 days = 90 entries
@@ -345,7 +451,7 @@ def get_metrics(user_id: Optional[int] = None) -> dict:
         })
         time_series_rows.append(dict(row))
 
-    # per_user breakdown (global only)
+    # Per-user breakdown is only available for global (non-filtered) metrics.
     per_user: list = []
     if user_id is None:
         per_user = conn.execute(
@@ -496,8 +602,8 @@ def create_group(name: str) -> tuple[Optional[dict], Optional[str]]:
     result: tuple[Optional[dict], Optional[str]] = (None, "error")
     try:
         conn.execute(
-            "INSERT INTO groups (name, allowed_doc_types, created_at) VALUES (?, ?, ?)",
-            (name.strip(), "", datetime.utcnow().isoformat() + "Z"),
+            "INSERT INTO groups (name, allowed_doc_types) VALUES (?, ?)",
+            (name.strip(), ""),
         )
         conn.commit()
         row = conn.execute(
@@ -577,7 +683,7 @@ def get_user_allowed_doc_types(user_id: int) -> Optional[list]:
     """
     groups = get_user_groups(user_id)
     if not groups:
-        return None  # No group membership → no restrictions
+        return None  # No group membership means no doc-type restrictions.
     allowed = set()
     for g in groups:
         types_str = g.get("allowed_doc_types") or ""
@@ -682,3 +788,252 @@ def update_feedback_status(feedback_id: int, status: str) -> bool:
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+# ==============================================================================
+# Tenancy Profiles
+# ==============================================================================
+
+def create_tenancy_profile(
+    name: str,
+    auth_method: str,
+    region: str,
+    created_by: int,
+    is_public: bool = False,
+    visibility: str = "by_group",
+    tenancy_name: Optional[str] = None,
+    tenancy_ocid: Optional[str] = None,
+    user_ocid: Optional[str] = None,
+    fingerprint: Optional[str] = None,
+    private_key_pem: Optional[str] = None,
+) -> tuple[Optional[dict], Optional[str]]:
+    """
+    Creates a tenancy profile. Private key is encrypted before storage.
+    visibility: admin_only | all_users | by_group | by_user
+    Returns (profile_dict, None) on success or (None, error_str) on failure.
+    """
+    valid_vis = {"admin_only", "all_users", "by_group", "by_user"}
+    if visibility not in valid_vis:
+        visibility = "by_group"
+    conn = _conn()
+    result: tuple[Optional[dict], Optional[str]] = (None, "error")
+    try:
+        encrypted_key = encrypt_value(private_key_pem) if private_key_pem else None
+        conn.execute(
+            """INSERT INTO tenancy_profiles
+               (name, auth_method, tenancy_name, tenancy_ocid, user_ocid, fingerprint,
+                private_key_encrypted, region, is_active, is_public, visibility, created_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+            (name.strip(), auth_method.upper(), tenancy_name or '', tenancy_ocid, user_ocid, fingerprint,
+             encrypted_key, region, 1 if is_public else 0, visibility, created_by,
+             datetime.utcnow().isoformat() + "Z"),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, name, auth_method, tenancy_name, tenancy_ocid, user_ocid, fingerprint, "
+            "region, is_active, is_public, visibility, created_by, created_at "
+            "FROM tenancy_profiles WHERE name = ?", (name.strip(),)
+        ).fetchone()
+        result = (dict(row) if row else None), None
+    except sqlite3.IntegrityError:
+        result = None, "duplicate"
+    except Exception as e:
+        logging.error("create_tenancy_profile error: %s", e)
+        result = None, "error"
+    finally:
+        conn.close()
+    return result
+
+
+def list_tenancy_profiles(include_inactive: bool = False) -> list:
+    """Returns all profiles without the encrypted private key."""
+    conn = _conn()
+    where = "" if include_inactive else "WHERE is_active = 1"
+    rows = conn.execute(
+        f"""SELECT id, name, auth_method, tenancy_name, tenancy_ocid, user_ocid, fingerprint,
+                   region, is_active, is_public, visibility, created_by, created_at
+              FROM tenancy_profiles {where}
+             ORDER BY name"""
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_tenancy_profile(profile_id: int, decrypt_key: bool = False) -> Optional[dict]:
+    """
+    Returns a single profile by id.
+    Set decrypt_key=True only when credentials are needed for OCI calls.
+    """
+    conn = _conn()
+    row = conn.execute(
+        """SELECT id, name, auth_method, tenancy_name, tenancy_ocid, user_ocid, fingerprint,
+                  private_key_encrypted, region, is_active, is_public, visibility, created_by, created_at
+             FROM tenancy_profiles WHERE id = ?""",
+        (profile_id,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    profile: dict = dict(row)
+    if decrypt_key and profile.get("private_key_encrypted"):
+        try:
+            profile["private_key_pem"] = decrypt_value(profile["private_key_encrypted"])
+        except Exception:
+            profile["private_key_pem"] = None
+    profile.pop("private_key_encrypted", None)
+    return profile
+
+
+def update_tenancy_profile(
+    profile_id: int,
+    name: Optional[str] = None,
+    auth_method: Optional[str] = None,
+    region: Optional[str] = None,
+    tenancy_name: Optional[str] = None,
+    is_public: Optional[bool] = None,
+    is_active: Optional[bool] = None,
+    visibility: Optional[str] = None,
+    tenancy_ocid: Optional[str] = None,
+    user_ocid: Optional[str] = None,
+    fingerprint: Optional[str] = None,
+    private_key_pem: Optional[str] = None,
+) -> bool:
+    """Partial update — only non-None fields are changed."""
+    conn = _conn()
+    fields: list = []
+    values: list = []
+    if name is not None:
+        fields.append("name = ?"); values.append(name.strip())
+    if auth_method is not None:
+        fields.append("auth_method = ?"); values.append(auth_method.upper())
+    if region is not None:
+        fields.append("region = ?"); values.append(region)
+    if tenancy_name is not None:
+        fields.append("tenancy_name = ?"); values.append(tenancy_name)
+    if is_public is not None:
+        fields.append("is_public = ?"); values.append(1 if is_public else 0)
+    if is_active is not None:
+        fields.append("is_active = ?"); values.append(1 if is_active else 0)
+    if visibility is not None:
+        valid_vis = {"admin_only", "all_users", "by_group", "by_user"}
+        fields.append("visibility = ?"); values.append(visibility if visibility in valid_vis else "by_group")
+    if tenancy_ocid is not None:
+        fields.append("tenancy_ocid = ?"); values.append(tenancy_ocid)
+    if user_ocid is not None:
+        fields.append("user_ocid = ?"); values.append(user_ocid)
+    if fingerprint is not None:
+        fields.append("fingerprint = ?"); values.append(fingerprint)
+    if private_key_pem is not None:
+        fields.append("private_key_encrypted = ?")
+        values.append(encrypt_value(private_key_pem))
+    if not fields:
+        conn.close()
+        return False
+    values.append(profile_id)
+    cursor = conn.execute(
+        f"UPDATE tenancy_profiles SET {', '.join(fields)} WHERE id = ?", values
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
+
+
+def delete_tenancy_profile(profile_id: int) -> bool:
+    conn = _conn()
+    conn.execute("DELETE FROM group_profiles             WHERE profile_id = ?", (profile_id,))
+    conn.execute("DELETE FROM user_profile_assignments   WHERE profile_id = ?", (profile_id,))
+    conn.execute("DELETE FROM tenancy_profiles           WHERE id         = ?", (profile_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def get_profiles_for_user(user_id: int, is_admin: bool) -> list:
+    """
+    Returns profiles accessible to a user based on visibility tier:
+    - admin_only  → only admins
+    - all_users   → any authenticated user
+    - by_group    → users in assigned groups
+    - by_user     → users explicitly assigned
+    Admins always see all active profiles.
+    """
+    conn = _conn()
+    if is_admin:
+        rows = conn.execute(
+            """SELECT id, name, auth_method, tenancy_name, tenancy_ocid, region, is_active, is_public, visibility
+                 FROM tenancy_profiles WHERE is_active = 1 ORDER BY name"""
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT DISTINCT tp.id, tp.name, tp.auth_method, tp.tenancy_name, tp.tenancy_ocid, tp.region,
+                               tp.is_active, tp.is_public, tp.visibility
+                 FROM tenancy_profiles tp
+                 LEFT JOIN group_profiles gp          ON tp.id = gp.profile_id
+                 LEFT JOIN user_groups ug             ON gp.group_id = ug.group_id
+                 LEFT JOIN user_profile_assignments ua ON tp.id = ua.profile_id
+                WHERE tp.is_active = 1
+                  AND tp.visibility != 'admin_only'
+                  AND (
+                      tp.visibility = 'all_users'
+                      OR (tp.visibility = 'by_group'  AND ug.user_id = ?)
+                      OR (tp.visibility = 'by_user'   AND ua.user_id = ?)
+                  )
+                ORDER BY tp.name""",
+            (user_id, user_id),
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def set_user_profile_assignments(profile_id: int, user_ids: list) -> None:
+    """Replaces all direct user assignments for a profile."""
+    conn = _conn()
+    conn.execute("DELETE FROM user_profile_assignments WHERE profile_id = ?", (profile_id,))
+    for uid in user_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO user_profile_assignments (user_id, profile_id) VALUES (?, ?)",
+            (uid, profile_id),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_user_profile_assignments(profile_id: int) -> list:
+    """Returns users directly assigned to a profile."""
+    conn = _conn()
+    rows = conn.execute(
+        """SELECT u.id, u.username
+             FROM users u
+             JOIN user_profile_assignments ua ON u.id = ua.user_id
+            WHERE ua.profile_id = ?
+            ORDER BY u.username""",
+        (profile_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def set_group_profiles(group_id: int, profile_ids: list) -> None:
+    """Replaces all profile assignments for a group."""
+    conn = _conn()
+    conn.execute("DELETE FROM group_profiles WHERE group_id = ?", (group_id,))
+    for pid in profile_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO group_profiles (group_id, profile_id) VALUES (?, ?)",
+            (group_id, pid),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_group_profiles(group_id: int) -> list:
+    conn = _conn()
+    rows = conn.execute(
+        """SELECT tp.id, tp.name, tp.auth_method, tp.region
+             FROM tenancy_profiles tp
+             JOIN group_profiles gp ON tp.id = gp.profile_id
+            WHERE gp.group_id = ?
+            ORDER BY tp.name""",
+        (group_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

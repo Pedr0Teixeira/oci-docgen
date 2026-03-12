@@ -1,0 +1,70 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      ALLOWED_ORIGINS: "${FRONTEND_URL:-http://localhost:5500}"
+      DATA_DIR: /app/data
+    volumes:
+      - db_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: celery -A celery_worker.celery_app worker --loglevel=info --concurrency=4
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /app/data
+    volumes:
+      - db_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5500}:80"
+    depends_on:
+      - api
+
+volumes:
+  redis_data:
+  db_data:
