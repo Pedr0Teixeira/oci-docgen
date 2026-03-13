@@ -938,9 +938,6 @@ allow dynamic-group 'oci-docgen-dg' to read volume-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read virtual-network-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read load-balancers in tenancy
 allow dynamic-group 'oci-docgen-dg' to read cluster-family in tenancy
-allow dynamic-group 'oci-docgen-dg' to read drg-family in tenancy
-allow dynamic-group 'oci-docgen-dg' to read ipsec-connections in tenancy
-allow dynamic-group 'oci-docgen-dg' to read cpes in tenancy
 allow dynamic-group 'oci-docgen-dg' to read waf-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read leaf-certificate-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to use network-security-groups in tenancy where any {
@@ -951,7 +948,64 @@ allow dynamic-group 'oci-docgen-dg' to use network-security-groups in tenancy wh
 
 > All verbs are `read` or restricted `use`. The application never creates, modifies, or deletes OCI resources.
 
+> **Note:** **`waf-family` vs `waas-family`:** These are two distinct OCI services. `waf-family` covers the **OCI WAF** (new service, used by this application). `waas-family` covers the legacy **WAAS** service. Using `waas-family` instead of `waf-family` will result in a `NotAuthorizedOrNotFound` error when generating WAF reports.
+
 Reference: [OCI IAM Policy Reference](https://docs.oracle.com/en-us/iaas/Content/Identity/Reference/policyreference.htm)
+
+### Error & Notification Flow
+
+When a collection task fails due to a missing IAM policy — or any other condition worth surfacing to the operator — the application propagates the error through a structured pipeline from the OCI SDK all the way to the browser toast notification.
+
+```mermaid
+flowchart TD
+    A([OCI SDK Call]) --> B{ServiceError?}
+
+    B -- "No" --> C[Process data normally]
+    B -- "Yes" --> D{"status=404<br/>code=NotAuthorizedOrNotFound?"}
+
+    D -- "No" --> E[Re-raise original exception]
+    D -- "Yes" --> F["PermissionError<br/>_iam_error_msg(resource_key)"]
+
+    F --> G{Which task?}
+
+    G -- "waf_report" --> H["PermissionError propagates freely<br/>WAF is primary deliverable"]
+    G -- "full_infra / new_host" --> H
+
+    H --> K["Celery task catches PermissionError"]
+    K --> L["update_state<br/>state='IAM_ERROR'<br/>meta={error, error_type}"]
+    L --> M["raise Ignore()<br/>preserves meta in Redis"]
+
+    M --> N["GET /api/collection-status<br/>detects state='IAM_ERROR'"]
+    N --> O["Returns<br/>status: FAILURE<br/>result: {error, error_type}"]
+
+    O --> P{error_type?}
+
+    P -- "IAM_PERMISSION" --> Q["Split error string by newline"]
+    Q --> R["showToast<br/>intro + code block<br/>error, duration=0"]
+
+    P -- "other" --> S["showToast<br/>generic server error"]
+
+    E --> T["Celery default failure handler"]
+    T --> U["showToast generic server error"]
+
+    style F fill:#f97316,color:#fff
+    style L fill:#f97316,color:#fff
+    style R fill:#ef4444,color:#fff
+    style C fill:#22c55e,color:#fff
+```
+
+**Resource criticality matrix** — determines whether a missing IAM policy aborts the task or silently skips the resource:
+
+| Resource          | Family                    | Task aborts? | Reason                                                          |
+| ----------------- | ------------------------- | ------------ | --------------------------------------------------------------- |
+| Instances         | `instance-family`         | Yes          | Primary deliverable for all doc types                           |
+| VCN / Network     | `virtual-network-family`  | Yes          | Required for topology sections                                  |
+| Load Balancers    | `load-balancers`          | Yes          | Required for LB and WAF binding                                 |
+| WAF               | `waf-family`              | Yes          | Required for WAF report and full infrastructure                 |
+| Certificates      | `leaf-certificate-family` | Yes          | Required for WAF report and full infrastructure                 |
+| OKE Clusters      | `cluster-family`          | Yes          | Required for kubernetes doc type                                |
+| DRG / CPE / IPSec | `virtual-network-family`  | Yes          | All use VirtualNetworkClient; covered by the same policy as VCN |
+| Volumes           | `volume-family`           | Yes          | Required for storage section                                    |
 
 ---
 

@@ -1238,7 +1238,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } else if (data.status === 'FAILURE') {
           clearInterval(pollingIntervalId);
-          showToast(t('toast.server_error'), 'error');
+          const failResult = data.result;
+          if (failResult && failResult.error_type === 'IAM_PERMISSION') {
+            const lines   = (failResult.error || '').split('\n');
+            const intro   = lines[0] || t('toast.server_error');
+            const command = lines.slice(1).join('\n').trim();
+            const msgHtml = command
+              ? `${intro}<br><code style="display:block;margin-top:8px;padding:6px 8px;background:rgba(0,0,0,0.25);border-radius:4px;font-size:0.82em;word-break:break-all;white-space:pre-wrap;">${command}</code>`
+              : intro;
+            showToast(msgHtml, 'error', t('toast.server_error'), 0);
+          } else {
+            showToast(t('toast.server_error'), 'error');
+          }
           hideProgress();
         }
       } catch (error) {
