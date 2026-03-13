@@ -30,6 +30,7 @@ from schemas import (
     ListenerData,
     LoadBalancerData,
     LoadBalancerIpAddressData,
+    HostnameData,
     LpgData,
     NetworkSecurityGroup,
     NodePoolData,
@@ -81,6 +82,68 @@ retry_strategy = oci.retry.RetryStrategyBuilder(
     retry_on_service_error_codes=["429", "500", "502", "503", "504"],
     backoff_type=oci.retry.BACKOFF_EQUAL_JITTER_VALUE,
 ).get_retry_strategy()
+
+# ==============================================================================
+# IAM Error Detection
+# ==============================================================================
+
+# Maps each OCI resource family to the policy statement needed to collect it.
+# Used by _iam_error_msg() to produce actionable error messages.
+_IAM_POLICY_MAP = {
+    "waf":          "allow dynamic-group '<seu-grupo>' to read waf-family in tenancy",
+    "certificate":  "allow dynamic-group '<seu-grupo>' to read leaf-certificate-family in tenancy",
+    "instance":     "allow dynamic-group '<seu-grupo>' to read instance-family in tenancy",
+    "volume":       "allow dynamic-group '<seu-grupo>' to read volume-family in tenancy",
+    "network":      "allow dynamic-group '<seu-grupo>' to read virtual-network-family in tenancy",
+    "loadbalancer": "allow dynamic-group '<seu-grupo>' to read load-balancers in tenancy",
+    "cluster":      "allow dynamic-group '<seu-grupo>' to read cluster-family in tenancy",
+    "compartment":  "allow dynamic-group '<seu-grupo>' to read compartments in tenancy",
+    # drg, cpe e ipsec usam VirtualNetworkClient e falham quando virtual-network-family está ausente
+    "drg":          "allow dynamic-group '<seu-grupo>' to read virtual-network-family in tenancy",
+    "cpe":          "allow dynamic-group '<seu-grupo>' to read virtual-network-family in tenancy",
+    "ipsec":        "allow dynamic-group '<seu-grupo>' to read virtual-network-family in tenancy",
+}
+
+# Kept for backward compatibility with existing call sites.
+_WAF_IAM_ERROR_MSG = (
+    "Permissão IAM ausente para WAF. Adicione a seguinte policy à sua Dynamic Group:\n"
+    + _IAM_POLICY_MAP["waf"]
+)
+
+
+_IAM_RESOURCE_LABEL = {
+    "waf":          "WAF",
+    "certificate":  "Certificados (leaf-certificate-family)",
+    "instance":     "Instâncias (instance-family)",
+    "volume":       "Volumes (volume-family)",
+    "network":      "Rede Virtual (virtual-network-family)",
+    "drg":          "Rede Virtual / DRG (virtual-network-family)",
+    "cpe":          "Rede Virtual / CPE (virtual-network-family)",
+    "ipsec":        "Rede Virtual / IPSec (virtual-network-family)",
+    "loadbalancer": "Load Balancers",
+    "cluster":      "OKE Clusters (cluster-family)",
+    "compartment":  "Compartimentos",
+}
+
+
+def _iam_error_msg(resource_key: str) -> str:
+    """Returns a human-readable IAM error message for the given resource family key."""
+    policy = _IAM_POLICY_MAP.get(resource_key, "allow dynamic-group '<seu-grupo>' to read <resource-family> in tenancy")
+    label  = _IAM_RESOURCE_LABEL.get(resource_key, resource_key.upper())
+    return (
+        f"Permissão IAM ausente para {label}. "
+        f"Adicione a seguinte policy à sua Dynamic Group:\n{policy}"
+    )
+
+
+def _check_iam(e: oci.exceptions.ServiceError, resource_key: str) -> None:
+    """
+    Raises PermissionError with an actionable IAM message when e is a
+    NotAuthorizedOrNotFound 404. Re-raises e unchanged for all other errors.
+    """
+    if e.status == 404 and e.code == "NotAuthorizedOrNotFound":
+        raise PermissionError(_iam_error_msg(resource_key)) from e
+    raise e
 
 # ==============================================================================
 # OCI Authentication and Client Initialization
@@ -553,6 +616,8 @@ def _get_standalone_block_volumes(
             compartment_id=compartment_id,
             retry_strategy=retry_strategy,
         ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "volume")
         for vol in all_vols_sdk:
             if vol.id in attached_volume_ids:
                 continue
@@ -594,11 +659,14 @@ def _get_volume_groups(
 ) -> List[VolumeGroupData]:
     """Collects Volume Groups from the compartment, including backup policy and cross-region replication data."""
     volume_groups_data = []
-    all_vgs_sdk = oci.pagination.list_call_get_all_results(
-        block_storage_client.list_volume_groups,
-        compartment_id=compartment_id,
-        retry_strategy=retry_strategy,
-    ).data
+    try:
+        all_vgs_sdk = oci.pagination.list_call_get_all_results(
+            block_storage_client.list_volume_groups,
+            compartment_id=compartment_id,
+            retry_strategy=retry_strategy,
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "volume")
     for vg_summary in all_vgs_sdk:
         vg = _safe_api_call(block_storage_client.get_volume_group, vg_summary.id)
         if not vg:
@@ -645,9 +713,12 @@ def _get_oke_clusters(
 ) -> List[OkeClusterData]:
     """Collects active OKE clusters with their Node Pools and associated network information."""
     oke_clusters_data = []
-    all_clusters_summary_sdk = oci.pagination.list_call_get_all_results(
-        ce_client.list_clusters, compartment_id=compartment_id, retry_strategy=retry_strategy
-    ).data
+    try:
+        all_clusters_summary_sdk = oci.pagination.list_call_get_all_results(
+            ce_client.list_clusters, compartment_id=compartment_id, retry_strategy=retry_strategy
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "cluster")
     for cluster_summary in [c for c in all_clusters_summary_sdk if c.lifecycle_state == "ACTIVE"]:
         vcn_info = vcn_map.get(cluster_summary.vcn_id, {"name": "N/A", "subnets": {}})
         node_pools_data = []
@@ -742,26 +813,12 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
     """
     Collects OCI Certificates Service certificates and their associations.
     Only ACTIVE and PENDING_DELETION states are kept; others are discarded silently.
-
-    Uses getattr() instead of to_dict() — some SDK versions return objects that
-    do not implement that method.
-
-    FIELD ACCESS STRATEGY (based on tested OCI SDK behavior):
-      - Top-level fields: getattr(obj, "snake_case_attr") — always works on SDK objects
-      - Nested objects (subject, current_version_summary, validity):
-        the nested SDK objects also expose attributes via getattr().
-        For the version dict, list_certificates uses .current_version_summary
-        and get_certificate uses .current_version (different attribute name!).
-      - to_dict() is intentionally NOT used for the outer object because some
-        SDK/platform combinations return an empty dict or an object without to_dict().
     """
 
     def _ga(obj, attr, default=None):
-        """Safe getattr with default."""
         return getattr(obj, attr, default) or default
 
     def _date(raw, default="N/A"):
-        """Trim ISO datetime to date-only string (handles both T and space separators)."""
         if not raw:
             return default
         s = str(raw)
@@ -771,7 +828,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
         return s[:10] if len(s) >= 10 else s
 
     def _subject_from_obj(subj_obj):
-        """Extract subject fields from an OCI CertificateSubject SDK object or dict."""
         if subj_obj is None:
             return {"common_name": "N/A", "organization": "N/A",
                     "locality_name": "N/A", "state_or_province_name": "N/A", "country": "N/A"}
@@ -797,10 +853,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
         }
 
     def _cvs_from_obj(cvs_obj):
-        """
-        Extract version summary fields from CertificateVersionSummary SDK object.
-        Returns a normalized dict. cvs_obj may be None.
-        """
         if cvs_obj is None:
             return {}
         if isinstance(cvs_obj, dict):
@@ -843,7 +895,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
         }
 
     def _sans_from_raw(sans_raw) -> list:
-        """Convert a list of SAN objects/dicts to [{san_type, value}]."""
         result = []
         for s in (sans_raw or []):
             if isinstance(s, dict):
@@ -859,7 +910,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
         return result
 
     def _build_assoc(assoc_obj) -> dict:
-        """Build association entry from SDK object or dict."""
         if isinstance(assoc_obj, dict):
             def _dk(d, *keys):
                 for k in keys:
@@ -881,7 +931,6 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
         }
 
     def _cert_id_from(assoc_obj) -> str:
-        """Extract the certificates_resource_id from an association object."""
         if isinstance(assoc_obj, dict):
             return (assoc_obj.get("certificates_resource_id")
                     or assoc_obj.get("certificates-resource-id") or "")
@@ -897,114 +946,197 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
             retry_strategy=retry_strategy,
         ).data
         logging.info("Found %d certificate(s) in compartment.", len(certs_sdk))
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "certificate")
 
-        assoc_map: Dict[str, list] = {}
+    assoc_map: Dict[str, list] = {}
+    try:
+        assocs_sdk = oci.pagination.list_call_get_all_results(
+            certs_mgmt_client.list_associations,
+            compartment_id=compartment_id,
+            retry_strategy=retry_strategy,
+        ).data
+        for a in assocs_sdk:
+            cid = _cert_id_from(a)
+            if cid:
+                assoc_map.setdefault(cid, []).append(_build_assoc(a))
+        logging.info("Fetched %d certificate association(s) for compartment.", len(assocs_sdk))
+    except Exception as e:
+        logging.warning("Compartment-wide association fetch failed: %s", e)
+
+    for cert_obj in certs_sdk:
         try:
-            assocs_sdk = oci.pagination.list_call_get_all_results(
-                certs_mgmt_client.list_associations,
-                compartment_id=compartment_id,
-                retry_strategy=retry_strategy,
-            ).data
-            for a in assocs_sdk:
-                cid = _cert_id_from(a)
-                if cid:
-                    assoc_map.setdefault(cid, []).append(_build_assoc(a))
-            logging.info("Fetched %d certificate association(s) for compartment.", len(assocs_sdk))
-        except Exception as e:
-            logging.warning("Compartment-wide association fetch failed: %s", e)
+            cert_id = getattr(cert_obj, "id", None) or ""
+            name    = getattr(cert_obj, "name", None) or "N/A"
+            state   = (getattr(cert_obj, "lifecycle_state", None) or "").upper()
 
-        for cert_obj in certs_sdk:
+            if state not in ("ACTIVE", "PENDING_DELETION"):
+                continue
+            if not cert_id:
+                logging.warning("Skipping certificate with no OCID: name=%s", name)
+                continue
+
+            cert_detail_obj = None
             try:
-                cert_id = getattr(cert_obj, "id", None) or ""
-                name    = getattr(cert_obj, "name", None) or "N/A"
-                state   = (getattr(cert_obj, "lifecycle_state", None) or "").upper()
+                cert_detail_obj = certs_mgmt_client.get_certificate(
+                    certificate_id=cert_id,
+                    retry_strategy=retry_strategy,
+                ).data
+            except Exception as e:
+                logging.warning("Failed to get certificate detail for %s: %s", name, e)
 
-                if state not in ("ACTIVE", "PENDING_DELETION"):
-                    continue
-                if not cert_id:
-                    logging.warning("Skipping certificate with no OCID: name=%s", name)
-                    continue
-
-                # The detail endpoint uses .current_version; the list endpoint uses .current_version_summary.
-                cert_detail_obj = None
+            if cert_id not in assoc_map:
                 try:
-                    cert_detail_obj = certs_mgmt_client.get_certificate(
-                        certificate_id=cert_id,
+                    per = oci.pagination.list_call_get_all_results(
+                        certs_mgmt_client.list_associations,
+                        compartment_id=compartment_id,
+                        certificates_resource_id=cert_id,
                         retry_strategy=retry_strategy,
                     ).data
+                    if per:
+                        assoc_map[cert_id] = [_build_assoc(a) for a in per]
                 except Exception as e:
-                    logging.warning("Failed to get certificate detail for %s: %s", name, e)
+                    logging.warning("Per-cert association fallback failed for %s: %s", name, e)
 
-                if cert_id not in assoc_map:
-                    try:
-                        per = oci.pagination.list_call_get_all_results(
-                            certs_mgmt_client.list_associations,
-                            compartment_id=compartment_id,
-                            certificates_resource_id=cert_id,
-                            retry_strategy=retry_strategy,
-                        ).data
-                        if per:
-                            assoc_map[cert_id] = [_build_assoc(a) for a in per]
-                    except Exception as e:
-                        logging.warning("Per-cert association fallback failed for %s: %s", name, e)
+            subj_obj = getattr(cert_obj, "subject", None)
+            subj = _subject_from_obj(subj_obj)
+            if subj["common_name"] == "N/A" and cert_detail_obj:
+                subj = _subject_from_obj(getattr(cert_detail_obj, "subject", None))
 
-                subj_obj = getattr(cert_obj, "subject", None)
-                subj = _subject_from_obj(subj_obj)
-                if subj["common_name"] == "N/A" and cert_detail_obj:
-                    subj = _subject_from_obj(getattr(cert_detail_obj, "subject", None))
+            cvs_obj = (
+                getattr(cert_obj,         "current_version_summary", None)
+                or (getattr(cert_detail_obj, "current_version",         None) if cert_detail_obj else None)
+                or getattr(cert_obj,         "current_version",         None)
+            )
+            cvs = _cvs_from_obj(cvs_obj)
+            sans = _sans_from_raw(cvs.pop("_sans_raw", []))
 
-                # Attribute name differs by endpoint: list → current_version_summary, get → current_version.
-                cvs_obj = (
-                    getattr(cert_obj,         "current_version_summary", None)
-                    or (getattr(cert_detail_obj, "current_version",         None) if cert_detail_obj else None)
-                    or getattr(cert_obj,         "current_version",         None)
-                )
-                cvs = _cvs_from_obj(cvs_obj)
+            tod_raw = (getattr(cert_obj, "time_of_deletion", None)
+                       or (getattr(cert_detail_obj, "time_of_deletion", None) if cert_detail_obj else None))
+            time_of_deletion = _date(tod_raw) if tod_raw else "—"
 
-                sans = _sans_from_raw(cvs.pop("_sans_raw", []))
+            cert_entry = {
+                "id":              cert_id,
+                "name":            name,
+                "lifecycle_state": state,
+                "config_type":     getattr(cert_obj, "config_type", None) or "IMPORTED",
+                "key_algorithm":   getattr(cert_obj, "key_algorithm", None) or "N/A",
+                "signature_algorithm": getattr(cert_obj, "signature_algorithm", None) or "N/A",
+                "time_created":    _date(getattr(cert_obj, "time_created", None)),
+                "time_of_deletion": time_of_deletion,
+                "subject":         subj,
+                "subject_alternative_names": sans,
+                "current_version_summary": {
+                    "stages":           cvs.get("stages", []),
+                    "version_number":   cvs.get("version_number"),
+                    "serial_number":    cvs.get("serial_number", "N/A"),
+                    "valid_not_before": cvs.get("valid_not_before", "N/A"),
+                    "valid_not_after":  cvs.get("valid_not_after",  "N/A"),
+                    "time_created":     cvs.get("time_created",     "N/A"),
+                },
+                "associations": assoc_map.get(cert_id, []),
+            }
+            certs_data.append(cert_entry)
 
-                tod_raw = (getattr(cert_obj, "time_of_deletion", None)
-                           or (getattr(cert_detail_obj, "time_of_deletion", None) if cert_detail_obj else None))
-                time_of_deletion = _date(tod_raw) if tod_raw else "—"
-
-                cert_entry = {
-                    "id":              cert_id,
-                    "name":            name,
-                    "lifecycle_state": state,
-                    "config_type":     getattr(cert_obj, "config_type", None) or "IMPORTED",
-                    "key_algorithm":   getattr(cert_obj, "key_algorithm", None) or "N/A",
-                    "signature_algorithm": getattr(cert_obj, "signature_algorithm", None) or "N/A",
-                    "time_created":    _date(getattr(cert_obj, "time_created", None)),
-                    "time_of_deletion": time_of_deletion,
-                    "subject":         subj,
-                    "subject_alternative_names": sans,
-                    "current_version_summary": {
-                        "stages":           cvs.get("stages", []),
-                        "version_number":   cvs.get("version_number"),
-                        "serial_number":    cvs.get("serial_number", "N/A"),
-                        "valid_not_before": cvs.get("valid_not_before", "N/A"),
-                        "valid_not_after":  cvs.get("valid_not_after",  "N/A"),
-                        "time_created":     cvs.get("time_created",     "N/A"),
-                    },
-                    "associations": assoc_map.get(cert_id, []),
-                }
-                certs_data.append(cert_entry)
-
-            except Exception as cert_ex:
-                logging.error(
-                    "Exception processing certificate %s: %s",
-                    getattr(cert_obj, "name", "?"),
-                    cert_ex,
-                    exc_info=True,
-                )
-
-    except oci.exceptions.ServiceError as e:
-        logging.error("OCI ServiceError collecting certificates for compartment %s: %s", compartment_id, e.message)
-    except Exception as e:
-        logging.error("Unexpected error collecting certificates: %s", e, exc_info=True)
+        except Exception as cert_ex:
+            logging.error(
+                "Exception processing certificate %s: %s",
+                getattr(cert_obj, "name", "?"),
+                cert_ex,
+                exc_info=True,
+            )
 
     logging.info("Certificate collection complete. Returning %d certificate(s).", len(certs_data))
     return certs_data
+
+# ==============================================================================
+# WAF Data Collection Helpers
+# ==============================================================================
+
+def _get_waf_firewall_attachments(waf_client: WafClient, compartment_id: str) -> Dict[str, Dict[str, str]]:
+    """
+    Returns a dict mapping load_balancer_id → WAF attachment metadata.
+
+    Raises PermissionError when the IAM policy for WAF is missing so that callers
+    can decide whether to abort the task or continue without WAF data.
+    """
+    try:
+        firewalls_sdk = oci.pagination.list_call_get_all_results(
+            waf_client.list_web_app_firewalls,
+            compartment_id=compartment_id,
+            retry_strategy=retry_strategy,
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "waf")
+
+    attachments = {}
+    for fw in firewalls_sdk:
+        if fw.lifecycle_state != "DELETED" and fw.backend_type == "LOAD_BALANCER":
+            policy_name = fw.display_name
+            policy = _safe_api_call(waf_client.get_web_app_firewall_policy, fw.web_app_firewall_policy_id)
+            if policy:
+                policy_name = policy.display_name
+            attachments[fw.load_balancer_id] = {
+                "firewall_id": fw.id, "firewall_name": fw.display_name,
+                "policy_id": fw.web_app_firewall_policy_id, "policy_name": policy_name,
+            }
+    return attachments
+
+
+def _get_waf_policies(
+    waf_client: WafClient, compartment_id: str, region: str, compartment_name: str
+) -> List[WafPolicyData]:
+    """
+    Returns all active WAF policies in the compartment.
+
+    Raises PermissionError when the IAM policy for WAF (waas-family) is missing.
+    All other ServiceErrors are re-raised as-is.
+    """
+    try:
+        policies_sdk = oci.pagination.list_call_get_all_results(
+            waf_client.list_web_app_firewall_policies,
+            compartment_id=compartment_id,
+            lifecycle_state="ACTIVE",
+            retry_strategy=retry_strategy,
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "waf")
+
+    policies_data = []
+    for p_summary in policies_sdk:
+        if getattr(p_summary, "lifecycle_state", "").upper() not in ("ACTIVE", "CREATING", "UPDATING"):
+            continue
+        p_details = _safe_api_call(waf_client.get_web_app_firewall_policy, p_summary.id)
+        if not p_details:
+            continue
+        actions = [WafAction(name=a.name, type=a.type, code=getattr(a, "code", None)) for a in (p_details.actions or [])]
+        ac_rules = [
+            WafAccessControlRule(name=r.name, action_name=r.action_name, condition=r.condition, condition_language=r.condition_language)
+            for r in (p_details.request_access_control.rules if p_details.request_access_control and p_details.request_access_control.rules else [])
+        ]
+        prot_rules = []
+        for r in (p_details.request_protection.rules if p_details.request_protection and p_details.request_protection.rules else []):
+            caps = [WafProtectionCapability(key=c.key, version=c.version, action_name=c.action_name) for c in (r.protection_capabilities or [])]
+            prot_rules.append(WafProtectionRule(
+                name=r.name, action_name=r.action_name, condition=r.condition,
+                is_body_inspection_enabled=r.is_body_inspection_enabled or False,
+                protection_capabilities=caps,
+            ))
+        rl_rules = [
+            WafRateLimitingRule(name=r.name, action_name=r.action_name, condition=r.condition)
+            for r in (p_details.request_rate_limiting.rules if p_details.request_rate_limiting and p_details.request_rate_limiting.rules else [])
+        ]
+        time_created = p_details.time_created.strftime("%Y-%m-%d %H:%M:%S") if p_details.time_created else "N/A"
+        policies_data.append(
+            WafPolicyData(
+                id=p_details.id, display_name=p_details.display_name,
+                compartment_name=compartment_name, lifecycle_state=p_details.lifecycle_state,
+                region=region, time_created=time_created,
+                actions=actions, access_control_rules=ac_rules,
+                protection_rules=prot_rules, rate_limiting_rules=rl_rules,
+            )
+        )
+    return policies_data
 
 # ==============================================================================
 # Main Orchestrator Functions — Entry points for Celery tasks
@@ -1016,8 +1148,8 @@ def get_infrastructure_details(
 ) -> InfrastructureData:
     """
     Main orchestrator for full infrastructure data collection.
-    Instance collection is parallelized via ThreadPoolExecutor to reduce total runtime
-    on compartments with many instances. Progress is reported via Celery task states.
+    WAF collection is treated as optional: a missing IAM policy is logged as a
+    warning and WAF data is returned empty so the rest of the report is unaffected.
     """
     is_k8s_flow = doc_type == "kubernetes"
 
@@ -1036,9 +1168,16 @@ def get_infrastructure_details(
     oracle_managed_str = "Gerenciado pela Oracle (Padrão)"
     instances = []
 
+    # WAF firewall attachments are optional — a PermissionError means missing IAM,
+    # which is logged as a warning so the rest of the collection continues normally.
     waf_attachments = {}
     if waf_client:
-        waf_attachments = _get_waf_firewall_attachments(waf_client, compartment_id)
+        try:
+            waf_attachments = _get_waf_firewall_attachments(waf_client, compartment_id)
+        except PermissionError as e:
+            logging.warning("WAF firewall attachments skipped — %s", e)
+        except Exception as e:
+            logging.warning("WAF firewall attachments skipped (unexpected error): %s", e)
 
     step_key = "progress.listing_oke" if is_k8s_flow else "progress.listing_instances"
     task.update_state(
@@ -1046,9 +1185,12 @@ def get_infrastructure_details(
         meta={"current": 5, "total": 100, "step_key": step_key, "context": {}},
     )
 
-    all_instances_sdk = oci.pagination.list_call_get_all_results(
-        compute_client.list_instances, compartment_id=compartment_id, retry_strategy=retry_strategy
-    ).data
+    try:
+        all_instances_sdk = oci.pagination.list_call_get_all_results(
+            compute_client.list_instances, compartment_id=compartment_id, retry_strategy=retry_strategy
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "instance")
     total_instances = len(all_instances_sdk)
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS_FOR_DETAILS) as executor:
@@ -1078,17 +1220,18 @@ def get_infrastructure_details(
     all_volumes_map.update({bv.id: f"Block Volume ({bv.display_name})" for i in instances for bv in i.block_volumes})
     volume_groups = _get_volume_groups(block_storage_client, compartment_id, all_volumes_map)
 
-    # Collect volumes that exist in the compartment but aren't attached to any instance.
-    # Respects user preference: if include_standalone=False, skip this potentially slow API call.
     attached_ids = {bv.id for i in instances for bv in i.block_volumes}
     standalone_volumes = _get_standalone_block_volumes(block_storage_client, compartment_id, attached_ids) if include_standalone else []
 
     step_key = "progress.checking_network_connectivity" if is_k8s_flow else "progress.collecting_connectivity"
     task.update_state(state="PROGRESS", meta={"current": 60, "total": 100, "step_key": step_key, "context": {}})
 
-    all_drgs_sdk = oci.pagination.list_call_get_all_results(
-        virtual_network_client.list_drgs, compartment_id=compartment_id, retry_strategy=retry_strategy
-    ).data
+    try:
+        all_drgs_sdk = oci.pagination.list_call_get_all_results(
+            virtual_network_client.list_drgs, compartment_id=compartment_id, retry_strategy=retry_strategy
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "drg")
     drgs = []
     for drg_sdk in all_drgs_sdk:
         attachments_sdk = oci.pagination.list_call_get_all_results(
@@ -1118,9 +1261,12 @@ def get_infrastructure_details(
     step_key = "progress.finishing" if is_k8s_flow else "progress.collecting_vpn"
     task.update_state(state="PROGRESS", meta={"current": 65, "total": 100, "step_key": step_key, "context": {}})
 
-    all_cpes_sdk = oci.pagination.list_call_get_all_results(
-        virtual_network_client.list_cpes, compartment_id=compartment_id, retry_strategy=retry_strategy
-    ).data
+    try:
+        all_cpes_sdk = oci.pagination.list_call_get_all_results(
+            virtual_network_client.list_cpes, compartment_id=compartment_id, retry_strategy=retry_strategy
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "cpe")
     cpes = []
     for cpe in all_cpes_sdk:
         vendor = "N/A"
@@ -1130,9 +1276,12 @@ def get_infrastructure_details(
                 vendor = shape.cpe_device_info.vendor or "N/A"
         cpes.append(CpeData(id=cpe.id, display_name=cpe.display_name, ip_address=cpe.ip_address, vendor=vendor))
 
-    all_ipsec_sdk = oci.pagination.list_call_get_all_results(
-        virtual_network_client.list_ip_sec_connections, compartment_id=compartment_id, retry_strategy=retry_strategy
-    ).data
+    try:
+        all_ipsec_sdk = oci.pagination.list_call_get_all_results(
+            virtual_network_client.list_ip_sec_connections, compartment_id=compartment_id, retry_strategy=retry_strategy
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "ipsec")
     ipsec_connections = []
     for ipsec in all_ipsec_sdk:
         tunnels_sdk = _safe_api_call(virtual_network_client.list_ip_sec_connection_tunnels, ipsec.id)
@@ -1191,10 +1340,13 @@ def get_infrastructure_details(
         meta={"current": 75, "total": 100, "step_key": "progress.analyzing_vcns", "context": {}},
     )
 
-    all_vcns_sdk = oci.pagination.list_call_get_all_results(
-        virtual_network_client.list_vcns,
-        compartment_id=compartment_id, lifecycle_state="AVAILABLE", retry_strategy=retry_strategy,
-    ).data
+    try:
+        all_vcns_sdk = oci.pagination.list_call_get_all_results(
+            virtual_network_client.list_vcns,
+            compartment_id=compartment_id, lifecycle_state="AVAILABLE", retry_strategy=retry_strategy,
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "network")
     vcns = []
     for vcn_sdk in all_vcns_sdk:
         subnets = [
@@ -1302,9 +1454,12 @@ def get_infrastructure_details(
         meta={"current": 90, "total": 100, "step_key": "progress.inspecting_lbs", "context": {}},
     )
 
-    all_lbs_summary_sdk = oci.pagination.list_call_get_all_results(
-        load_balancer_client.list_load_balancers, compartment_id=compartment_id, retry_strategy=retry_strategy
-    ).data
+    try:
+        all_lbs_summary_sdk = oci.pagination.list_call_get_all_results(
+            load_balancer_client.list_load_balancers, compartment_id=compartment_id, retry_strategy=retry_strategy
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "loadbalancer")
     load_balancers = []
     for lb_summary in all_lbs_summary_sdk:
         lb_details = _safe_api_call(load_balancer_client.get_load_balancer, lb_summary.id)
@@ -1315,8 +1470,6 @@ def get_infrastructure_details(
         listeners = [
             ListenerData(
                 name=l.name,
-                # OCI SDK always returns "HTTP" as base protocol even for SSL listeners.
-                # Infer HTTPS when ssl_configuration is present (has certificate IDs or name).
                 protocol=(
                     "HTTPS"
                     if getattr(l, "ssl_configuration", None) is not None
@@ -1346,11 +1499,10 @@ def get_infrastructure_details(
         if getattr(lb_details, "certificates", None):
             for cert_name, cert_obj in lb_details.certificates.items():
                 not_after = "N/A"
-                if hasattr(cert_obj, "public_certificate") and cert_obj.public_certificate:
+                if hasattr(cert_obj, "public_certificate") and cert_obj.public_certificate and hasattr(cert_obj.public_certificate, "not_valid_after"):
                     not_after = str(cert_obj.public_certificate.not_valid_after)
                 certificates.append(LoadBalancerCertificateData(name=cert_name, valid_not_after=not_after))
 
-        # load_balancers must be initialised before the loop or the append below raises NameError.
         load_balancers.append(
             LoadBalancerData(
                 id=lb_details.id,
@@ -1369,18 +1521,19 @@ def get_infrastructure_details(
             )
         )
 
-    # Collect WAF policies for the compartment, then enrich each with firewall/LB integration data.
     task.update_state(
         state="PROGRESS",
         meta={"current": 94, "total": 100, "step_key": "progress.collecting_waf_infra", "context": {}},
     )
+
+    # WAF policies collection is optional in the full infrastructure flow.
+    # A PermissionError (missing IAM policy) is logged as a warning and WAF is
+    # returned empty — the rest of the report is not affected.
     waf_policies = []
     if waf_client:
         try:
             waf_policies = _get_waf_policies(waf_client, compartment_id, region, compartment_name="")
 
-            # Enrich each policy with its Firewall + LB integration data.
-            # LBs already have waf_policy_id set from collection, so no extra API calls are needed.
             firewalls_sdk = oci.pagination.list_call_get_all_results(
                 waf_client.list_web_app_firewalls,
                 compartment_id=compartment_id,
@@ -1388,14 +1541,12 @@ def get_infrastructure_details(
             ).data
             active_firewalls = [fw for fw in firewalls_sdk if fw.lifecycle_state != "DELETED"]
 
-            # Index LBs by waf_policy_id; a single policy can be bound to multiple LBs.
             lb_by_policy_id: dict = {}
             for lb in load_balancers:
                 if lb.waf_policy_id:
                     lb_by_policy_id.setdefault(lb.waf_policy_id, []).append(lb)
 
             for policy in waf_policies:
-                # Collect all firewalls bound to this policy.
                 policy_firewalls = [f for f in active_firewalls if f.web_app_firewall_policy_id == policy.id]
                 policy_integrations = []
 
@@ -1407,7 +1558,6 @@ def get_infrastructure_details(
                         load_balancer_id=getattr(fw, "load_balancer_id", None),
                     )
 
-                    # Resolve the LB from the index; fall back to a direct API call for cross-compartment LBs.
                     fw_lb_id = getattr(fw, "load_balancer_id", None)
                     lb_data = None
                     if fw_lb_id:
@@ -1435,20 +1585,18 @@ def get_infrastructure_details(
                             except Exception:
                                 pass
 
-                    integration = WafIntegrationData(
-                        firewall=fw_data,
-                        load_balancer=lb_data,
-                    )
+                    integration = WafIntegrationData(firewall=fw_data, load_balancer=lb_data)
                     policy_integrations.append(integration)
 
-                # Keep singular `integration` for backward compatibility — holds the first firewall.
                 if policy_integrations:
                     policy.integration = policy_integrations[0]
                 policy.integrations = policy_integrations
-        except Exception as e:
-            logging.warning("WAF collection skipped in infrastructure flow: %s", e)
 
-    # Collect OCI Certificates Service certificates for the summary and full infrastructure report.
+        except PermissionError:
+            raise
+        except Exception as e:
+            logging.warning("WAF collection skipped (unexpected error): %s", e)
+
     task.update_state(
         state="PROGRESS",
         meta={"current": 97, "total": 100, "step_key": "progress.collecting_certificates", "context": {}},
@@ -1457,8 +1605,10 @@ def get_infrastructure_details(
     try:
         certs_mgmt_client = get_client(oci.certificates_management.CertificatesManagementClient, region, profile)
         all_certificates = _get_compartment_certificates(certs_mgmt_client, compartment_id)
+    except PermissionError:
+        raise
     except Exception as e:
-        logging.warning("Certificates collection skipped in infrastructure flow: %s", e)
+        logging.warning("Certificates collection skipped (unexpected error): %s", e)
 
     task.update_state(
         state="PROGRESS",
@@ -1526,67 +1676,6 @@ def get_new_host_details(
         vcns=[], drgs=[], cpes=[], ipsec_connections=[], load_balancers=[], kubernetes_clusters=[],
     )
 
-def _get_waf_firewall_attachments(waf_client: WafClient, compartment_id: str) -> Dict[str, Dict[str, str]]:
-    attachments = {}
-    firewalls_sdk = oci.pagination.list_call_get_all_results(
-        waf_client.list_web_app_firewalls, compartment_id=compartment_id, retry_strategy=retry_strategy
-    ).data
-    for fw in firewalls_sdk:
-        if fw.lifecycle_state != "DELETED" and fw.backend_type == "LOAD_BALANCER":
-            policy_name = fw.display_name
-            policy = _safe_api_call(waf_client.get_web_app_firewall_policy, fw.web_app_firewall_policy_id)
-            if policy:
-                policy_name = policy.display_name
-            attachments[fw.load_balancer_id] = {
-                "firewall_id": fw.id, "firewall_name": fw.display_name,
-                "policy_id": fw.web_app_firewall_policy_id, "policy_name": policy_name,
-            }
-    return attachments
-
-def _get_waf_policies(
-    waf_client: WafClient, compartment_id: str, region: str, compartment_name: str
-) -> List[WafPolicyData]:
-    policies_data = []
-    policies_sdk = oci.pagination.list_call_get_all_results(
-        waf_client.list_web_app_firewall_policies,
-        compartment_id=compartment_id,
-        lifecycle_state="ACTIVE",
-        retry_strategy=retry_strategy,
-    ).data
-    for p_summary in policies_sdk:
-        if getattr(p_summary, "lifecycle_state", "").upper() not in ("ACTIVE", "CREATING", "UPDATING"):
-            continue
-        p_details = _safe_api_call(waf_client.get_web_app_firewall_policy, p_summary.id)
-        if not p_details:
-            continue
-        actions = [WafAction(name=a.name, type=a.type, code=getattr(a, "code", None)) for a in (p_details.actions or [])]
-        ac_rules = [
-            WafAccessControlRule(name=r.name, action_name=r.action_name, condition=r.condition, condition_language=r.condition_language)
-            for r in (p_details.request_access_control.rules if p_details.request_access_control and p_details.request_access_control.rules else [])
-        ]
-        prot_rules = []
-        for r in (p_details.request_protection.rules if p_details.request_protection and p_details.request_protection.rules else []):
-            caps = [WafProtectionCapability(key=c.key, version=c.version, action_name=c.action_name) for c in (r.protection_capabilities or [])]
-            prot_rules.append(WafProtectionRule(
-                name=r.name, action_name=r.action_name, condition=r.condition,
-                is_body_inspection_enabled=r.is_body_inspection_enabled or False,
-                protection_capabilities=caps,
-            ))
-        rl_rules = [
-            WafRateLimitingRule(name=r.name, action_name=r.action_name, condition=r.condition)
-            for r in (p_details.request_rate_limiting.rules if p_details.request_rate_limiting and p_details.request_rate_limiting.rules else [])
-        ]
-        time_created = p_details.time_created.strftime("%Y-%m-%d %H:%M:%S") if p_details.time_created else "N/A"
-        policies_data.append(
-            WafPolicyData(
-                id=p_details.id, display_name=p_details.display_name,
-                compartment_name=compartment_name, lifecycle_state=p_details.lifecycle_state,
-                region=region, time_created=time_created,
-                actions=actions, access_control_rules=ac_rules,
-                protection_rules=prot_rules, rate_limiting_rules=rl_rules,
-            )
-        )
-    return policies_data
 
 def _get_vcn_details(virtual_network_client, compartment_id: str) -> list:
     """Collects VCNs and all nested resources (subnets, security lists, route tables, NSGs, LPGs). Resolves gateway names in route rules."""
@@ -1683,8 +1772,11 @@ def get_waf_report_details(
 ) -> InfrastructureData:
     """
     Data collection orchestrator for the WAF report.
-    Collects active WAF policies, bound firewalls, integrated load balancers,
-    relevant VCNs, and OCI Certificates from the compartment.
+
+    Unlike the full infrastructure flow, WAF is the ONLY purpose of this task.
+    A PermissionError (missing IAM policy) is therefore re-raised so that Celery
+    marks the task as FAILURE and the frontend can display the exact IAM instruction
+    to the user instead of silently returning an empty report.
     """
     task.update_state(
         state="PROGRESS",
@@ -1700,6 +1792,8 @@ def get_waf_report_details(
         meta={"current": 20, "total": 100, "step_key": "progress.listing_waf", "context": {}},
     )
 
+    # PermissionError propagates intentionally here — the frontend will display the
+    # exact IAM policy instruction stored in the exception message.
     waf_policies = _get_waf_policies(waf_client, compartment_id, region, compartment_name)
 
     task.update_state(
@@ -1721,11 +1815,9 @@ def get_waf_report_details(
         meta={"current": 75, "total": 100, "step_key": "progress.mapping_waf_network", "context": {}},
     )
 
-    # Initialise load_balancers before the loop to avoid NameError on first append.
     load_balancers: List[LoadBalancerData] = []
 
     for policy in waf_policies:
-        # Collect ALL firewalls bound to this policy.
         policy_firewalls = [f for f in active_firewalls if f.web_app_firewall_policy_id == policy.id]
         policy_integrations = []
 
@@ -1773,7 +1865,7 @@ def get_waf_report_details(
                         if getattr(lb_details, "certificates", None):
                             for cert_name, cert_obj in lb_details.certificates.items():
                                 not_after = "N/A"
-                                if hasattr(cert_obj, "public_certificate") and cert_obj.public_certificate:
+                                if hasattr(cert_obj, "public_certificate") and cert_obj.public_certificate and hasattr(cert_obj.public_certificate, "not_valid_after"):
                                     not_after = str(cert_obj.public_certificate.not_valid_after)
                                 lb_certs.append(LoadBalancerCertificateData(name=cert_name, valid_not_after=not_after))
 
@@ -1789,7 +1881,6 @@ def get_waf_report_details(
                             waf_policy_id=policy.id, waf_policy_name=policy.display_name,
                         )
 
-                        # Use the first LB that has a resolved subnet for network_infrastructure.
                         if lb_details.subnet_ids and not policy.network_infrastructure:
                             subnet = _safe_api_call(virtual_network_client.get_subnet, lb_details.subnet_ids[0])
                             if subnet:
@@ -1810,7 +1901,6 @@ def get_waf_report_details(
             )
             policy_integrations.append(integration)
 
-        # Populate both `integration` (first item, backward compat) and `integrations` (all).
         if policy_integrations:
             policy.integration = policy_integrations[0]
         policy.integrations = policy_integrations
@@ -1822,6 +1912,8 @@ def get_waf_report_details(
 
     all_vcns = _get_vcn_details(virtual_network_client, compartment_id)
 
+    # PermissionError propagates intentionally — WAF report certificates are
+    # a primary deliverable; missing IAM is reported to the frontend.
     certs_mgmt_client = get_client(oci.certificates_management.CertificatesManagementClient, region, profile)
     all_certificates = _get_compartment_certificates(certs_mgmt_client, compartment_id)
 
