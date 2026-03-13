@@ -468,9 +468,11 @@ body.light-mode #language-selector { color: rgba(255,255,255,0.55); }
   justify-content: flex-end;
   gap: 8px;
   padding: 6px 20px;
-  background: var(--bg-primary);
+  background: var(--bg-main);
+  background-clip: padding-box;
   border-bottom: 1px solid var(--border-muted);
   min-height: 48px;
+  isolation: isolate;
 }
 
 .app-content {
@@ -1235,7 +1237,7 @@ body.light-mode .multi-select-chip { color: #4338ca; }
   line-height: 16px;
   text-align: center;
   pointer-events: none;
-  border: 2px solid var(--bg-primary);
+  border: 2px solid var(--bg-main);
 }
 #ann-topbar-btn .topbar-badge { background: #f59e0b; }
 .topbar-badge.hidden { display: none; }

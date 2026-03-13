@@ -673,6 +673,8 @@ async def get_collection_status(task_id: str):
         return {"task_id": task_id, "status": "PROGRESS", "result": task_result.info}
     if task_result.state == "PENDING":
         return {"task_id": task_id, "status": "PENDING",  "result": None}
+    if task_result.state == "IAM_ERROR":
+        return {"task_id": task_id, "status": "FAILURE", "result": task_result.info}
     if task_result.state == "FAILURE":
         logging.error(f"Task {task_id} failed.\n{task_result.traceback}")
         return {"task_id": task_id, "status": "FAILURE",  "result": None}
