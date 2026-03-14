@@ -5020,8 +5020,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
               </td>
               <td>
-                <label class="admin-toggle-label" title="${isAdmin ? t('admin.role.revoke') : t('admin.role.promote')}">
-                  <input type="checkbox" class="admin-role-toggle" data-uid="${u.id}" ${isAdmin ? 'checked' : ''}>
+                <label class="admin-toggle-label" title="${u.username === 'admin' ? 'Permissões permanentes — não podem ser alteradas' : (isAdmin ? t('admin.role.revoke') : t('admin.role.promote'))}" style="${u.username === 'admin' ? 'opacity:0.4;cursor:not-allowed;pointer-events:none' : ''}">
+                  <input type="checkbox" class="admin-role-toggle" data-uid="${u.id}" ${isAdmin ? 'checked' : ''} ${u.username === 'admin' ? 'disabled' : ''}>
                   <span class="admin-toggle-track"><span class="admin-toggle-thumb"></span></span>
                   <span class="admin-toggle-text">${isAdmin ? t('admin.role.admin') : t('admin.role.user')}</span>
                 </label>

@@ -41,6 +41,16 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 - [Production Deployment](#production-deployment)
 - [Docker (Recommended)](#docker-recommended)
 - [Bare VM](#bare-vm)
+- [HTTPS with Let's Encrypt](#https-with-lets-encrypt)
+  - [How it works](#how-it-works)
+  - [Step 1 — Install Certbot and the DNS plugin](#step-1--install-certbot-and-the-dns-plugin)
+  - [Step 2 — Configure DNS credentials](#step-2--configure-dns-credentials)
+  - [Step 3 — Obtain the certificate](#step-3--obtain-the-certificate)
+  - [Step 4 — Enable HTTPS in the frontend container](#step-4--enable-https-in-the-frontend-container)
+  - [Step 5 — Update `.env`](#step-5--update-env)
+  - [Step 6 — Rebuild and verify](#step-6--rebuild-and-verify)
+  - [Step 7 — Automatic renewal hook](#step-7--automatic-renewal-hook)
+  - [DNS Provider Reference](#dns-provider-reference)
 - [Admin Guide](#admin-guide)
 - [First Login](#first-login)
 - [Tenancy Profiles](#tenancy-profiles)
@@ -466,7 +476,8 @@ oci-docgen/
 │       ├── pt.json          # PT-BR translations
 │       └── en.json          # EN translations
 ├── docker-compose.yml
-├── nginx.conf
+├── nginx.conf               # Default HTTP config (used inside the frontend container)
+├── nginx.https.conf         # HTTPS template — copy over nginx.conf to enable TLS
 └── .env                     # SECRET_KEY, OCI_AUTH_METHOD, etc. (not committed)
 ```
 
@@ -833,12 +844,327 @@ sudo ln -s /etc/nginx/sites-available/ocidocgen /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl restart nginx
 ```
 
-> **HTTPS** with Let's Encrypt:
+> **HTTPS:** See the [HTTPS with Let's Encrypt](#https-with-lets-encrypt) section for full instructions. The DNS-01 challenge flow described there works for both Docker and Bare VM deployments — just apply the `nginx.https.conf` template to `/etc/nginx/sites-available/ocidocgen` instead of to the Docker volume.
+
+---
+
+## HTTPS with Let's Encrypt
+
+### How it works
+
+Let's Encrypt issues free, trusted TLS certificates that expire every 90 days and renew automatically. The standard HTTP-01 challenge requires the server to be reachable from the internet on port 80 — which is not possible if your instance is on a private network or behind a VPN.
+
+The solution is the **DNS-01 challenge**: instead of serving a file over HTTP, Certbot proves domain ownership by creating a temporary `TXT` record in your DNS zone via the provider's API. The server never needs to be publicly reachable. Certbot uses the same API to delete the record after validation and to renew automatically every ~60 days.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  DNS-01 Challenge Flow (no public HTTP access required)         │
+│                                                                 │
+│  Certbot ──API──▶  DNS Provider  ──creates──▶  _acme-challenge  │
+│      │                                         TXT record       │
+│  Let's Encrypt validates the TXT record                         │
+│      │                                                          │
+│  Certbot ◀── certificate issued ── Let's Encrypt                │
+│      │                                                          │
+│  Certbot ──API──▶  DNS Provider  ──deletes──▶  TXT record       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Requirements before starting:**
+
+- A domain name with DNS managed by a supported provider (see [DNS Provider Reference](#dns-provider-reference))
+- A DNS `A` record pointing `your.domain.com` to your server's IP (private or public)
+- `certbot` and the matching DNS plugin installed on the **host VM** (not inside Docker)
+
+---
+
+### Step 1 — Install Certbot and the DNS plugin
+
+Install Certbot on the host VM and the plugin that matches your DNS provider.
+
+**Cloudflare:**
+
+```bash
+sudo apt install -y certbot python3-certbot-dns-cloudflare
+```
+
+**AWS Route 53:**
+
+```bash
+sudo apt install -y certbot python3-certbot-dns-route53
+```
+
+**DigitalOcean:**
+
+```bash
+sudo apt install -y certbot python3-certbot-dns-digitalocean
+```
+
+**Registro.br / providers without a Certbot plugin:**
+
+```bash
+sudo apt install -y certbot
+# Uses manual DNS-01 — see Step 2 for details.
+```
+
+> For a complete list of DNS plugins: [certbot.eff.org/docs/using.html#dns-plugins](https://eff.org/docs/using.html#dns-plugins)
+
+---
+
+### Step 2 — Configure DNS credentials
+
+Each provider requires a credentials file that Certbot uses to authenticate with the DNS API.
+
+#### Cloudflare
+
+1. In the Cloudflare dashboard: **My Profile → API Tokens → Create Token**
+2. Use the **"Edit zone DNS"** template. Restrict it to your zone:
+   - Permissions: `Zone / DNS / Edit`
+   - Zone Resources: `Include / Specific zone / yourdomain.com`
+3. Copy the generated token.
+
+```bash
+sudo mkdir -p /etc/letsencrypt/dns-credentials
+sudo nano /etc/letsencrypt/dns-credentials/cloudflare.ini
+```
+
+```ini
+dns_cloudflare_api_token = YOUR_CLOUDFLARE_API_TOKEN
+```
+
+```bash
+sudo chmod 600 /etc/letsencrypt/dns-credentials/cloudflare.ini
+```
+
+#### AWS Route 53
+
+Certbot uses the standard AWS credentials chain. The IAM user or role needs the `route53:ChangeResourceRecordSets` and `route53:ListHostedZones` permissions.
+
+```bash
+sudo mkdir -p /etc/letsencrypt/dns-credentials
+sudo nano /etc/letsencrypt/dns-credentials/route53.ini
+```
+
+```ini
+[default]
+aws_access_key_id     = YOUR_ACCESS_KEY_ID
+aws_secret_access_key = YOUR_SECRET_ACCESS_KEY
+```
+
+```bash
+sudo chmod 600 /etc/letsencrypt/dns-credentials/route53.ini
+```
+
+Set the credentials file for Certbot:
+
+```bash
+export AWS_CONFIG_FILE=/etc/letsencrypt/dns-credentials/route53.ini
+```
+
+#### DigitalOcean
+
+1. In the DigitalOcean control panel: **API → Tokens → Generate New Token** (read + write scope).
+2. Copy the token.
+
+```bash
+sudo mkdir -p /etc/letsencrypt/dns-credentials
+sudo nano /etc/letsencrypt/dns-credentials/digitalocean.ini
+```
+
+```ini
+dns_digitalocean_token = YOUR_DIGITALOCEAN_API_TOKEN
+```
+
+```bash
+sudo chmod 600 /etc/letsencrypt/dns-credentials/digitalocean.ini
+```
+
+#### Registro.br / providers without an API plugin
+
+Providers without a Certbot plugin require a **one-time manual validation** to issue the first certificate. Renewal uses the same manual step, so this approach is only recommended when no API plugin exists.
+
+```bash
+sudo certbot certonly \
+  --manual \
+  --preferred-challenges dns \
+  -d your.domain.com \
+  --email your@email.com \
+  --agree-tos
+```
+
+Certbot will display a `TXT` record value. Log in to your DNS provider's dashboard, create a `_acme-challenge.your.domain.com TXT` record with that value, wait ~60 seconds, then press Enter to continue.
+
+> For fully automated renewal with providers that have a REST API but no official Certbot plugin, you can use [acme.sh](https://acme.sh) which has a broader provider list, or write a custom `--manual-auth-hook` script that calls the provider's API.
+
+---
+
+### Step 3 — Obtain the certificate
+
+Replace `your.domain.com` and `your@email.com` with real values.
+
+**Cloudflare:**
+
+```bash
+sudo certbot certonly \
+  --dns-cloudflare \
+  --dns-cloudflare-credentials /etc/letsencrypt/dns-credentials/cloudflare.ini \
+  -d your.domain.com \
+  --email your@email.com \
+  --agree-tos \
+  --non-interactive
+```
+
+**AWS Route 53:**
+
+```bash
+sudo certbot certonly \
+  --dns-route53 \
+  -d your.domain.com \
+  --email your@email.com \
+  --agree-tos \
+  --non-interactive
+```
+
+**DigitalOcean:**
+
+```bash
+sudo certbot certonly \
+  --dns-digitalocean \
+  --dns-digitalocean-credentials /etc/letsencrypt/dns-credentials/digitalocean.ini \
+  -d your.domain.com \
+  --email your@email.com \
+  --agree-tos \
+  --non-interactive
+```
+
+After success, the certificate files are placed at:
+
+```
+/etc/letsencrypt/live/your.domain.com/fullchain.pem
+/etc/letsencrypt/live/your.domain.com/privkey.pem
+```
+
+These paths are referenced directly in `nginx.https.conf` and mounted as a read-only volume into the frontend container — no container rebuild is needed when the certificate renews.
+
+---
+
+### Step 4 — Enable HTTPS in the frontend container
+
+The repository ships with two Nginx configuration files:
+
+| File               | Purpose                                                             |
+| :----------------- | :------------------------------------------------------------------ |
+| `nginx.conf`       | Default — HTTP only, works out of the box after `docker compose up` |
+| `nginx.https.conf` | HTTPS template — copy over `nginx.conf` to enable TLS               |
+
+To activate HTTPS, copy the template over the active config and replace the domain placeholder:
+
+```bash
+# From the project root
+sed 's/YOUR_DOMAIN/your.domain.com/g' nginx.https.conf > frontend/nginx.conf
+```
+
+> If you cloned the repository and your `nginx.conf` is at the project root (not inside `frontend/`), adjust the destination path to match your structure.
+
+Then edit `docker-compose.yml` to expose port 443 and mount the certificates. Find the `frontend` service and update it:
+
+```yaml
+frontend:
+  build:
+    context: ./frontend
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  ports:
+    - "80:80"
+    - "443:443"
+  volumes:
+    - /etc/letsencrypt:/etc/letsencrypt:ro
+  depends_on:
+    - api
+```
+
+The `/etc/letsencrypt` directory is mounted read-only. When Certbot renews the certificate on the host, Nginx inside the container reads the updated files on the next reload — without any rebuild.
+
+---
+
+### Step 5 — Update `.env`
+
+```env
+FRONTEND_URL=https://your.domain.com
+FRONTEND_PORT=443
+```
+
+`FRONTEND_URL` is used as the value of the `ALLOWED_ORIGINS` CORS header in the API container. It must match the exact origin the browser sends (`https://` prefix included).
+
+---
+
+### Step 6 — Rebuild and verify
+
+```bash
+# Rebuild only the frontend (nginx.conf changed)
+docker compose build --no-cache frontend
+docker compose up -d
+
+# Verify HTTPS is working
+curl -I https://your.domain.com
+# Expected: HTTP/2 200 or HTTP/1.1 200 OK
+
+# Verify HTTP → HTTPS redirect
+curl -I http://your.domain.com
+# Expected: 301 Moved Permanently → Location: https://your.domain.com/
+```
+
+---
+
+### Step 7 — Automatic renewal hook
+
+Certbot installs a systemd timer that checks for expiring certificates every 12 hours and renews them when fewer than 30 days remain. After renewal, Nginx must reload to pick up the new certificate files. Add a post-renewal hook:
+
+```bash
+sudo tee /etc/letsencrypt/renewal-hooks/post/reload-nginx.sh > /dev/null << 'EOF'
+#!/bin/bash
+# Reload Nginx inside the OCI DocGen frontend container after certificate renewal.
+CONTAINER=$(docker ps --filter "name=oci-docgen-frontend" --format "{{.ID}}" | head -1)
+if [ -n "$CONTAINER" ]; then
+  docker exec "$CONTAINER" nginx -s reload
+  echo "$(date): Nginx reloaded in container $CONTAINER after certificate renewal."
+fi
+EOF
+
+sudo chmod +x /etc/letsencrypt/renewal-hooks/post/reload-nginx.sh
+```
+
+To test the full renewal flow without actually renewing:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+To check the timer status:
+
+```bash
+systemctl status certbot.timer
+# or
+systemctl list-timers | grep certbot
+```
+
+---
+
+### DNS Provider Reference
+
+| Provider                 | Plugin package                     | Credentials file                     |
+| :----------------------- | :--------------------------------- | :----------------------------------- |
+| **Cloudflare**           | `python3-certbot-dns-cloudflare`   | `dns_cloudflare_api_token = TOKEN`   |
+| **AWS Route 53**         | `python3-certbot-dns-route53`      | Standard AWS credentials file        |
+| **DigitalOcean**         | `python3-certbot-dns-digitalocean` | `dns_digitalocean_token = TOKEN`     |
+| **Google Cloud DNS**     | `python3-certbot-dns-google`       | Service account JSON key path        |
+| **Azure DNS**            | `python3-certbot-dns-azure`        | Service principal credentials        |
+| **Linode**               | `python3-certbot-dns-linode`       | `dns_linode_key = TOKEN`             |
+| **Registro.br / others** | _(no plugin)_                      | Manual DNS-01 — one-time per renewal |
+
+> Full plugin list and documentation: [certbot.eff.org/docs/using.html#dns-plugins](https://certbot.eff.org/docs/using.html#dns-plugins)
 >
-> ```bash
-> sudo apt install certbot python3-certbot-nginx -y
-> sudo certbot --nginx -d your_domain.com
-> ```
+> For providers with a REST API but no official plugin, [acme.sh](https://github.com/acmesh-official/acme.sh) supports over 150 DNS providers natively.
 
 ---
 

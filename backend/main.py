@@ -189,6 +189,10 @@ async def admin_set_role(user_id: int, request: Request):
     is_admin = bool(body.get("is_admin", False))
     if me["id"] == user_id and not is_admin:
         raise HTTPException(400, "Você não pode remover sua própria permissão de admin.")
+    # The built-in "admin" account is a permanent superadmin — its role can never be changed.
+    target = auth.get_user_by_id(user_id)
+    if target and target.get("username") == "admin":
+        raise HTTPException(400, "As permissões do usuário 'admin' são permanentes e não podem ser alteradas.")
     ok = auth.set_user_role(user_id, is_admin)
     if not ok:
         raise HTTPException(404, "Usuário não encontrado.")
