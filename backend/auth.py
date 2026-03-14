@@ -542,6 +542,14 @@ def set_user_role(user_id: int, is_admin: bool) -> bool:
     return cursor.rowcount > 0
 
 
+def get_user_by_id(user_id: int) -> Optional[dict]:
+    """Returns a minimal user dict (id, username) for the given id, or None."""
+    conn = _conn()
+    row = conn.execute("SELECT id, username FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_all_users() -> list:
     conn = _conn()
     # Separate subqueries avoid cross-join explosion between user_groups and doc_generations.
