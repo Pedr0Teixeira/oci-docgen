@@ -22,6 +22,8 @@ services:
       DATA_DIR: /app/data
     volumes:
       - db_data:/app/data
+    ports:
+      - "8000:8000"
     depends_on:
       redis:
         condition: service_healthy

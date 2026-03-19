@@ -58,6 +58,7 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 - [User Management](#user-management)
 - [OCI IAM Permissions](#oci-iam-permissions)
 - [API Reference](#api-reference)
+- [Swagger UI](#swagger-ui)
 - [SSL/TLS Reference](#ssltls-reference)
 - [Engineering Notes](#engineering-notes)
 - [Contributing](#contributing)
@@ -856,18 +857,29 @@ Let's Encrypt issues free, trusted TLS certificates that expire every 90 days an
 
 The solution is the **DNS-01 challenge**: instead of serving a file over HTTP, Certbot proves domain ownership by creating a temporary `TXT` record in your DNS zone via the provider's API. The server never needs to be publicly reachable. Certbot uses the same API to delete the record after validation and to renew automatically every ~60 days.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  DNS-01 Challenge Flow (no public HTTP access required)         │
-│                                                                 │
-│  Certbot ──API──▶  DNS Provider  ──creates──▶  _acme-challenge  │
-│      │                                         TXT record       │
-│  Let's Encrypt validates the TXT record                         │
-│      │                                                          │
-│  Certbot ◀── certificate issued ── Let's Encrypt                │
-│      │                                                          │
-│  Certbot ──API──▶  DNS Provider  ──deletes──▶  TXT record       │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant C as Certbot
+    participant D as DNS Provider
+    participant L as Let's Encrypt
+
+    C->>D: API — create _acme-challenge TXT record
+    activate D
+    D-->>C: Record created
+    deactivate D
+
+    note over D,L: Let's Encrypt queries the TXT record
+    L->>D: Validate _acme-challenge TXT
+    activate D
+    D-->>L: TXT record confirmed
+    deactivate D
+
+    L-->>C: Certificate issued
+
+    C->>D: API — delete TXT record
+    activate D
+    D-->>C: Record deleted
+    deactivate D
 ```
 
 **Requirements before starting:**
@@ -1407,6 +1419,92 @@ All endpoints are prefixed with `/api`. Authentication uses a Bearer token sent 
 | Method | Path        | Auth Required | Description           |
 | :----- | :---------- | :------------ | :-------------------- |
 | POST   | `/feedback` | Optional      | Submit feedback entry |
+
+---
+
+## Swagger UI
+
+FastAPI automatically generates interactive API documentation (Swagger UI) at `/docs` and an alternative reader (ReDoc) at `/redoc`. These are useful for exploring and testing endpoints directly from the browser.
+
+### Accessing the Swagger UI
+
+The `nginx.conf` shipped with OCI DocGen proxies `/docs`, `/redoc`, and `/openapi.json` to the backend container, making them available through the same domain as the application — no extra ports required.
+
+| URL                             | Interface                                |
+| :------------------------------ | :--------------------------------------- |
+| `https://your.domain.com/docs`  | Swagger UI (interactive)                 |
+| `https://your.domain.com/redoc` | ReDoc (read-only reference)              |
+| `http://localhost:8000/docs`    | Direct backend access (server-side only) |
+
+> The direct backend URL (`localhost:8000`) is only reachable from the server itself — not from your local machine — unless port `8000` is exposed in `docker-compose.yml` or an SSH tunnel is active.
+
+### Accessing from your local machine
+
+If you need to reach the Swagger UI from your local machine without exposing port `8000` publicly, use an SSH tunnel:
+
+```bash
+ssh -L 8000:localhost:8000 root@your.server.ip -N
+```
+
+With the tunnel active, open your browser at:
+
+```
+http://localhost:8000/docs
+```
+
+> The `-N` flag keeps the tunnel open without opening a shell. Press `Ctrl+C` to close it.
+
+### Disabling Swagger UI in production
+
+If you prefer not to expose the API documentation publicly — recommended for hardened production environments — remove the three proxy blocks from `frontend/nginx.conf` and optionally disable it at the FastAPI level.
+
+**Step 1 — Remove the proxy blocks from `frontend/nginx.conf`:**
+
+Remove the following three `location` blocks (leave the rest of the file untouched):
+
+```nginx
+# Remove these three blocks:
+location /docs { ... }
+location /redoc { ... }
+location /openapi.json { ... }
+```
+
+**Step 2 — Remove the exposed port from `docker-compose.yml`:**
+
+If port `8000` is listed under the `api` service, remove it:
+
+```yaml
+# Remove this block from the api service:
+ports:
+  - "8000:8000"
+```
+
+**Step 3 — Optionally disable docs at the FastAPI level (`backend/main.py`):**
+
+For a complete lockdown, set `docs_url` and `redoc_url` to `None` when initialising the app:
+
+```python
+app = FastAPI(
+    title="OCI DocGen API",
+    version="2.3.0",
+    docs_url=None,
+    redoc_url=None,
+)
+```
+
+> This prevents FastAPI from serving the documentation even if the Nginx proxy blocks are misconfigured or bypassed.
+
+**Step 4 — Rebuild:**
+
+```bash
+# After changing nginx.conf, rebuild only the frontend
+docker compose build --no-cache frontend
+docker compose up -d frontend
+
+# After changing main.py, rebuild the backend services as well
+docker compose build --no-cache api worker
+docker compose up -d api worker
+```
 
 ---
 
