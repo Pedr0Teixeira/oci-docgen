@@ -10,137 +10,932 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Loading Overlay
+  ═══════════════════════════════════════════════════════════ -->
   <div id="loading-overlay" class="hidden">
     <div class="progress-container">
-      <div class="spinner"></div>
+      <div class="progress-icon-ring">
+        <div class="spinner" id="progress-spinner"></div>
+        <!-- Cloud icon (shows during loading) -->
+        <svg id="progress-cloud-icon" class="progress-inner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+        </svg>
+        <!-- Checkmark icon (shows when done) -->
+        <svg id="progress-check-icon" class="progress-inner-icon progress-check-hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+      </div>
       <span id="progress-timer" class="progress-timer">00:00</span>
-      <span id="progress-text">Carregando...</span>
-      <div class="progress-bar-container">
-        <div id="progress-bar"></div>
+      <span id="progress-text" class="progress-text">Carregando...</span>
+      <div class="progress-bar-container"><div id="progress-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Login Modal (optional — triggered by sidebar button)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="auth-modal" class="hidden">
+    <div class="auth-modal-backdrop"></div>
+    <div class="auth-modal-card">
+
+      <!-- Tab switcher + close button in the same row -->
+      <div class="auth-modal-header">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login">Entrar</button>
+          <button class="auth-tab" data-tab="register">Criar conta</button>
+        </div>
+        <button class="auth-modal-close" id="auth-modal-close-btn" aria-label="Fechar">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Login form -->
+      <div class="auth-form" id="auth-form-login">
+        <div class="auth-field">
+          <label class="auth-label">Usuário</label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            <input type="text" id="login-username" placeholder="seu_usuario" autocomplete="username">
+          </div>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Senha</label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+          </div>
+        </div>
+        <p id="login-error" class="auth-error hidden"></p>
+        <button id="login-submit-btn" class="button-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+            <polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>
+          </svg>
+          Entrar
+        </button>
+      </div>
+
+      <!-- Register form -->
+      <div class="auth-form hidden" id="auth-form-register">
+        <div class="auth-field-row" style="display:flex;gap:10px">
+          <div class="auth-field" style="flex:1">
+            <label class="auth-label">Nome</label>
+            <div class="auth-input-wrap">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <input type="text" id="register-first-name" placeholder="João" autocomplete="given-name">
+            </div>
+          </div>
+          <div class="auth-field" style="flex:1">
+            <label class="auth-label">Sobrenome</label>
+            <div class="auth-input-wrap">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <input type="text" id="register-last-name" placeholder="Silva" autocomplete="family-name">
+            </div>
+          </div>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Usuário (login) <span style="color:var(--s-stopped)">*</span></label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            <input type="text" id="register-username" placeholder="min. 3 caracteres" autocomplete="username">
+          </div>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">E-mail</label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            <input type="email" id="register-email" placeholder="joao@empresa.com" autocomplete="email">
+          </div>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Senha <span style="color:var(--s-stopped)">*</span></label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input type="password" id="register-password" placeholder="min. 6 caracteres" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Confirmar senha <span style="color:var(--s-stopped)">*</span></label>
+          <div class="auth-input-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input type="password" id="register-confirm-password" placeholder="repita a senha" autocomplete="new-password">
+          </div>
+        </div>
+        <p id="register-error" class="auth-error hidden"></p>
+        <button id="register-submit-btn" class="button-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/>
+          </svg>
+          Criar conta
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       App Shell
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="app-shell">
+
+    <!-- ── Sidebar ── -->
+    <aside id="app-sidebar">
+      <div class="sidebar-top">
+
+        <button class="sidebar-brand" id="sidebar-brand-link" title="Gerar Documento" type="button">
+          <div class="sidebar-brand-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="9" y1="13" x2="15" y2="13"/>
+              <line x1="9" y1="17" x2="15" y2="17"/>
+            </svg>
+          </div>
+          <div>
+            <div class="sidebar-brand-name">OCI DocGen</div>
+            <div class="sidebar-brand-sub">by Pedro Teixeira</div>
+          </div>
+          <span class="sidebar-brand-badge">BETA</span>
+        </button>
+
+        <!-- Navigation -->
+        <nav class="sidebar-nav">
+          <a href="#" class="sidebar-nav-item active" id="nav-generator">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span data-i18n="nav_generator">Gerar Documento</span>
+          </a>
+          <a href="#" class="sidebar-nav-item" id="nav-metrics">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" x2="18" y1="20" y2="10"/>
+              <line x1="12" x2="12" y1="20" y2="4"/>
+              <line x1="6"  x2="6"  y1="20" y2="14"/>
+            </svg>
+            <span data-i18n="nav_metrics">Métricas</span>
+          </a>
+          <a href="#" class="sidebar-nav-item hidden" id="nav-admin">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <span data-i18n="nav_admin">Administração</span>
+          </a>
+        </nav>
+
+        <div class="sidebar-divider"></div>
+
+        <!-- History (per-user) -->
+        <div class="sidebar-section-label" data-i18n="nav_history">Histórico Recente</div>
+        <div id="sidebar-history-guest" class="sidebar-history-guest hidden">
+          🔒 <a href="#" id="history-login-cta" data-i18n="history_login_required">Faça login para ver seu histórico.</a>
+        </div>
+        <div id="sidebar-history" class="sidebar-history hidden">
+          <p class="sidebar-empty">Nenhum documento gerado ainda.</p>
+        </div>
+
+      </div>
+
+      <!-- Sidebar footer -->
+      <div class="sidebar-footer">
+
+        <!-- Logged-out state -->
+        <div id="sidebar-guest" class="sidebar-guest">
+          <p class="sidebar-guest-text">Faça login para ver suas métricas pessoais.</p>
+          <button id="sidebar-login-btn" class="sidebar-login-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>
+            </svg>
+            Entrar / Criar conta
+          </button>
+        </div>
+
+        <!-- Logged-in state -->
+        <div id="sidebar-user" class="sidebar-user hidden">
+          <div class="sidebar-user-identity">
+            <div class="sidebar-user-avatar" id="sidebar-user-avatar">P</div>
+            <div class="sidebar-user-info">
+              <span class="sidebar-user-name" id="sidebar-user-name">Pedro</span>
+              <span class="sidebar-user-role" data-i18n="sidebar_user_logged">Logado</span>
+            </div>
+          </div>
+          <div class="sidebar-user-actions">
+            <button class="sidebar-profile-btn" id="sidebar-profile-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              </svg>
+              <span data-i18n="sidebar_profile_btn">Meu Perfil</span>
+            </button>
+            <button class="sidebar-logout-btn" id="sidebar-logout-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>
+              </svg>
+              <span data-i18n="sidebar_logout_btn">Sair</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Theme + Language -->
+        <div class="sidebar-controls">
+          <button id="theme-toggle-btn" class="sidebar-theme-btn" title="Alternar tema">
+            <svg id="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+            <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+            <span id="theme-btn-label">Modo Claro</span>
+          </button>
+
+          <div class="lang-flag-selector lang-flag-list">
+            <button class="lang-flag-btn active" data-lang="pt" title="Português Brasil">
+              <span class="flag-emoji">🇧🇷</span>
+              <span class="lang-label">Português</span>
+              <span class="lang-check"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            </button>
+            <button class="lang-flag-btn" data-lang="en" title="English">
+              <span class="flag-emoji">🇺🇸</span>
+              <span class="lang-label">English</span>
+              <span class="lang-check"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div id="app-main">
+
+      <!-- ── Top bar: Announcements + Notification bell ── -->
+      <div id="app-topbar">
+        <!-- Announcements megaphone (admin broadcasts — visible when logged in) -->
+        <button id="ann-topbar-btn" class="topbar-icon-btn hidden" aria-label="Avisos" title="Comunicados do sistema">
+          <!-- Megaphone icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 5.882V19.24a1.76 1.76 0 0 1-3.417.592l-2.147-6.15M18 13a3 3 0 0 0 0-6M5.436 13.683A4.001 4.001 0 0 1 7 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 0 1-1.564-.317z"/>
+          </svg>
+          <span id="ann-topbar-badge" class="topbar-badge hidden">0</span>
+        </button>
+        <!-- Notification bell (transient toast history) -->
+        <button id="notif-bell-btn" class="topbar-icon-btn notif-bell-btn" aria-label="Notificações" title="Notificações">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span id="notif-badge" class="topbar-badge hidden">0</span>
+        </button>
+      </div>
+
+      <!-- ── GENERATOR VIEW ── -->
+      <div id="view-generator" class="app-content">
+
+        <div class="page-intro">
+          <p class="section-eyebrow" data-i18n="page_eyebrow_generator">Gerador de Documentação</p>
+          <h2 class="page-title" data-i18n="page_title_generator">Configure e gere sua documentação OCI</h2>
+        </div>
+
+        <main class="content-card wizard-card">
+
+          <!-- No-profile guard: shown when user has no available profiles -->
+          <!-- No-profile guard: shown when user has no available profiles -->
+          <div id="no-profile-block" class="hidden no-profile-block">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="no-profile-icon"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <p class="no-profile-msg" id="no-profile-msg-text"></p>
+            <div id="no-profile-actions"></div>
+          </div>
+
+          <div id="generator-steps-content">
+
+          <!-- Step 0: Tenancy Profile (hidden when only 1 profile available) -->
+          <div class="step wizard-step" id="profile-step" style="display:none">
+            <div class="step-number" id="profile-step-number">1</div>
+            <div class="step-content">
+              <label data-i18n="step_profile_label">Tenancy Profile</label>
+              <div id="profile-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <div class="step wizard-step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <label data-i18n="step1_label">Selecione a Região</label>
+              <div id="region-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <div class="step wizard-step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <label data-i18n="step2_label">Selecione o Tipo de Documentação</label>
+              <div id="doctype-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <div class="step wizard-step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <label data-i18n="step3_label">Selecione o Compartimento</label>
+              <div id="compartment-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <div class="step wizard-step" id="instance-step">
+            <div class="step-number">5</div>
+            <div class="step-content">
+              <label data-i18n="step4_label">Selecione a(s) Instância(s)</label>
+              <div id="instance-select-container" class="custom-select-container"></div>
+            </div>
+          </div>
+
+          <!-- Storage scope option — only shown for full_infra -->
+          <div id="storage-options-row" class="storage-options-row hidden">
+            <label class="storage-option-label">
+              <input type="checkbox" id="include-standalone-volumes" checked>
+              <span class="storage-option-text" data-i18n="storage_option_standalone">Incluir Block Volumes sem instância associada</span>
+            </label>
+          </div>
+
+          <div class="wizard-action">
+            <button id="fetch-details-btn" class="button-primary" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+                <circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/>
+              </svg>
+              <span data-i18n="fetch_btn_full">Buscar Dados da Infraestrutura</span>
+            </button>
+          </div>
+
+          <div id="details-container" class="hidden">
+            <hr class="fieldset-divider">
+            <div id="fetched-data-summary"></div>
+            <hr class="fieldset-divider">
+
+            <fieldset>
+              <legend>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span data-i18n="document_info_legend">Informações do Documento</span>
+              </legend>
+              <div class="info-group full-width">
+                <label for="responsible-name-input" data-i18n="responsible_label">Nome do Responsável</label>
+                <input type="text" id="responsible-name-input" class="info-value" placeholder="Digite seu nome completo" required>
+              </div>
+            </fieldset>
+
+            <hr class="fieldset-divider">
+
+            <fieldset>
+              <legend>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <span data-i18n="attachments_legend">Anexos de Imagem</span>
+              </legend>
+              <div id="image-sections-list"></div>
+              <button id="add-image-section-btn" class="add-section-btn" type="button">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+                </svg>
+                <span data-i18n="attachments_add_section">Adicionar Seção de Imagem</span>
+              </button>
+            </fieldset>
+
+            <hr class="fieldset-divider">
+
+            <div class="wizard-action wizard-action-final">
+              <button id="doc-preview-btn" type="button" class="button-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
+                </svg>
+                <span data-i18n="preview_btn">Visualizar Preview do Documento</span>
+              </button>
+              <button id="generate-doc-btn" type="button" class="button-primary generate-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
+                </svg>
+                <span data-i18n="generate_btn">Gerar Documento (.docx)</span>
+              </button>
+            </div>
+          </div><!-- /#generator-steps-content -->
+
+        </main>
+      </div>
+
+      <!-- ── METRICS VIEW ── -->
+      <div id="view-metrics" class="app-content hidden">
+
+        <div class="page-intro">
+          <p class="section-eyebrow" data-i18n="page_eyebrow_metrics">Painel de Dados</p>
+          <h2 class="page-title" id="metrics-title" data-i18n="page_title_metrics">Métricas de Geração</h2>
+        </div>
+
+        <!-- KPI cards -->
+        <div class="metrics-kpi-row">
+          <div class="metrics-kpi-card">
+            <div class="metrics-kpi-icon metrics-kpi-icon--blue">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <div class="metrics-kpi-body">
+              <span class="metrics-kpi-label" data-i18n="metrics_kpi_total">Total Gerado</span>
+              <span class="metrics-kpi-value" id="kpi-total">—</span>
+            </div>
+          </div>
+          <div class="metrics-kpi-card">
+            <div class="metrics-kpi-icon metrics-kpi-icon--green">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div class="metrics-kpi-body">
+              <span class="metrics-kpi-label" data-i18n="metrics_kpi_month">Este Mês</span>
+              <span class="metrics-kpi-value" id="kpi-month">—</span>
+            </div>
+          </div>
+          <div class="metrics-kpi-card" id="kpi-top-type-card">
+            <div class="metrics-kpi-icon metrics-kpi-icon--purple">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+            </div>
+            <div class="metrics-kpi-body">
+              <span class="metrics-kpi-label" data-i18n="metrics_kpi_top_type">Tipo Mais Usado</span>
+              <span class="metrics-kpi-value" id="kpi-top-type">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- By type -->
+        <div class="metrics-section-grid">
+          <div class="content-card metrics-card">
+            <div class="metrics-card-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" x2="18" y1="20" y2="10"/>
+                <line x1="12" x2="12" y1="20" y2="4"/>
+                <line x1="6"  x2="6"  y1="20" y2="14"/>
+              </svg>
+              <span data-i18n="metrics_by_type_title">Por Tipo de Documento</span>
+            </div>
+            <div id="metrics-by-type" class="metrics-by-type"></div>
+          </div>
+
+          <div class="content-card metrics-card">
+            <div class="metrics-card-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span data-i18n="metrics_recent_title">Gerações Recentes</span>
+            </div>
+            <div id="metrics-recent" class="metrics-recent-list"></div>
+          </div>
+        </div>
+
+        <!-- Guest notice (shown when not logged in) -->
+        <div id="metrics-guest-notice" class="metrics-guest-notice hidden">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div>
+            <strong data-i18n="metrics_guest_title">Visão global</strong> — <span data-i18n="metrics_guest_body">você está vendo métricas agregadas de todos os usuários.</span>
+            <a href="#" id="metrics-login-cta" data-i18n="metrics_guest_login">Faça login</a> <span data-i18n="metrics_guest_suffix">para ver apenas as suas.</span>
+          </div>
+        </div>
+
+        <!-- Time series chart -->
+        <div class="content-card metrics-card" style="margin-top:20px">
+          <div class="metrics-card-header">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+            <span data-i18n="metrics_chart_title">Evolução de Gerações</span>
+            <!-- Filters row -->
+            <div class="metrics-chart-filters">
+              <div class="metrics-filter-group">
+                <button class="metrics-filter-btn active" data-period="30">30d</button>
+                <button class="metrics-filter-btn" data-period="7">7d</button>
+                <button class="metrics-filter-btn" data-period="90">90d</button>
+              </div>
+              <div class="metrics-filter-types" id="metrics-type-filter-btns">
+                <button class="metrics-type-filter-btn active" data-type="all" data-i18n="metrics_filter_all">Todos</button>
+                <button class="metrics-type-filter-btn" data-type="new_host" data-i18n="metrics_filter_new_host">Novo Host</button>
+                <button class="metrics-type-filter-btn" data-type="full_infra" data-i18n="metrics_filter_full_infra">Infra Completa</button>
+                <button class="metrics-type-filter-btn" data-type="kubernetes">Kubernetes</button>
+                <button class="metrics-type-filter-btn" data-type="waf_report">WAF</button>
+              </div>
+              <div class="metrics-chart-type-btns">
+                <button class="metrics-chart-type-btn active" data-chart-type="spline" title="Spline">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </button>
+                <button class="metrics-chart-type-btn" data-chart-type="bar" title="Bar Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                </button>
+                <button class="metrics-chart-type-btn" data-chart-type="pie" title="Pie Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="metrics-timeseries-chart" class="metrics-timeseries-wrap"></div>
+          <div id="metrics-chart-legend" class="metrics-chart-legend"></div>
+        </div>
+
+        <!-- Per-user breakdown (admin only) -->
+        <div id="metrics-per-user-section" class="content-card metrics-card hidden" style="margin-top:20px">
+          <div class="metrics-card-header">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span data-i18n="metrics_per_user_title">Gerações por Usuário</span>
+          </div>
+          <div id="metrics-per-user" class="metrics-by-type"></div>
+        </div>
+
+      </div>
+
+      <!-- ── ADMIN VIEW ── -->
+      <div id="view-admin" class="app-content hidden">
+
+        <div class="page-intro">
+          <p class="section-eyebrow" data-i18n="page_eyebrow_admin">Painel Administrativo</p>
+          <h2 class="page-title" data-i18n="page_title_admin">Administração</h2>
+        </div>
+
+        <!-- Admin tabs -->
+        <div class="admin-tabs">
+          <button class="admin-tab active" data-tab="users">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span data-i18n="admin_tab_users">Usuários</span>
+          </button>
+          <button class="admin-tab" data-tab="groups">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <span data-i18n="admin_tab_groups">Grupos</span>
+          </button>
+          <button class="admin-tab" data-tab="profiles">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            <span data-i18n="admin_tab_profiles">Tenancy Profiles</span>
+          </button>
+          <button class="admin-tab" data-tab="notifications">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span data-i18n="admin_tab_notifications">Avisos</span>
+          </button>
+          <button class="admin-tab" data-tab="feedback">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span data-i18n="admin_tab_feedback">Feedback</span>
+          </button>
+        </div>
+
+        <!-- Users panel -->
+        <div id="admin-panel-users" class="admin-panel">
+          <div class="admin-panel-toolbar">
+            <input type="text" id="admin-user-search" class="admin-search-input" placeholder="Filtrar usuários…">
+            <button class="button-primary" id="admin-create-user-btn" style="margin-left:auto">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+              Novo Usuário
+            </button>
+            <button class="button-secondary" id="admin-refresh-users">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Atualizar
+            </button>
+          </div>
+          <div id="admin-users-table-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+        <!-- Groups panel -->
+        <div id="admin-panel-groups" class="admin-panel hidden">
+          <div class="admin-panel-toolbar">
+            <input type="text" id="admin-new-group-name" class="admin-search-input" placeholder="Nome do novo grupo…">
+            <button class="button-primary" id="admin-create-group-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Criar Grupo
+            </button>
+          </div>
+          <div id="admin-groups-table-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+        <!-- Tenancy Profiles panel (admin only) -->
+        <div id="admin-panel-profiles" class="admin-panel hidden">
+          <div class="admin-panel-toolbar">
+            <button class="button-primary" id="admin-create-profile-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Novo Profile
+            </button>
+          </div>
+          <div id="admin-profiles-table-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+        <!-- Notifications / Announcements panel (admin only) -->
+        <div id="admin-panel-notifications" class="admin-panel hidden">
+          <div class="admin-panel-toolbar">
+            <button class="button-primary" id="admin-create-announcement-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span data-i18n="action.new_announcement">Novo Aviso</span>
+            </button>
+          </div>
+          <div id="admin-announcements-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+        <!-- Feedback panel (admin only) -->
+        <div id="admin-panel-feedback" class="admin-panel hidden">
+          <div id="admin-feedback-wrap" class="admin-table-wrap">
+            <p class="no-data-message">Carregando…</p>
+          </div>
+        </div>
+
+      </div>
+  </div><!-- /#app-shell -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Tenancy Profile Modal (admin create/edit)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="profile-modal" class="hidden">
+    <div class="group-modal-backdrop" id="profile-modal-backdrop"></div>
+    <div class="group-modal-card profile-modal-card">
+      <div class="group-modal-header">
+        <h3 class="group-modal-title" id="profile-modal-title">Novo Tenancy Profile</h3>
+        <button class="auth-modal-close" id="profile-modal-close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="group-modal-body profile-modal-body">
+
+        <div class="profile-form-section">
+          <div class="profile-form-row">
+            <div class="profile-form-group profile-form-group--full">
+              <label class="profile-form-label">Nome do Profile <span class="profile-form-required">*</span></label>
+              <input id="profile-field-name" class="profile-form-input" placeholder="ex: ACME Prod">
+            </div>
+          </div>
+          <div class="profile-form-row">
+            <div class="profile-form-group profile-form-group--full">
+              <label class="profile-form-label">Nome da Tenancy <span class="profile-form-required">*</span></label>
+              <input id="profile-field-tenancy-name" class="profile-form-input" placeholder="ex: ACME Cloud, Lab OCI...">
+            </div>
+          </div>
+          <div class="profile-form-row">
+            <div class="profile-form-group">
+              <label class="profile-form-label">Método de Autenticação</label>
+              <select id="profile-field-auth-method" class="profile-form-input">
+                <option value="API_KEY">API Key</option>
+                <option value="INSTANCE_PRINCIPAL">Instance Principal</option>
+              </select>
+            </div>
+            <div class="profile-form-group">
+              <label class="profile-form-label">Região Padrão</label>
+              <input id="profile-field-region" class="profile-form-input" placeholder="ex: sa-saopaulo-1">
+            </div>
+          </div>
+        </div>
+
+        <div id="profile-apikey-fields" class="profile-form-section">
+          <p class="profile-form-section-title">Credenciais API Key</p>
+          <div class="profile-form-row">
+            <div class="profile-form-group profile-form-group--full">
+              <label class="profile-form-label">Tenancy OCID</label>
+              <div class="profile-input-wrap">
+                <svg class="profile-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                <input id="profile-field-tenancy" class="profile-input-inner" placeholder="ocid1.tenancy.oc1..">
+                <button type="button" class="profile-input-copy" data-target="profile-field-tenancy" title="Copiar">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="profile-form-row">
+            <div class="profile-form-group">
+              <label class="profile-form-label">User OCID</label>
+              <div class="profile-input-wrap">
+                <svg class="profile-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input id="profile-field-user" class="profile-input-inner" placeholder="ocid1.user.oc1..">
+                <button type="button" class="profile-input-copy" data-target="profile-field-user" title="Copiar">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="profile-form-group">
+              <label class="profile-form-label">Fingerprint</label>
+              <div class="profile-input-wrap">
+                <svg class="profile-input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/><path d="M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 3"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2"/></svg>
+                <input id="profile-field-fingerprint" class="profile-input-inner" placeholder="xx:xx:xx:xx:xx">
+                <button type="button" class="profile-input-copy" data-target="profile-field-fingerprint" title="Copiar">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="profile-form-row">
+            <div class="profile-form-group profile-form-group--full">
+              <label class="profile-form-label">Private Key PEM</label>
+              <!-- hidden file input always present -->
+              <input type="file" id="profile-pem-file-input" accept=".pem,.key,.txt" style="display:none">
+              <!-- hidden textarea holds the value -->
+              <textarea id="profile-field-key" style="display:none" spellcheck="false"></textarea>
+
+              <!-- CREATE mode: two big choice buttons -->
+              <div id="pem-choose-panel" class="profile-pem-wrap">
+                <div class="pem-choose-mode">
+                  <button type="button" class="pem-mode-btn" id="pem-btn-file">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Arquivo
+                  </button>
+                  <button type="button" class="pem-mode-btn" id="pem-btn-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                    Texto / Colar
+                  </button>
+                </div>
+                <span class="pem-paste-hint">Formato PEM — inclua as linhas BEGIN e END</span>
+              </div>
+
+              <!-- FILE mode: after file selected, show preview item -->
+              <div id="pem-file-panel" class="profile-pem-wrap" style="display:none">
+                <div class="pem-file-item" id="pem-file-preview">
+                  <div class="pem-file-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div class="pem-file-info">
+                    <div class="pem-file-name" id="pem-file-name-label">chave.pem</div>
+                    <div class="pem-file-meta" id="pem-file-meta-label">Carregada</div>
+                  </div>
+                  <div class="pem-file-actions">
+                    <button type="button" class="pem-action-sm pem-action-danger" id="pem-file-clear" title="Remover chave">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <span class="pem-paste-hint">Clique no lixo para remover e escolher outro método</span>
+              </div>
+
+              <!-- TEXT/PASTE mode -->
+              <div id="pem-text-panel" class="profile-pem-wrap" style="display:none">
+                <div class="pem-paste-area">
+                  <textarea id="pem-text-input" class="profile-pem-textarea" placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;MIIEpAIBAAKCAQEA...&#10;-----END RSA PRIVATE KEY-----" rows="5" spellcheck="false"></textarea>
+                </div>
+                <div class="profile-pem-toolbar">
+                  <span class="profile-pem-hint">Cole ou digite a chave PEM</span>
+                  <div class="pem-action-toggle">
+                    <button type="button" class="pem-toggle-btn" id="profile-pem-paste-btn" title="Colar da área de transferência">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                      Colar (Ctrl+V)
+                    </button>
+                    <span class="pem-toggle-sep"></span>
+                    <button type="button" class="pem-toggle-btn" id="pem-text-back" title="Voltar">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                      Voltar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- EDIT mode: show existing key as item with replace option -->
+              <div id="pem-edit-panel" class="profile-pem-wrap" style="display:none">
+                <div class="pem-file-item">
+                  <div class="pem-file-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </div>
+                  <div class="pem-file-info">
+                    <div class="pem-file-name">Chave PEM salva</div>
+                    <div class="pem-file-meta">Chave privada configurada — não exibida por segurança</div>
+                  </div>
+                  <div class="pem-file-actions">
+                    <button type="button" class="pem-action-sm" id="pem-edit-preview" title="Visualizar chave">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button type="button" class="pem-action-sm pem-action-danger" id="pem-edit-delete" title="Remover chave e adicionar nova">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <span class="pem-paste-hint">Clique no ícone de lixeira para substituir a chave</span>
+              </div>
+
+
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-form-section">
+          <p class="profile-form-section-title">Controle de Acesso</p>
+
+          <div class="profile-form-row">
+            <div class="profile-form-group profile-form-group--full">
+              <label class="profile-form-label">Visibilidade</label>
+              <div class="profile-vis-grid" id="profile-vis-grid">
+                <label class="profile-vis-card" data-value="all_users">
+                  <input type="radio" name="profile-visibility" value="all_users" class="profile-vis-radio">
+                  <div class="profile-vis-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  </div>
+                  <span class="profile-vis-label">Todos os usuários</span>
+                </label>
+                <label class="profile-vis-card" data-value="by_group">
+                  <input type="radio" name="profile-visibility" value="by_group" class="profile-vis-radio">
+                  <div class="profile-vis-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+                  </div>
+                  <span class="profile-vis-label">Por grupo</span>
+                </label>
+                <label class="profile-vis-card" data-value="by_user">
+                  <input type="radio" name="profile-visibility" value="by_user" class="profile-vis-radio">
+                  <div class="profile-vis-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </div>
+                  <span class="profile-vis-label">Por usuário</span>
+                </label>
+                <label class="profile-vis-card" data-value="admin_only">
+                  <input type="radio" name="profile-visibility" value="admin_only" class="profile-vis-radio">
+                  <div class="profile-vis-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </div>
+                  <span class="profile-vis-label">Somente admins</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="profile-form-row" id="profile-anon-row" style="display:none">
+            <div class="profile-form-group profile-form-group--full">
+              <div class="profile-anon-toggle-row">
+                <div class="profile-anon-info">
+                  <span class="profile-form-label" style="text-transform:none;letter-spacing:0;font-size:13px;font-weight:500" data-i18n="profile_anon_label">Visível sem autenticação</span>
+                  <span class="profile-form-hint" data-i18n="profile_anon_hint">Permite uso anônimo do gerador</span>
+                </div>
+                <label class="admin-toggle-label" style="margin:0">
+                  <input type="checkbox" id="profile-field-public" class="admin-role-toggle">
+                  <span class="admin-toggle-track"><span class="admin-toggle-thumb"></span></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div id="profile-group-assignments-section" style="display:none">
+            <div class="profile-form-group profile-form-group--full">
+              <label class="profile-form-label" data-i18n="label.groups_with_access">Grupos com acesso</label>
+              <div id="profile-group-assignments-wrap" class="profile-user-list"></div>
+            </div>
+          </div>
+
+          <div id="profile-user-assignments-section" style="display:none">
+            <div class="profile-form-group profile-form-group--full">
+              <label class="profile-form-label" data-i18n="label.users_with_access">Usuários com acesso direto</label>
+              <div id="profile-user-assignments-wrap" class="profile-user-list"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="profile-modal-footer">
+        <button class="button-secondary" id="profile-modal-cancel" data-i18n="action.cancel">Cancelar</button>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="button-secondary profile-validate-btn" id="profile-modal-validate" data-i18n="action.test_connection">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            Testar Conexão
+          </button>
+          <button class="button-primary" id="profile-modal-save" data-i18n="action.save">Salvar</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <div id="main-app-container">
-    <div class="container">
-      <header class="app-header">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="header-icon">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-        </svg>
-        <h1 data-i18n="docgen_title">OCI DocGen</h1>
-        <span class="header-subtitle">by Pedro Teixeira</span>
-        <div class="language-selector-container">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
-          <select id="language-selector">
-            <option value="pt">Português</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-      </header>
-
-      <main class="content-card">
-        <div class="step">
-          <div class="step-number">1</div>
-          <div class="step-content">
-            <label data-i18n="step1_label">Selecione a Região</label>
-            <div id="region-select-container" class="custom-select-container"></div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-number">2</div>
-          <div class="step-content">
-            <label data-i18n="step2_label">Selecione o Tipo de Documentação</label>
-            <div id="doctype-select-container" class="custom-select-container"></div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-number">3</div>
-          <div class="step-content">
-            <label data-i18n="step3_label">Selecione o Compartimento</label>
-            <div id="compartment-select-container" class="custom-select-container"></div>
-          </div>
-        </div>
-
-        <div class="step" id="instance-step">
-          <div class="step-number">4</div>
-          <div class="step-content">
-            <label data-i18n="step4_label">Selecione a(s) Instância(s)</label>
-            <div id="instance-select-container" class="custom-select-container"></div>
-          </div>
-        </div>
-
-        <button id="fetch-details-btn" class="button-primary" disabled>
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" x2="16.65" y1="21" y2="16.65"></line>
-          </svg>
-          <span data-i18n="fetch_btn_full">Buscar Dados da(s) Instância(s)</span>
-        </button>
-        
-        <div id="details-container" class="hidden">
-          <hr class="fieldset-divider">
-          <div id="fetched-data-summary">
-            </div>
-
-          <hr class="fieldset-divider">
-
-          <fieldset>
-            <legend>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-              <span data-i18n="document_info_legend">Informações do Documento</span>
-            </legend>
-            <div class="info-group full-width">
-              <label for="responsible-name-input" style="color: var(--text-primary); font-weight: 600;" data-i18n="responsible_label">Nome do Responsável (Obrigatório)</label>
-              <input type="text" id="responsible-name-input" class="info-value" placeholder="Digite seu nome completo" required style="background-color: #3c3e4f; padding: 12px 16px; font-size: 16px; border-radius: var(--border-radius); border: 1px solid var(--border-color); color: var(--text-primary);" data-i18n-placeholder="responsible_placeholder">
-            </div>
-          </fieldset>
-          
-          <hr class="fieldset-divider">
-
-          <fieldset>
-            <legend>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-              <span data-i18n="attachments_legend">Anexos Manuais</span>
-            </legend>
-            <div class="attachments-grid">
-              <div class="file-upload-group" id="architecture-upload-group" tabindex="0">
-                <label for="architecture-upload" class="file-upload-label">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
-                  <span data-i18n="attachments_arch_label">Adicionar Desenho(s) da Arquitetura</span>
-                </label>
-                <input type="file" id="architecture-upload" accept="image/png, image/jpeg, image/gif" multiple>
-                <p class="upload-note" data-i18n="attachments_arch_note">Clique para selecionar ou cole uma imagem aqui (Ctrl+V).</p>
-                <div id="architecture-file-list" class="file-list-container"></div>
-              </div>
-
-              <div class="file-upload-group" id="antivirus-upload-group" tabindex="0">
-                <label for="antivirus-upload" class="file-upload-label">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
-                  <span data-i18n="attachments_av_label">Adicionar Print(s) do Antivírus</span>
-                </label>
-                <input type="file" id="antivirus-upload" accept="image/png, image/jpeg, image/gif" multiple>
-                <p class="upload-note" data-i18n="attachments_av_note">Clique para selecionar ou cole uma imagem aqui (Ctrl+V).</p>
-                <div id="antivirus-file-list" class="file-list-container"></div>
-              </div>
-            </div>
-          </fieldset>
-
-          <button id="generate-doc-btn" type="button" class="button-primary generate-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="button-icon">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" x2="12" y1="15" y2="3"></line>
-            </svg>
-            <span data-i18n="generate_btn">Gerar Documento (.docx)</span>
-          </button>
-        </div>
-      </main>
-    </div>
-  </div>
-  
+  <!-- ═══════════════════════════════════════════════════════════
+       Success Screen
+  ═══════════════════════════════════════════════════════════ -->
   <div id="success-screen" class="hidden">
     <div class="success-modal">
       <div class="success-icon">
@@ -150,12 +945,401 @@
         </svg>
       </div>
       <h2 data-i18n="success_title">Sucesso!</h2>
-      <p data-i18n="success_message">Operação realizada com sucesso.</p>
+      <p data-i18n="success_message">Documento gerado com sucesso.</p>
       <button id="new-doc-btn" class="button-primary" data-i18n="success_btn">OK</button>
     </div>
   </div>
 
   <div id="toast-container"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Announcement Modal (admin)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="announcement-modal" class="hidden">
+    <div class="group-modal-backdrop" id="announcement-modal-backdrop"></div>
+    <div class="group-modal-card" style="max-width:520px;width:100%">
+      <div class="group-modal-header">
+        <h3 class="group-modal-title" id="announcement-modal-title" data-i18n="action.new_announcement">Novo Aviso</h3>
+        <button class="auth-modal-close" id="announcement-modal-close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="group-modal-body" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+
+        <!-- Type selector -->
+        <div>
+          <label class="profile-form-label" data-i18n="ann.type">Tipo</label>
+          <div class="ann-type-grid" id="ann-type-grid">
+            <label class="ann-type-card" data-value="info">
+              <input type="radio" name="ann-type" value="info" class="ann-type-radio" checked>
+              <div class="ann-type-icon ann-type-icon--info"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><polyline points="11 12 12 12 12 16"/></svg></div>
+              <span class="ann-type-label" data-i18n="ann.type.info">Informativo</span>
+            </label>
+            <label class="ann-type-card" data-value="warning">
+              <input type="radio" name="ann-type" value="warning" class="ann-type-radio">
+              <div class="ann-type-icon ann-type-icon--warning"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+              <span class="ann-type-label" data-i18n="ann.type.warning">Manutenção</span>
+            </label>
+            <label class="ann-type-card" data-value="error">
+              <input type="radio" name="ann-type" value="error" class="ann-type-radio">
+              <div class="ann-type-icon ann-type-icon--error"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+              <span class="ann-type-label" data-i18n="ann.type.error">Urgente</span>
+            </label>
+            <label class="ann-type-card" data-value="success">
+              <input type="radio" name="ann-type" value="success" class="ann-type-radio">
+              <div class="ann-type-icon ann-type-icon--success"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+              <span class="ann-type-label" data-i18n="ann.type.success">Novidade</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Title -->
+        <div>
+          <label class="profile-form-label">
+            <span data-i18n="ann.title">Título</span>
+            <span class="profile-form-required">*</span>
+          </label>
+          <input id="ann-field-title" class="profile-form-input" placeholder="ex: Manutenção programada amanhã">
+        </div>
+
+        <!-- Message -->
+        <div>
+          <label class="profile-form-label" data-i18n="ann.message">Mensagem</label>
+          <textarea id="ann-field-message" class="profile-form-input" rows="3" style="resize:vertical;min-height:70px" placeholder="Detalhes adicionais (opcional)"></textarea>
+        </div>
+
+        <!-- Expiry -->
+        <div>
+          <label class="profile-form-label" data-i18n="ann.expires_at">Expirar em (opcional)</label>
+          <input id="ann-field-expires" type="datetime-local" class="profile-form-input">
+          <span class="profile-form-hint" data-i18n="ann.expires_hint">Deixe em branco para exibir indefinidamente</span>
+        </div>
+
+      </div>
+      <div class="profile-modal-footer">
+        <button class="button-secondary" id="announcement-modal-cancel" data-i18n="action.cancel">Cancelar</button>
+        <button class="button-primary" id="announcement-modal-save" data-i18n="action.save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Notification Center
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="notif-panel" class="notif-panel hidden">
+    <div class="notif-panel-header">
+      <span class="notif-panel-title" data-i18n="notif.title">Notificações</span>
+      <div class="notif-panel-actions">
+        <button id="notif-clear-btn" class="notif-clear-btn" data-i18n="notif.clear_all">Limpar tudo</button>
+        <button id="notif-panel-close" class="notif-panel-close-btn" aria-label="Fechar">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="notif-list" class="notif-list">
+      <div class="notif-empty" data-i18n="notif.empty">Nenhuma notificação</div>
+    </div>
+  </div>
+  <div id="notif-panel-backdrop" class="notif-panel-backdrop hidden"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Announcements Panel (admin broadcasts — separate from bell)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="ann-panel" class="ann-panel hidden">
+    <div class="ann-panel-header">
+      <div class="ann-panel-title-row">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ann-panel-icon">
+            <path d="M11 5.882V19.24a1.76 1.76 0 0 1-3.417.592l-2.147-6.15M18 13a3 3 0 0 0 0-6M5.436 13.683A4.001 4.001 0 0 1 7 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 0 1-1.564-.317z"/>
+          </svg>
+        <span class="ann-panel-title" data-i18n="ann.panel.title">Avisos do Sistema</span>
+      </div>
+      <button id="ann-panel-close" class="ann-panel-close-btn" aria-label="Fechar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="ann-panel-list" class="ann-panel-list">
+      <div class="ann-panel-empty" data-i18n="ann.panel.empty">Nenhum aviso ativo</div>
+    </div>
+  </div>
+  <div id="ann-panel-backdrop" class="ann-panel-backdrop hidden"></div>
+
+  <!-- Lightbox -->
+  <div id="lightbox-overlay">
+    <button id="lightbox-close" aria-label="Fechar">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+    <img id="lightbox-img" src="" alt="">
+  </div>
+
+  <!-- Document Preview Overlay -->
+  <div id="preview-overlay">
+    <div id="preview-modal">
+      <div class="preview-modal-header">
+        <h3>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
+          </svg>
+          <span data-i18n="preview_title">Preview do Documento</span>
+        </h3>
+        <button id="preview-modal-close" aria-label="Fechar">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="preview-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Admin — Group Management Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="group-modal" class="hidden">
+    <div class="group-modal-backdrop" id="group-modal-backdrop"></div>
+    <div class="group-modal-card">
+      <div class="group-modal-header">
+        <h3 class="group-modal-title" id="group-modal-title">Grupos do Usuário</h3>
+        <button class="auth-modal-close" id="group-modal-close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="group-modal-body" class="group-modal-body">
+        <p class="no-data-message">Carregando…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Force Password Change Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="force-pw-modal" class="hidden">
+    <div class="force-pw-backdrop"></div>
+    <div class="force-pw-card">
+      <h3 data-i18n="force_pw_title">🔐 Altere sua senha</h3>
+      <p data-i18n="force_pw_desc">Por segurança, defina uma nova senha para continuar. Esta ação é obrigatória no primeiro acesso.</p>
+      <div class="force-pw-field">
+        <label data-i18n="force_pw_new_label">Nova Senha</label>
+        <input type="password" id="force-pw-new" data-i18n-placeholder="force_pw_new_placeholder" placeholder="Mínimo 8 caracteres">
+      </div>
+      <div class="force-pw-field">
+        <label data-i18n="force_pw_confirm_label">Confirmar Nova Senha</label>
+        <input type="password" id="force-pw-confirm" data-i18n-placeholder="force_pw_confirm_placeholder" placeholder="Repita a senha">
+      </div>
+      <ul class="force-pw-rules">
+        <li id="rule-length"  data-i18n="force_pw_rule_length">Mínimo de 8 caracteres</li>
+        <li id="rule-upper"   data-i18n="force_pw_rule_upper">Pelo menos uma letra maiúscula</li>
+        <li id="rule-lower"   data-i18n="force_pw_rule_lower">Pelo menos uma letra minúscula</li>
+        <li id="rule-number"  data-i18n="force_pw_rule_number">Pelo menos um número</li>
+        <li id="rule-special" data-i18n="force_pw_rule_special">Pelo menos um caractere especial (!@#$...)</li>
+      </ul>
+      <p id="force-pw-error"></p>
+      <button id="force-pw-submit-btn" class="button-primary" style="width:100%" data-i18n="force_pw_submit">Salvar nova senha</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       User Profile Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="user-profile-modal" class="hidden">
+    <div class="profile-backdrop" id="user-profile-modal-backdrop"></div>
+    <div class="profile-card">
+      <div class="profile-card-header">
+        <h3 data-i18n="profile_title">Meu Perfil</h3>
+        <button class="profile-close-btn" id="user-profile-modal-close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="profile-section-label" data-i18n="profile_section_identity">Identidade</div>
+      <div class="profile-field">
+        <label data-i18n="profile_username">Usuário (login)</label>
+        <input type="text" id="profile-username" readonly style="opacity:0.6;cursor:not-allowed">
+      </div>
+      <div class="profile-field-row">
+        <div class="profile-field">
+          <label data-i18n="profile_first_name">Nome</label>
+          <input type="text" id="profile-first-name" placeholder="João">
+        </div>
+        <div class="profile-field">
+          <label data-i18n="profile_last_name">Sobrenome</label>
+          <input type="text" id="profile-last-name" placeholder="Silva">
+        </div>
+      </div>
+
+      <div class="profile-section-label" data-i18n="profile_section_contact">Contato (opcional)</div>
+      <div class="profile-field">
+        <label data-i18n="profile_email">E-mail</label>
+        <input type="email" id="profile-email" placeholder="joao@empresa.com">
+      </div>
+      <div class="profile-field">
+        <label data-i18n="profile_phone">Telefone</label>
+        <input type="text" id="profile-phone" placeholder="+55 11 99999-0000">
+      </div>
+      <div class="profile-field">
+        <label data-i18n="profile_notes">Observações</label>
+        <textarea id="profile-notes" placeholder="Notas internas..."></textarea>
+      </div>
+
+      <hr class="profile-divider">
+      <div class="profile-section-label" data-i18n="profile_section_password">Alterar Senha (opcional)</div>
+      <div class="profile-field">
+        <label data-i18n="profile_current_password">Senha atual</label>
+        <input type="password" id="profile-current-pw" placeholder="••••••••">
+      </div>
+      <div class="profile-field-row">
+        <div class="profile-field">
+          <label data-i18n="profile_new_password">Nova senha</label>
+          <input type="password" id="profile-new-pw" placeholder="••••••••">
+        </div>
+        <div class="profile-field">
+          <label data-i18n="profile_confirm_password">Confirmar</label>
+          <input type="password" id="profile-confirm-pw" placeholder="••••••••">
+        </div>
+      </div>
+
+      <div class="profile-actions">
+        <button class="button-secondary" id="user-profile-cancel-btn" data-i18n="btn_cancel">Cancelar</button>
+        <button class="button-primary" id="user-profile-save-btn" data-i18n="btn_save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Feedback Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <!-- Admin User Modal (create / edit) -->
+  <div id="admin-user-modal" class="hidden">
+    <div class="profile-backdrop" id="admin-user-modal-backdrop"></div>
+    <div class="admin-user-modal-card">
+      <div class="admin-user-modal-header">
+        <h3 id="admin-user-modal-title" data-i18n="admin.modal.create_user">Novo Usuário</h3>
+        <button class="profile-close-btn" id="admin-user-modal-close">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="profile-section-label" data-i18n="profile_section_identity">Identidade</div>
+      <div class="profile-field-row">
+        <div class="profile-field">
+          <label data-i18n="profile_first_name">Nome</label>
+          <input type="text" id="aum-first-name" placeholder="João">
+        </div>
+        <div class="profile-field">
+          <label data-i18n="profile_last_name">Sobrenome</label>
+          <input type="text" id="aum-last-name" placeholder="Silva">
+        </div>
+      </div>
+      <div class="profile-field">
+        <label data-i18n="profile_username">Usuário (login) <span style="color:var(--s-stopped)">*</span></label>
+        <input type="text" id="aum-username" placeholder="joao.silva" autocomplete="off">
+      </div>
+
+      <div class="profile-section-label" data-i18n="profile_section_contact">Contato (opcional)</div>
+      <div class="profile-field">
+        <label data-i18n="profile_email">E-mail</label>
+        <input type="email" id="aum-email" placeholder="joao@empresa.com">
+      </div>
+      <div class="profile-field">
+        <label data-i18n="profile_phone">Telefone</label>
+        <input type="text" id="aum-phone" placeholder="+55 11 99999-0000">
+      </div>
+      <div class="profile-field">
+        <label data-i18n="profile_notes">Observações</label>
+        <textarea id="aum-notes" placeholder="Notas internas..."></textarea>
+      </div>
+
+      <hr class="profile-divider">
+      <div class="profile-section-label" id="aum-pw-section-label" data-i18n="profile_section_password">Senha</div>
+      <div class="profile-field" id="aum-current-pw-row" style="display:none">
+        <label data-i18n="profile_current_password">Senha atual</label>
+        <input type="password" id="aum-current-pw" placeholder="••••••••">
+      </div>
+      <div class="profile-field-row">
+        <div class="profile-field">
+          <label id="aum-pw-label" data-i18n="profile_new_password">Nova senha <span style="color:var(--s-stopped)">*</span></label>
+          <input type="password" id="aum-password" placeholder="••••••••" autocomplete="new-password">
+        </div>
+        <div class="profile-field">
+          <label data-i18n="profile_confirm_password">Confirmar <span style="color:var(--s-stopped)">*</span></label>
+          <input type="password" id="aum-confirm-pw" placeholder="••••••••">
+        </div>
+      </div>
+
+      <div class="profile-actions">
+        <button class="button-secondary" id="admin-user-modal-cancel" data-i18n="btn_cancel">Cancelar</button>
+        <button class="button-primary" id="admin-user-modal-save" data-i18n="btn_save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Feedback Modal
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="feedback-modal" class="hidden">
+    <div class="feedback-backdrop" id="feedback-modal-backdrop"></div>
+    <div class="feedback-card">
+      <div class="feedback-card-header">
+        <h3 data-i18n="feedback_title">Feedback & Sugestões</h3>
+        <a href="https://github.com/Pedr0Teixeira/oci-docgen" target="_blank" class="feedback-github-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.1 3.29 9.43 7.86 10.96.57.1.78-.25.78-.55v-2.17c-3.19.69-3.86-1.54-3.86-1.54-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.74 2.68 1.24 3.33.95.1-.74.4-1.24.72-1.52-2.55-.29-5.23-1.27-5.23-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.45.11-3.03 0 0 .96-.31 3.15 1.18a10.96 10.96 0 0 1 5.74 0c2.18-1.49 3.14-1.18 3.14-1.18.62 1.58.23 2.74.11 3.03.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.37-5.25 5.65.41.36.78 1.06.78 2.13v3.17c0 .3.2.66.79.55C20.22 21.43 23.5 17.1 23.5 12 23.5 5.73 18.27.5 12 .5z"/></svg>
+          GitHub
+        </a>
+      </div>
+
+      <div class="feedback-categories">
+        <button class="feedback-cat-btn active" data-cat="sugestao" data-i18n="feedback_cat_suggestion">💡 Sugestão</button>
+        <button class="feedback-cat-btn" data-cat="bug" data-i18n="feedback_cat_bug">🐛 Bug</button>
+        <button class="feedback-cat-btn" data-cat="melhoria" data-i18n="feedback_cat_improvement">✨ Melhoria</button>
+        <button class="feedback-cat-btn" data-cat="outro" data-i18n="feedback_cat_other">📝 Outro</button>
+      </div>
+
+      <textarea id="feedback-text" class="feedback-textarea" data-i18n-placeholder="feedback_placeholder" placeholder="Descreva sua sugestão ou problema..." maxlength="1000"></textarea>
+      <div class="feedback-char-counter"><span id="feedback-char-count">0</span>/1000</div>
+
+      <div class="feedback-actions">
+        <button class="button-secondary" id="feedback-cancel-btn" data-i18n="btn_cancel">Cancelar</button>
+        <button class="button-primary" id="feedback-submit-btn" data-i18n="feedback_submit">Enviar Feedback</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback FAB -->
+  <button id="feedback-fab" title="Feedback & Sugestões">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  </button>
+<!-- PEM Preview Modal -->
+              <div id="pem-preview-modal" id="pem-preview-modal-wrap" style="display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center">
+                <div style="position:absolute;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px)" id="pem-preview-backdrop"></div>
+                <div style="position:relative;z-index:1;width:min(640px,92vw);background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                    <h3 style="margin:0;font-size:15px;font-weight:700;color:var(--text-primary)">Conteúdo da Chave PEM</h3>
+                    <button id="pem-preview-close" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px;border-radius:6px;transition:color 0.15s,background 0.15s" onmouseover="this.style.color='var(--accent)';this.style.background='var(--accent-soft)'" onmouseout="this.style.color='var(--text-secondary)';this.style.background='none'">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                  <textarea id="pem-preview-content" readonly style="width:100%;height:220px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text-primary);font-family:monospace;font-size:11px;resize:vertical;box-sizing:border-box"></textarea>
+                  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+                    <button id="pem-preview-copy" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;font-size:13px;transition:all 0.15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      Copiar
+                    </button>
+                    <button id="pem-preview-close-btn" style="padding:7px 18px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600;transition:opacity 0.15s" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Fechar</button>
+                  </div>
+                </div>
+              </div>
+
   <script src="js/app.js"></script>
 </body>
 </html>
