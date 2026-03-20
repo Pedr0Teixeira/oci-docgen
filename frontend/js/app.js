@@ -1154,7 +1154,8 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept-Language': currentLanguage
+          'Accept-Language': currentLanguage,
+          ...getAuthHeaders(),
         },
         body: JSON.stringify(payload),
       });
@@ -1167,6 +1168,11 @@ document.addEventListener('DOMContentLoaded', () => {
           sessionStorage.removeItem('selectedProfileId');
           selectedProfileId = null;
           await loadProfileSelector();
+        }
+        // Session expired or not authenticated — redirect to login.
+        if (response.status === 401) {
+          showToast(t('error.auth_required') || 'Autenticação necessária. Faça login novamente.', 'error');
+          setTimeout(() => { currentUser = null; updateAuthUI(); showView('generator'); }, 1500);
         }
         throw new Error(err.detail || 'Falha ao iniciar a tarefa de coleta.');
       }

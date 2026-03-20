@@ -18,7 +18,7 @@ services:
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379/0
-      ALLOWED_ORIGINS: "${FRONTEND_URL:-http://localhost:5500}"
+      ALLOWED_ORIGINS: "${FRONTEND_URL:-https://docgen.ccmcloud2.com.br}"
       DATA_DIR: /app/data
     volumes:
       - db_data:/app/data
@@ -27,17 +27,23 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    command: >
+      uvicorn main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 4
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')",
         ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   worker:
     build:
@@ -63,7 +69,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-5500}:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - api
 
