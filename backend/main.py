@@ -612,13 +612,22 @@ async def get_instances(region: str, compartment_id: str, profile_id: Optional[i
     response_model=TaskCreationResponse,
     summary="Iniciar Coleta de Dados em Background",
 )
-async def start_data_collection(payload: dict = Body(...)):
+async def start_data_collection(request: Request, payload: dict = Body(...)):
     collection_type = payload.get("type")
     doc_type        = payload.get("doc_type")
     region          = payload.get("region")
 
     if not all([collection_type, doc_type, region]):
         raise HTTPException(400, "Campos obrigatórios ausentes: 'type', 'doc_type' ou 'region'.")
+
+    # new_host is the only collection type allowed without authentication.
+    # full_infra, waf_report and kubernetes require a valid session token
+    # because they perform a full compartment scan and return sensitive
+    # infrastructure data.
+    if collection_type != "new_host":
+        user = _optional_user(request)
+        if not user:
+            raise HTTPException(401, "Autenticação obrigatória para este tipo de coleta.")
 
     try:
         profile_id = payload.get("profile_id") or None
@@ -851,3 +860,7 @@ async def get_user_logs(user_id: int, request: Request):
     _require_admin(request)
     logs = auth.get_user_generation_logs(user_id=user_id if user_id > 0 else None)
     return logs
+
+@app.get("/api/health", summary="Health check", include_in_schema=False)
+async def health():
+    return {"status": "ok"}
