@@ -161,12 +161,11 @@ flowchart TD
   Nginx -->|"proxy_pass"| FastAPI
   FastAPI <-->|"sessions / users / metrics"| Auth
   Auth <-->|"CRUD · WAL mode"| SQLite
-  FastAPI -->|"dispatch task"| Redis
+  FastAPI <-->|"dispatch / read result"| Redis
   Redis -->|"consume"| Celery
   Celery -->|"OCI SDK calls"| Connector
   Connector <-->|"REST / SDK"| OCI_API
   Celery -->|"store result"| Redis
-  FastAPI -->|"read result"| Redis
   FastAPI -->|"render"| DocGen
   DocGen -->|"stream .docx"| Browser
 ```
@@ -1304,10 +1303,7 @@ flowchart TD
     D -- "No" --> E[Re-raise original exception]
     D -- "Yes" --> F["PermissionError<br/>_iam_error_msg(resource_key)"]
 
-    F --> G{Which task?}
-
-    G -- "waf_report" --> H["PermissionError propagates freely<br/>WAF is primary deliverable"]
-    G -- "full_infra / new_host" --> H
+    F --> H["PermissionError propagates freely<br/>waf_report · full_infra · new_host"]
 
     H --> K["Celery task catches PermissionError"]
     K --> L["update_state<br/>state='IAM_ERROR'<br/>meta={error, error_type}"]
@@ -1370,15 +1366,15 @@ All endpoints are prefixed with `/api`. Authentication uses a Bearer token sent 
 
 ### Generator
 
-| Method | Path                                | Auth Required | Description                                                                           |
-| :----- | :---------------------------------- | :------------ | :------------------------------------------------------------------------------------ |
-| GET    | `/my-permissions`                   | User          | Permitted doc types + profile list                                                    |
-| GET    | `/profiles`                         | User          | Tenancy profiles visible to this user, including inactive (marked `is_active: false`) |
-| GET    | `/{region}/compartments`            | User          | List compartments (via selected profile)                                              |
-| GET    | `/{region}/instances/{compartment}` | User          | List instances for New Host mode                                                      |
-| POST   | `/start-collection`                 | User          | Start async OCI data collection. Returns HTTP 403 if the profile is inactive.         |
-| GET    | `/collection-status/{task_id}`      | User          | Poll collection progress                                                              |
-| POST   | `/generate-document`                | User          | Render and download `.docx`                                                           |
+| Method | Path                                | Auth Required | Description                                                                                                                                                         |
+| :----- | :---------------------------------- | :------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/my-permissions`                   | Optional      | Permitted doc types + profile list. Anonymous users receive `new_host` only.                                                                                        |
+| GET    | `/profiles`                         | Optional      | Tenancy profiles visible to this user, including inactive (marked `is_active: false`)                                                                               |
+| GET    | `/{region}/compartments`            | —             | List compartments (via selected profile)                                                                                                                            |
+| GET    | `/{region}/instances/{compartment}` | —             | List instances for New Host mode                                                                                                                                    |
+| POST   | `/start-collection`                 | **Partial**   | `new_host` — no auth required. `full_infra`, `waf_report`, `kubernetes` — Bearer token mandatory (HTTP 401 if absent). Returns HTTP 403 if the profile is inactive. |
+| GET    | `/collection-status/{task_id}`      | —             | Poll collection progress                                                                                                                                            |
+| POST   | `/generate-document`                | Optional      | Render and download `.docx`                                                                                                                                         |
 
 ### Admin
 
@@ -1553,6 +1549,8 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 
 - **Fernet key derivation:** The `SECRET_KEY` env variable is SHA-256 hashed and base64url-encoded to produce a valid 32-byte Fernet key, regardless of the original key length.
 - **Profile active state enforcement (dual-layer):** At the API layer, `/api/start-collection` validates `is_active` before dispatching any Celery task and returns HTTP 403 if the profile is inactive. At the frontend layer, inactive profiles are shown as locked items and wizard steps are disabled, preventing the request from being formed in the first place. Both layers are required: the API guard protects against direct API calls and stale browser state; the UI guard provides immediate feedback.
+- **Collection auth enforcement (dual-layer):** `POST /api/start-collection` requires a valid Bearer token for `full_infra`, `waf_report`, and `kubernetes` collection types — the three modes that perform a full OCI compartment scan and return sensitive infrastructure data. `new_host` remains accessible without authentication. At the API layer (`main.py`), `_optional_user()` is called before the Celery task is dispatched and raises HTTP 401 if no valid token is present. At the frontend layer, `app.js` always includes the `Authorization: Bearer <token>` header via `getAuthHeaders()` on every `/start-collection` request; a 401 response triggers a toast notification and redirects the user to the login screen. Both guards are required: the API guard protects against direct API calls and automation tools; the frontend guard ensures a clean UX on session expiry.
+- **Permanent superadmin protection (dual-layer):** The built-in `admin` account cannot be deleted and its role cannot be downgraded — not even by itself. At the API layer, `PATCH /api/admin/users/{id}/role` checks the target username before applying any change and returns HTTP 400 if the target is `admin`. At the frontend layer, the role toggle for that row is rendered as permanently disabled with `pointer-events: none` and a tooltip explaining the restriction.
 
 **Frontend**
 
