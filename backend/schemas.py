@@ -474,6 +474,18 @@ class ImageSectionMeta(BaseModel):
     text_below: str = ""
 
 
+class LetterheadMeta(BaseModel):
+    """Metadata for header/footer images and optional cover image.
+
+    File bytes are appended after image_section files in this order:
+    header (0-1), footer (0-1), cover (0-1).
+    """
+    enabled: bool = False
+    header_file_count: int = Field(0, ge=0, le=1)
+    footer_file_count: int = Field(0, ge=0, le=1)
+    cover_image_file_count: int = Field(0, ge=0, le=1)
+
+
 class GenerateDocRequest(BaseModel):
     """Request body for .docx document generation."""
     doc_type: str
@@ -481,6 +493,8 @@ class GenerateDocRequest(BaseModel):
     responsible_name: str = Field(..., min_length=1)
     lang: str = "pt"
     image_sections: List[ImageSectionMeta] = []
+    # Letterhead: optional header/footer on every page + cover image.
+    letterhead: Optional[LetterheadMeta] = None
     # Context metadata used for metrics logging.
     compartment_name: Optional[str] = "N/A"
     region: Optional[str] = "N/A"

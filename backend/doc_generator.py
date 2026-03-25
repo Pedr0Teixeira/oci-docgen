@@ -564,7 +564,7 @@ def _define_toc_styles(document: Document):
         style = styles.add_style("TOC 1", WD_STYLE_TYPE.PARAGRAPH)
         style.base_style = styles["Normal"]
         font = style.font
-        font.name = "Calibri"
+        font.name = "Gotham Light"
         font.size = Pt(11)
         p_format = style.paragraph_format
         p_format.left_indent = Inches(0)
@@ -573,7 +573,7 @@ def _define_toc_styles(document: Document):
         style = styles.add_style("TOC 2", WD_STYLE_TYPE.PARAGRAPH)
         style.base_style = styles["Normal"]
         font = style.font
-        font.name = "Calibri"
+        font.name = "Gotham Light"
         font.size = Pt(11)
         p_format = style.paragraph_format
         p_format.left_indent = Inches(0.25)
@@ -582,7 +582,7 @@ def _define_toc_styles(document: Document):
         style = styles.add_style("TOC 3", WD_STYLE_TYPE.PARAGRAPH)
         style.base_style = styles["Normal"]
         font = style.font
-        font.name = "Calibri"
+        font.name = "Gotham Light"
         font.size = Pt(11)
         p_format = style.paragraph_format
         p_format.left_indent = Inches(0.5)
@@ -1773,6 +1773,132 @@ def _insert_image_sections(
 
 
 
+
+def _apply_letterhead(
+    document,
+    header_bytes: Optional[bytes],
+    footer_bytes: Optional[bytes],
+) -> None:
+    """Stamp header/footer images using the full-page-width bleed technique.
+
+    Replicates exactly what the CCM template does:
+
+    1. header_distance = footer_distance = 0  →  header area starts at y=0 (top of page).
+    2. w:ind hanging = left_margin_twips  →  negative indent pulls the image LEFT
+       by exactly the left margin, so the image starts at the physical left page edge.
+    3. Image width = section.page_width (full physical page width, not text width).
+
+    This combination produces a header/footer that bleeds edge-to-edge with no
+    lateral gaps regardless of the document's margin settings.
+
+    Footer layout
+    -------------
+    Paragraph 1 (hanging indent): footer image at full page width.
+    Paragraph 2 (right-aligned):  page number field below the image.
+    """
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml.shared import OxmlElement as _OE
+
+    def _fld_char(kind: str):
+        el = _OE("w:fldChar")
+        el.set(_qn("w:fldCharType"), kind)
+        return el
+
+    def _instr(text: str):
+        el = _OE("w:instrText")
+        el.set(_qn("xml:space"), "preserve")
+        el.text = text
+        return el
+
+    def _add_page_num(para):
+        """Insert a PAGE field run into *para*."""
+        run = para.add_run()
+        run._r.append(_fld_char("begin"))
+        run._r.append(_instr(" PAGE "))
+        run._r.append(_fld_char("separate"))
+        run._r.append(_fld_char("end"))
+        run.font.name = "Gotham Light"
+        run.font.size = Pt(9)
+
+    def _set_bleed_para(para, left_twips: int):
+        """Apply the hanging-indent bleed technique to *para*.
+
+        Removes all left/right/firstLine ind overrides and sets ONLY
+        w:hanging = left_margin_twips.  This mirrors the pPr of the template
+        header/footer paragraphs exactly.
+        """
+        pPr = para._p.get_or_add_pPr()
+        # Remove any existing ind and spacing elements
+        for tag in (_qn("w:ind"), _qn("w:spacing")):
+            for el in pPr.findall(tag):
+                pPr.remove(el)
+        # Hanging indent = left margin → image starts at left page edge
+        ind = _OE("w:ind")
+        ind.set(_qn("w:hanging"), str(left_twips))
+        pPr.append(ind)
+        # Zero all spacing so there is no gap above/below the image
+        spc = _OE("w:spacing")
+        spc.set(_qn("w:before"), "0")
+        spc.set(_qn("w:after"), "0")
+        pPr.append(spc)
+
+    for section in document.sections:
+        # ── Compute per-section values ────────────────────────────────────────
+        # Left margin in twips (20 twips = 1 pt = 1/72 inch;  1 EMU = 914400 /inch)
+        left_twips = int(round(section.left_margin / 914400 * 1440))
+        # Full physical page width in EMU — this is what python-docx add_picture expects
+        page_width_emu = int(section.page_width)
+
+        # Set header and footer distances to 0 so they start at the page edge.
+        # This is the critical difference from the default (0.5 inch).
+        section.header_distance = Pt(0)
+        section.footer_distance = Pt(0)
+
+        # ── Header ────────────────────────────────────────────────────────────
+        if header_bytes:
+            section.header.is_linked_to_previous = False
+            hdr_para = (
+                section.header.paragraphs[0]
+                if section.header.paragraphs
+                else section.header.add_paragraph()
+            )
+            hdr_para.clear()
+            hdr_para.alignment = None  # Do NOT set explicit alignment — let hanging handle layout
+            _set_bleed_para(hdr_para, left_twips)
+            try:
+                hdr_para.add_run().add_picture(BytesIO(header_bytes), width=page_width_emu)
+            except Exception:
+                hdr_para.add_run("[Cabeçalho]")
+
+        # ── Footer ────────────────────────────────────────────────────────────
+        section.footer.is_linked_to_previous = False
+        for p in section.footer.paragraphs:
+            p.clear()
+        ftr_para = (
+            section.footer.paragraphs[0]
+            if section.footer.paragraphs
+            else section.footer.add_paragraph()
+        )
+        ftr_para.clear()
+        _set_bleed_para(ftr_para, left_twips)
+
+        if footer_bytes:
+            ftr_para.alignment = None  # Hanging indent handles lateral position
+            try:
+                ftr_para.add_run().add_picture(BytesIO(footer_bytes), width=page_width_emu)
+            except Exception:
+                ftr_para.add_run("[Rodapé]")
+            # Page number in a separate paragraph below the footer image
+            num_para = section.footer.add_paragraph()
+            _set_bleed_para(num_para, left_twips)
+            num_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            _add_page_num(num_para)
+        else:
+            # No footer image — just a right-aligned page number
+            ftr_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            _add_page_num(ftr_para)
+
+
 def generate_documentation(
     doc_type: str,
     infra_data: InfrastructureData,
@@ -1780,6 +1906,7 @@ def generate_documentation(
     image_sections: Optional[List[dict]] = None,
     lang: str = "pt",
     compartment_name: Optional[str] = None,
+    letterhead: Optional[dict] = None,
 ) -> str:
     """Main function to generate a .docx file.
 
@@ -1787,12 +1914,20 @@ def generate_documentation(
     compartment_name: explicit compartment name passed from the API request; used as the
                       primary source for the "Cliente" field so it is always populated
                       regardless of which resources exist in the collected data.
+    letterhead: optional dict {enabled, header, footer, cover} — header/footer images are
+                stamped into every section using the full-page-width bleed technique.
     """
     document = Document()
-    style = document.styles["Normal"]
-    font = style.font
-    font.name = "Calibri"
-    font.size = Pt(11)
+    # ── Global font: Gotham Light for body, Gotham Medium for headings/title ──
+    _ns = document.styles["Normal"]
+    _ns.font.name = "Gotham Light"
+    _ns.font.size = Pt(11)
+    for _hl in range(1, 10):
+        _hs = f"Heading {_hl}"
+        if _hs in document.styles:
+            document.styles[_hs].font.name = "Gotham Medium"
+    if "Title" in document.styles:
+        document.styles["Title"].font.name = "Gotham Medium"
     _define_toc_styles(document)
 
     # Prefer the explicit compartment_name from the API request (always populated).
@@ -1824,11 +1959,33 @@ def generate_documentation(
     headings_for_toc: List[Tuple[str, str, int]] = []
     numbering_counters: Dict[int, int] = {i: 0 for i in range(1, 6)}
 
-    title_p = document.add_paragraph(doc_title_text, style="Title")
-    title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    document.add_paragraph(
-        f"{t('doc.common.client', lang)}: {client_name}\n{t('doc.common.generation_date', lang)}: {datetime.now().strftime('%d/%m/%Y')}"
-    )
+    # ── Cover page ────────────────────────────────────────────────────────────
+    cover_bytes = (letterhead or {}).get("cover") if letterhead else None
+    if cover_bytes:
+        cover_img_p = document.add_paragraph()
+        cover_img_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        fmt = cover_img_p.paragraph_format
+        fmt.space_before = Pt(0)
+        fmt.space_after  = Pt(0)
+        try:
+            cover_img_p.add_run().add_picture(BytesIO(cover_bytes), width=Inches(6.27))
+        except Exception:
+            cover_img_p.add_run("[Imagem de Capa]")
+        document.add_paragraph()
+        title_p = document.add_paragraph(doc_title_text, style="Title")
+        title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        meta_p = document.add_paragraph(client_name)
+        meta_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        date_p = document.add_paragraph(
+            f"{t('doc.common.generation_date', lang)}: {datetime.now().strftime('%d/%m/%Y')}"
+        )
+        date_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    else:
+        title_p = document.add_paragraph(doc_title_text, style="Title")
+        title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        document.add_paragraph(
+            f"{t('doc.common.client', lang)}: {client_name}\n{t('doc.common.generation_date', lang)}: {datetime.now().strftime('%d/%m/%Y')}"
+        )
     document.add_page_break()
     toc_placeholder = document.add_paragraph(t("doc.common.toc", lang), style="Heading 1")
     document.add_page_break()
@@ -2052,6 +2209,10 @@ def generate_documentation(
         p = document.add_paragraph(style=style_name)
         _add_internal_hyperlink(p, text, bookmark)
         toc_placeholder._p.addnext(p._p)
+
+    # Apply header/footer images using full-page-width bleed technique.
+    if letterhead and letterhead.get("enabled") and (letterhead.get("header") or letterhead.get("footer")):
+        _apply_letterhead(document, header_bytes=letterhead.get("header"), footer_bytes=letterhead.get("footer"))
 
     output_dir = "generated_docs"
     os.makedirs(output_dir, exist_ok=True)

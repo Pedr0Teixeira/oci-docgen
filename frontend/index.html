@@ -405,6 +405,89 @@
 
             <hr class="fieldset-divider">
 
+            <!-- ── Cabeçalho, Rodapé e Capa ───────────────────────────────── -->
+            <fieldset id="letterhead-fieldset">
+              <legend>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon">
+                  <rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="7" x2="22" y2="7"/><line x1="2" y1="17" x2="22" y2="17"/>
+                </svg>
+                <span data-i18n="letterhead.legend">Cabeçalho, Rodapé e Capa</span>
+              </legend>
+              <!-- Capa (sempre visível) -->
+              <div class="letterhead-slot" id="letterhead-cover-slot">
+                <div class="letterhead-slot-label">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="letterhead-slot-icon"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span data-i18n="letterhead.cover_label">Imagem de Capa</span>
+                  <span class="letterhead-optional-badge" data-i18n="letterhead.optional">Opcional</span>
+                </div>
+                <small class="letterhead-slot-hint" data-i18n="letterhead.cover_hint">Imagem centralizada na capa</small>
+                <div class="letterhead-dropzone" id="letterhead-cover-zone" data-slot="cover" tabindex="0">
+                  <input type="file" id="letterhead-cover-input" accept="image/png,image/jpeg,image/gif,image/webp">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                  <span data-i18n="letterhead.drop_hint">Arraste ou selecione a imagem:</span>
+                  <div class="dropzone-actions">
+                    <button type="button" class="dropzone-action-btn" id="letterhead-cover-select-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg><span data-i18n="letterhead.select_file">Selecionar Arquivo</span></button>
+                    <button type="button" class="dropzone-action-btn" id="letterhead-cover-paste-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg><span data-i18n="letterhead.paste_clipboard">Colar (Ctrl+V)</span></button>
+                  </div>
+                  <small data-i18n="upload.hint">PNG, JPEG, GIF, WebP</small>
+                </div>
+                <div class="letterhead-preview" id="letterhead-cover-preview" style="display:none"><img id="letterhead-cover-img" alt="Capa"><button type="button" class="letterhead-remove-btn" id="letterhead-cover-remove"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+              </div>
+              <div class="letterhead-section-divider"></div>
+              <!-- Toggle Cabeçalho / Rodapé -->
+              <div class="letterhead-toggle-row">
+                <label class="admin-toggle-label">
+                  <input type="checkbox" id="letterhead-toggle">
+                  <span class="admin-toggle-track"><span class="admin-toggle-thumb"></span></span>
+                  <span class="admin-toggle-text" data-i18n="letterhead.toggle_label">Ativar cabeçalho e rodapé em todas as páginas</span>
+                </label>
+              </div>
+              <div id="letterhead-panel" class="letterhead-panel hidden">
+                <!-- Cabeçalho -->
+                <div class="letterhead-slot" id="letterhead-header-slot">
+                  <div class="letterhead-slot-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="letterhead-slot-icon"><rect x="2" y="3" width="20" height="5" rx="1"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="16" x2="22" y2="16"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+                    <span data-i18n="letterhead.header_label">Imagem de Cabeçalho</span>
+                  </div>
+                  <small class="letterhead-slot-hint" data-i18n="letterhead.header_hint">Exibida no topo de todas as páginas</small>
+                  <small class="letterhead-dim-hint" data-i18n="letterhead.header_dim">A4 recomendado: 1654 × 350 px (largura total da página, não da área de texto)</small>
+                  <div class="letterhead-dropzone" id="letterhead-header-zone" data-slot="header" tabindex="0">
+                    <input type="file" id="letterhead-header-input" accept="image/png,image/jpeg,image/gif,image/webp">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                    <span data-i18n="letterhead.drop_hint">Arraste ou selecione a imagem:</span>
+                    <div class="dropzone-actions">
+                      <button type="button" class="dropzone-action-btn" id="letterhead-header-select-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg><span data-i18n="letterhead.select_file">Selecionar Arquivo</span></button>
+                      <button type="button" class="dropzone-action-btn" id="letterhead-header-paste-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg><span data-i18n="letterhead.paste_clipboard">Colar (Ctrl+V)</span></button>
+                    </div>
+                    <small data-i18n="upload.hint">PNG, JPEG, GIF, WebP</small>
+                  </div>
+                  <div class="letterhead-preview" id="letterhead-header-preview" style="display:none"><img id="letterhead-header-img" alt="Cabeçalho"><button type="button" class="letterhead-remove-btn" id="letterhead-header-remove"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+                </div>
+                <!-- Rodapé -->
+                <div class="letterhead-slot" id="letterhead-footer-slot">
+                  <div class="letterhead-slot-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="letterhead-slot-icon"><line x1="2" y1="4" x2="22" y2="4"/><line x1="2" y1="8" x2="22" y2="8"/><line x1="2" y1="12" x2="22" y2="12"/><rect x="2" y="16" width="20" height="5" rx="1"/></svg>
+                    <span data-i18n="letterhead.footer_label">Imagem de Rodapé</span>
+                  </div>
+                  <small class="letterhead-slot-hint" data-i18n="letterhead.footer_hint">Exibida na base de todas as páginas, numeração abaixo</small>
+                  <small class="letterhead-dim-hint" data-i18n="letterhead.footer_dim">A4 recomendado: 1654 × 152 px (largura total da página, não da área de texto)</small>
+                  <div class="letterhead-dropzone" id="letterhead-footer-zone" data-slot="footer" tabindex="0">
+                    <input type="file" id="letterhead-footer-input" accept="image/png,image/jpeg,image/gif,image/webp">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                    <span data-i18n="letterhead.drop_hint">Arraste ou selecione a imagem:</span>
+                    <div class="dropzone-actions">
+                      <button type="button" class="dropzone-action-btn" id="letterhead-footer-select-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg><span data-i18n="letterhead.select_file">Selecionar Arquivo</span></button>
+                      <button type="button" class="dropzone-action-btn" id="letterhead-footer-paste-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg><span data-i18n="letterhead.paste_clipboard">Colar (Ctrl+V)</span></button>
+                    </div>
+                    <small data-i18n="upload.hint">PNG, JPEG, GIF, WebP</small>
+                  </div>
+                  <div class="letterhead-preview" id="letterhead-footer-preview" style="display:none"><img id="letterhead-footer-img" alt="Rodapé"><button type="button" class="letterhead-remove-btn" id="letterhead-footer-remove"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+                </div>
+              </div>
+            </fieldset>
+
+            <hr class="fieldset-divider">
+
             <fieldset>
               <legend>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon">
