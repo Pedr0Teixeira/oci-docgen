@@ -25,7 +25,7 @@ from celery_worker import (
     collect_new_host_task,
     collect_waf_report_task,
 )
-from schemas import GenerateDocRequest, TaskCreationResponse, TaskStatusResponse
+from schemas import GenerateDocRequest, TaskCreationResponse, TaskStatusResponse, LetterheadMeta
 
 logging.basicConfig(level=logging.INFO)
 
@@ -728,6 +728,26 @@ async def create_document(
                 "text_below": meta.text_below,
             })
 
+        # Letterhead bytes appended after section files — order: header, footer, cover.
+        resolved_letterhead = None
+        lh_meta = request_data.letterhead
+        if lh_meta:
+            header_bytes: Optional[bytes] = None
+            footer_bytes: Optional[bytes] = None
+            cover_bytes:  Optional[bytes] = None
+            if lh_meta.enabled and lh_meta.header_file_count == 1 and cursor < len(all_bytes):
+                header_bytes = all_bytes[cursor]; cursor += 1
+            if lh_meta.enabled and lh_meta.footer_file_count == 1 and cursor < len(all_bytes):
+                footer_bytes = all_bytes[cursor]; cursor += 1
+            if lh_meta.cover_image_file_count == 1 and cursor < len(all_bytes):
+                cover_bytes = all_bytes[cursor]; cursor += 1
+            resolved_letterhead = {
+                "enabled": lh_meta.enabled,
+                "header":  header_bytes,
+                "footer":  footer_bytes,
+                "cover":   cover_bytes,
+            }
+
         file_path = doc_generator.generate_documentation(
             doc_type=request_data.doc_type,
             infra_data=request_data.infra_data,
@@ -735,6 +755,7 @@ async def create_document(
             image_sections=resolved_sections,
             lang=request_data.lang,
             compartment_name=request_data.compartment_name,
+            letterhead=resolved_letterhead,
         )
 
         if not os.path.exists(file_path):

@@ -143,6 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // imageSections: [{id, name, position, files:[File]}]
   let imageSections = [];
   let sectionIdCounter = 0;
+  // letterhead state: {enabled, headerFile, footerFile, coverFile}
+  let letterhead = { enabled: false, headerFile: null, footerFile: null, coverFile: null };
   let collectionStartTime = 0;
   let progressTimerInterval = null;
   let pollingIntervalId = null;
@@ -612,6 +614,12 @@ document.addEventListener('DOMContentLoaded', () => {
     allInfrastructureData = {};
     imageSections = [];
     sectionIdCounter = 0;
+    letterhead = { enabled: false, headerFile: null, footerFile: null, coverFile: null };
+    const _lhTog = document.getElementById('letterhead-toggle');
+    if (_lhTog) _lhTog.checked = false;
+    const _lhPnl = document.getElementById('letterhead-panel');
+    if (_lhPnl) _lhPnl.classList.add('hidden');
+    ['header', 'footer', 'cover'].forEach(_resetLetterheadSlot);
 
     detailsContainer.classList.add('hidden');
     summaryContainer.innerHTML = '';
@@ -2513,11 +2521,21 @@ document.addEventListener('DOMContentLoaded', () => {
         text_above: sec.text_above || '',
         text_below: sec.text_below || '',
       }));
+      // Letterhead metadata (files appended after section_images: header, footer, cover)
+      payload.letterhead = {
+        enabled:                letterhead.enabled,
+        header_file_count:      (letterhead.enabled && letterhead.headerFile) ? 1 : 0,
+        footer_file_count:      (letterhead.enabled && letterhead.footerFile) ? 1 : 0,
+        cover_image_file_count: letterhead.coverFile ? 1 : 0,
+      };
       formData.append('json_data', JSON.stringify(payload));
-      // Flat file list — server slices by file_count per section
+      // Flat file list — server slices by file_count per section, then letterhead
       imageSections.forEach(sec =>
         sec.files.forEach(file => formData.append('section_images', file))
       );
+      if (letterhead.enabled && letterhead.headerFile) formData.append('section_images', letterhead.headerFile);
+      if (letterhead.enabled && letterhead.footerFile) formData.append('section_images', letterhead.footerFile);
+      if (letterhead.coverFile) formData.append('section_images', letterhead.coverFile);
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `${API_BASE_URL}/api/generate-document`, true);
@@ -2867,6 +2885,89 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 
+
+  // ===========================================================================
+  // Letterhead Manager — header, footer and cover image slots
+  // ===========================================================================
+
+  function initLetterheadManager() {
+    const toggle = document.getElementById('letterhead-toggle');
+    const panel  = document.getElementById('letterhead-panel');
+    if (!toggle || !panel) return;
+
+    toggle.addEventListener('change', () => {
+      letterhead.enabled = toggle.checked;
+      panel.classList.toggle('hidden', !toggle.checked);
+    });
+
+    ['header', 'footer', 'cover'].forEach(slot => {
+      const zone      = document.getElementById(`letterhead-${slot}-zone`);
+      const fileInput = document.getElementById(`letterhead-${slot}-input`);
+      const selectBtn = document.getElementById(`letterhead-${slot}-select-btn`);
+      const pasteBtn  = document.getElementById(`letterhead-${slot}-paste-btn`);
+      const removeBtn = document.getElementById(`letterhead-${slot}-remove`);
+      if (!zone) return;
+
+      selectBtn?.addEventListener('click', e => { e.stopPropagation(); fileInput?.click(); });
+      fileInput?.addEventListener('change', () => {
+        const f = fileInput.files[0]; if (f) _setLetterheadFile(slot, f); fileInput.value = '';
+      });
+
+      pasteBtn?.addEventListener('click', e => {
+        e.stopPropagation(); zone.focus();
+        const origHtml = pasteBtn.innerHTML;
+        pasteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> ${t('letterhead.paste_ready') || 'Pronto — Ctrl+V'}`;
+        setTimeout(() => { pasteBtn.innerHTML = origHtml; }, 4000);
+      });
+
+      zone.addEventListener('paste', e => {
+        e.preventDefault();
+        const items = Array.from(e.clipboardData?.items || []);
+        const imgItem = items.find(i => i.kind === 'file' && i.type.startsWith('image/'));
+        if (items.some(i => i.kind === 'file') && !imgItem) { showToast(t('toast.paste_not_image'), 'error'); return; }
+        if (!imgItem) return;
+        const blob = imgItem.getAsFile();
+        _setLetterheadFile(slot, new File([blob], `${slot}_${Date.now()}.${blob.type.split('/')[1]}`, { type: blob.type }));
+      });
+
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover-file'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('dragover-file'));
+      zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.classList.remove('dragover-file');
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+        if (e.dataTransfer.files.length && !files.length) { showToast(t('toast.paste_not_image'), 'error'); return; }
+        if (files[0]) _setLetterheadFile(slot, files[0]);
+      });
+
+      removeBtn?.addEventListener('click', () => _resetLetterheadSlot(slot));
+    });
+  }
+
+  function _setLetterheadFile(slot, file) {
+    if (slot === 'header') letterhead.headerFile = file;
+    else if (slot === 'footer') letterhead.footerFile = file;
+    else letterhead.coverFile = file;
+    const zone = document.getElementById(`letterhead-${slot}-zone`);
+    const preview = document.getElementById(`letterhead-${slot}-preview`);
+    const img = document.getElementById(`letterhead-${slot}-img`);
+    if (!zone || !preview || !img) return;
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; zone.style.display = 'none'; preview.style.display = 'flex'; };
+    reader.readAsDataURL(file);
+  }
+
+  function _resetLetterheadSlot(slot) {
+    if (slot === 'header') letterhead.headerFile = null;
+    else if (slot === 'footer') letterhead.footerFile = null;
+    else letterhead.coverFile = null;
+    const zone = document.getElementById(`letterhead-${slot}-zone`);
+    const preview = document.getElementById(`letterhead-${slot}-preview`);
+    const img = document.getElementById(`letterhead-${slot}-img`);
+    if (zone) zone.style.display = '';
+    if (preview) preview.style.display = 'none';
+    if (img) img.src = '';
+  }
+
   // ===========================================================================
   // Lightbox
   // ===========================================================================
@@ -2994,15 +3095,115 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') closeDocPreview();
   }
 
-  function buildPreviewPage(label, num) {
+
+  function buildPreviewPage(label, num, lhHeaderSrc, lhFooterSrc) {
     const page = document.createElement('div');
     page.className = 'preview-page';
+    if (lhHeaderSrc) {
+      const hImg = document.createElement('img');
+      hImg.src = lhHeaderSrc; hImg.className = 'preview-page-letterhead-header';
+      hImg.alt = t('letterhead.preview_header') || 'Cabeçalho';
+      page.appendChild(hImg);
+    }
     const pg = document.createElement('span');
     pg.className = 'preview-page-label';
     pg.textContent = `${t('preview_page') || 'Pág.'} ${num}`;
     page.appendChild(pg);
+    page._lhFooterSrc = lhFooterSrc || null;
+    page._pageNum = num;
     return page;
   }
+
+  function _sealPreviewPage(page) {
+    const src = page._lhFooterSrc;
+    if (!src && !letterhead.enabled) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'preview-page-letterhead-footer-wrap';
+    if (src) {
+      const img = document.createElement('img');
+      img.src = src; img.alt = t('letterhead.preview_footer') || 'Rodapé';
+      wrap.appendChild(img);
+    }
+    const badge = document.createElement('span');
+    badge.className = 'preview-page-num-badge';
+    badge.textContent = (t('letterhead.preview_page_num') || 'Pág. N').replace('N', String(page._pageNum));
+    wrap.appendChild(badge);
+    page.appendChild(wrap);
+  }
+
+  function openDocPreview() {
+    previewModalBody.innerHTML = '';
+    const docTypeLabels = { full_infra: t('doc_type_full'), new_host: t('doc_type_new'), kubernetes: t('doc_type_k8s'), waf_report: t('doc_type_waf') };
+    const docTitle = docTypeLabels[selectedDocType] || selectedDocType;
+    const clientName = selectedCompartmentName || 'N/A';
+    const today = new Date().toLocaleDateString('pt-BR');
+    const startSections = imageSections.filter(s => s.position === 'start');
+    const endSections   = imageSections.filter(s => s.position === 'end');
+
+    const lhOn       = letterhead.enabled;
+    const lhHdrSrc   = lhOn && letterhead.headerFile ? document.getElementById('letterhead-header-img')?.src || null : null;
+    const lhFtrSrc   = lhOn && letterhead.footerFile ? document.getElementById('letterhead-footer-img')?.src || null : null;
+    const lhCoverSrc = letterhead.coverFile ? document.getElementById('letterhead-cover-img')?.src || null : null;
+    const showFtr    = lhOn && (lhFtrSrc || lhHdrSrc);
+    const mk = (label, num) => buildPreviewPage(label, num, lhHdrSrc, showFtr ? lhFtrSrc : null);
+
+    // Cover
+    const coverPage = mk('Capa', 1);
+    if (lhCoverSrc) {
+      const ci = document.createElement('img');
+      ci.src = lhCoverSrc; ci.style.cssText = 'width:100%;max-height:160px;object-fit:contain;display:block;margin:0 auto 10px;';
+      coverPage.appendChild(ci);
+    }
+    ['preview-doc-title', 'preview-doc-meta', 'preview-doc-meta'].forEach((cls, i) => {
+      const d = document.createElement('div'); d.className = cls;
+      d.textContent = [docTitle, `${t('doc.common.client')||'Cliente'}: ${clientName}`, `${t('doc.common.generation_date')||'Data'}: ${today}`][i];
+      coverPage.appendChild(d);
+    });
+    _sealPreviewPage(coverPage); previewModalBody.appendChild(coverPage);
+
+    // TOC
+    const tocPage = mk('Sumário', 2);
+    const tocDiv = document.createElement('div');
+    const tocTitle = document.createElement('div'); tocTitle.className = 'preview-toc-title';
+    tocTitle.textContent = t('preview_toc') || 'Sumário'; tocDiv.appendChild(tocTitle);
+    const allSections = buildPreviewSectionList(startSections, endSections);
+    let pageNum = 3;
+    allSections.forEach(entry => {
+      const row = document.createElement('div'); row.className = 'preview-toc-entry level-' + entry.level;
+      const dots = document.createElement('span'); dots.className = 'preview-toc-dots';
+      const pg = document.createElement('span'); pg.className = 'preview-toc-page'; pg.textContent = pageNum;
+      if (entry.level === 1) pageNum++;
+      row.innerHTML = entry.name; row.append(dots, pg); tocDiv.appendChild(row);
+    });
+    tocPage.appendChild(tocDiv); _sealPreviewPage(tocPage); previewModalBody.appendChild(tocPage);
+
+    // Content
+    let cp = 3;
+    startSections.forEach(sec => { previewModalBody.appendChild(buildImageSectionPage(sec, cp++, lhHdrSrc, showFtr ? lhFtrSrc : null)); });
+    previewModalBody.appendChild(buildInfraPage(cp++, lhHdrSrc, showFtr ? lhFtrSrc : null));
+    endSections.forEach(sec => { previewModalBody.appendChild(buildImageSectionPage(sec, cp++, lhHdrSrc, showFtr ? lhFtrSrc : null)); });
+
+    // Responsible
+    const respPage = mk(t('preview_responsible')||'Responsável', cp);
+    const rs = document.createElement('div'); rs.className = 'preview-section';
+    const rh = document.createElement('div'); rh.className = 'preview-section-heading';
+    rh.innerHTML = `${t('preview_responsible')||'Responsável'}<span class="preview-badge responsible">${t('attachments_position_end')||'Final'}</span>`;
+    rs.appendChild(rh);
+    const rn = document.getElementById('responsible-name-input')?.value?.trim();
+    if (rn) { const rl = document.createElement('div'); rl.className = 'preview-subsection'; rl.textContent = rn; rs.appendChild(rl); }
+    else { const ph = document.createElement('div'); ph.className = 'preview-text-line medium'; rs.appendChild(ph); }
+    respPage.appendChild(rs); _sealPreviewPage(respPage); previewModalBody.appendChild(respPage);
+
+    previewOverlay.classList.add('visible');
+    document.addEventListener('keydown', closePreviewOnEsc);
+  }
+
+  function closeDocPreview() {
+    previewOverlay.classList.remove('visible');
+    document.removeEventListener('keydown', closePreviewOnEsc);
+  }
+
+  function closePreviewOnEsc(e) { if (e.key === 'Escape') closeDocPreview(); }
 
   function buildPreviewSectionList(startSecs, endSecs) {
     const entries = [];
@@ -3030,8 +3231,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return entries;
   }
 
-  function buildInfraPage(pageNum) {
-    const page = buildPreviewPage(t('preview_infra') || 'Infraestrutura', pageNum);
+  function buildInfraPage(pageNum, lhHdrSrc, lhFtrSrc) {
+    const page = buildPreviewPage(t('preview_infra') || 'Infraestrutura', pageNum, lhHdrSrc, lhFtrSrc);
     const data = allInfrastructureData;
 
     const sections = [];
@@ -3067,6 +3268,7 @@ document.addEventListener('DOMContentLoaded', () => {
       empty.className = 'preview-subsection';
       empty.textContent = t('preview_no_data') || 'Nenhum dado de infraestrutura coletado.';
       page.appendChild(empty);
+      _sealPreviewPage(page);
       return page;
     }
 
@@ -3085,11 +3287,12 @@ document.addEventListener('DOMContentLoaded', () => {
       page.appendChild(sec);
     });
 
+    _sealPreviewPage(page);
     return page;
   }
 
-  function buildImageSectionPage(sec, pageNum) {
-    const page = buildPreviewPage(sec.name, pageNum);
+  function buildImageSectionPage(sec, pageNum, lhHdrSrc, lhFtrSrc) {
+    const page = buildPreviewPage(sec.name, pageNum, lhHdrSrc, lhFtrSrc);
     const secDiv = document.createElement('div');
     secDiv.className = 'preview-section';
 
@@ -3147,6 +3350,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     page.appendChild(secDiv);
+    _sealPreviewPage(page);
     return page;
   }
 
@@ -5615,6 +5819,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   addImageSectionBtn.addEventListener('click', () => addImageSection());
   docPreviewBtn.addEventListener('click', openDocPreview);
+  initLetterheadManager();
   previewModalClose.addEventListener('click', closeDocPreview);
   previewOverlay.addEventListener('click', (e) => { if (e.target === previewOverlay) closeDocPreview(); });
   lightboxClose.addEventListener('click', closeLightbox);
