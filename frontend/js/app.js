@@ -1244,6 +1244,7 @@ document.addEventListener('DOMContentLoaded', () => {
             summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
             detailsContainer.classList.remove('hidden');
             addToHistory(selectedDocType || 'doc', selectedCompartmentName, selectedRegion);
+            if (typeof initDiagramInteraction === 'function') initDiagramInteraction();
           } catch (renderErr) {
             console.error('Summary render error:', renderErr);
             showToast('Erro ao renderizar o resumo: ' + renderErr.message, 'error');
@@ -2208,7 +2209,11 @@ document.addEventListener('DOMContentLoaded', () => {
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.VPN}${t('summary.vpn_connectivity')}</legend><h4 class="subheader">${t('summary.vpn.cpes')}</h4>${cpesHtml}<h4 class="subheader">${t('summary.vpn.ipsec_connections')}</h4><div class="ipsec-container">${ipsecHtml || `<p class="no-data-message">${t('summary.no_ipsec_found')}</p>`}</div></fieldset>`;
     }
 
-    return `<div><h3 class="infra-summary-main-title">${title}</h3>${mainContentHtml}</div>`;
+    const diagramHtml = (typeof renderOciDiagram === 'function')
+      ? renderOciDiagram(data, selectedDocType)
+      : '';
+
+    return `<div>${diagramHtml}<h3 class="infra-summary-main-title">${title}</h3>${mainContentHtml}</div>`;
   }
 
   // ===========================================================================

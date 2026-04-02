@@ -192,6 +192,7 @@ class LoadBalancerData(BaseModel):
     backend sets, IP addresses, and WAF integration.
     """
     id: Optional[str] = None           # Load Balancer OCID
+    subnet_ids: List[str] = []
     display_name: str
     lifecycle_state: str
     shape_name: str
@@ -432,6 +433,9 @@ class InstanceData(BaseModel):
     network_security_groups: List[NetworkSecurityGroup]
     route_table: Optional[RouteTable] = None
     compartment_name: str
+    subnet_id: Optional[str] = None
+    subnet_name: Optional[str] = None
+    vcn_id: Optional[str] = None
 
 
 class InfrastructureData(BaseModel):

@@ -456,6 +456,7 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
     os_name = f"{image.operating_system} {image.operating_system_version}" if image else "N/A"
 
     private_ip, public_ip = "N/A", "N/A"
+    subnet_id, subnet_name, vcn_id = None, None, None
     security_lists, network_security_groups, route_table = [], [], None
     vnic_attachments = _safe_api_call(
         compute_client.list_vnic_attachments, instance.compartment_id, instance_id=instance_id
@@ -467,6 +468,9 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
             public_ip = vnic.public_ip or "N/A"
             subnet = _safe_api_call(virtual_network_client.get_subnet, vnic.subnet_id)
             if subnet:
+                subnet_id = subnet.id
+                subnet_name = subnet.display_name
+                vcn_id = getattr(subnet, 'vcn_id', None)
                 for sl_id in subnet.security_list_ids:
                     sl = _safe_api_call(virtual_network_client.get_security_list, sl_id)
                     if sl:
@@ -598,6 +602,9 @@ def get_instance_details(region: str, instance_id: str, compartment_name: str = 
         route_table=route_table,
         compartment_name=compartment_name,
         lifecycle_state=instance.lifecycle_state,
+        subnet_id=subnet_id,
+        subnet_name=subnet_name,
+        vcn_id=vcn_id,
     )
 
 def _get_standalone_block_volumes(
@@ -1506,6 +1513,7 @@ def get_infrastructure_details(
         load_balancers.append(
             LoadBalancerData(
                 id=lb_details.id,
+                subnet_ids=list(lb_details.subnet_ids or []),
                 display_name=lb_details.display_name,
                 lifecycle_state=lb_details.lifecycle_state,
                 shape_name=lb_details.shape_name,
@@ -1571,6 +1579,7 @@ def get_infrastructure_details(
                                 if lb_sdk:
                                     lb_data = LoadBalancerData(
                                         id=fw_lb_id,
+                                        subnet_ids=list(lb_sdk.subnet_ids or []),
                                         display_name=lb_sdk.display_name,
                                         lifecycle_state=lb_sdk.lifecycle_state,
                                         shape_name=lb_sdk.shape_name,
@@ -1871,6 +1880,7 @@ def get_waf_report_details(
 
                         lb_data = LoadBalancerData(
                             id=lb_details.id,
+                            subnet_ids=list(lb_details.subnet_ids or []),
                             display_name=lb_details.display_name,
                             lifecycle_state=lb_details.lifecycle_state,
                             shape_name=lb_details.shape_name,
