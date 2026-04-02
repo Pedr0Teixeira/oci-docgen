@@ -186,3 +186,8 @@ temp/
 # Test images that may have been uploaded during development
 test_uploads/
 uploads/
+
+# =============================================================================
+# Claude Code
+# =============================================================================
+.claude/
