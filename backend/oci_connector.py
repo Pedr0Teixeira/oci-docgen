@@ -1260,7 +1260,9 @@ def get_infrastructure_details(
             compartment_id=compartment_id, drg_id=drg_sdk.id, retry_strategy=retry_strategy,
         ).data
         rpcs = [
-            RpcData(id=r.id, display_name=r.display_name, lifecycle_state=r.lifecycle_state, peering_status=r.peering_status)
+            RpcData(id=r.id, display_name=r.display_name, lifecycle_state=r.lifecycle_state, peering_status=r.peering_status,
+                    peering_status_details=getattr(r, 'peering_status_details', None),
+                    peer_region_name=getattr(r, 'peer_region_name', None))
             for r in rpcs_sdk
         ]
         drgs.append(DrgData(id=drg_sdk.id, display_name=drg_sdk.display_name, attachments=attachments, rpcs=rpcs))
@@ -1357,7 +1359,12 @@ def get_infrastructure_details(
     vcns = []
     for vcn_sdk in all_vcns_sdk:
         subnets = [
-            SubnetData(id=s.id, display_name=s.display_name, cidr_block=s.cidr_block)
+            SubnetData(
+                id=s.id, display_name=s.display_name, cidr_block=s.cidr_block,
+                route_table_id=s.route_table_id,
+                security_list_ids=list(s.security_list_ids or []),
+                prohibit_public_ip_on_vnic=getattr(s, 'prohibit_public_ip_on_vnic', False),
+            )
             for s in oci.pagination.list_call_get_all_results(
                 virtual_network_client.list_subnets,
                 compartment_id=compartment_id, vcn_id=vcn_sdk.id,
@@ -1400,6 +1407,10 @@ def get_infrastructure_details(
             ))
 
         route_table_map = {rt.id: rt.name for rt in route_tables}
+        sl_name_map = {sl.id: sl.name for sl in security_lists}
+        for sub in subnets:
+            sub.route_table_name = route_table_map.get(sub.route_table_id)
+            sub.security_list_names = [sl_name_map.get(sid, sid) for sid in sub.security_list_ids]
         vcn_specific_nsgs = []
         for nsg_sdk in oci.pagination.list_call_get_all_results(
             virtual_network_client.list_network_security_groups,
@@ -1444,6 +1455,16 @@ def get_infrastructure_details(
                 network_security_groups=vcn_specific_nsgs, lpgs=lpgs,
             )
         )
+
+    # Resolve LPG peer VCN names across all VCNs (zero extra API calls)
+    lpg_to_vcn_name = {}
+    for vcn in vcns:
+        for lpg in vcn.lpgs:
+            lpg_to_vcn_name[lpg.id] = vcn.display_name
+    for vcn in vcns:
+        for lpg in vcn.lpgs:
+            if lpg.peer_id and lpg.peer_id in lpg_to_vcn_name:
+                lpg.peer_vcn_name = lpg_to_vcn_name[lpg.peer_id]
 
     task.update_state(
         state="PROGRESS",

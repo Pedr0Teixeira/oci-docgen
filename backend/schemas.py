@@ -103,6 +103,11 @@ class SubnetData(BaseModel):
     id: str
     display_name: str
     cidr_block: str
+    route_table_id: Optional[str] = None
+    security_list_ids: List[str] = []
+    route_table_name: Optional[str] = None
+    security_list_names: List[str] = []
+    prohibit_public_ip_on_vnic: bool = False
 
 
 class LpgData(BaseModel):
@@ -117,6 +122,7 @@ class LpgData(BaseModel):
     peer_advertised_cidr: Optional[str] = None
     is_cross_tenancy_peering: bool
     route_table_name: Optional[str] = "N/A"
+    peer_vcn_name: Optional[str] = None
 
 
 class VcnData(BaseModel):
@@ -217,6 +223,7 @@ class RpcData(BaseModel):
     lifecycle_state: str
     peering_status: str
     peering_status_details: Optional[str] = None
+    peer_region_name: Optional[str] = None
 
 
 class DrgAttachmentData(BaseModel):

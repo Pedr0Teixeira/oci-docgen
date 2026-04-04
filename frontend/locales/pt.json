@@ -538,5 +538,15 @@
   "letterhead.paste_ready": "Pronto — pressione Ctrl+V",
   "letterhead.preview_header": "Cabeçalho",
   "letterhead.preview_footer": "Rodapé",
-  "letterhead.preview_page_num": "Pág. N"
+  "letterhead.preview_page_num": "Pág. N",
+  "diagram.title": "Topologia de Rede",
+  "diagram.section_name": "Topologia de Rede",
+  "diagram.section_desc": "O diagrama abaixo ilustra a topologia de rede do ambiente OCI, incluindo VCNs, sub-redes, gateways, roteamento, peering via DRG, conectividade VPN e integração com o ambiente on-premises.",
+  "diagram.zoom_in": "Aumentar zoom",
+  "diagram.zoom_out": "Diminuir zoom",
+  "diagram.fit_screen": "Ajustar ao tamanho da tela",
+  "diagram.download_png": "Baixar como PNG",
+  "diagram.add_to_doc": "Adicionar ao documento",
+  "diagram.hint": "Scroll para zoom · Arraste para mover · Duplo clique para ajustar",
+  "diagram.no_resources": "sem recursos"
 }

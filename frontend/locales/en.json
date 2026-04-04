@@ -538,5 +538,15 @@
   "letterhead.paste_ready": "Ready — press Ctrl+V",
   "letterhead.preview_header": "Header",
   "letterhead.preview_footer": "Footer",
-  "letterhead.preview_page_num": "Page N"
+  "letterhead.preview_page_num": "Page N",
+  "diagram.title": "Network Topology",
+  "diagram.section_name": "Network Topology",
+  "diagram.section_desc": "The diagram below illustrates the network topology of the OCI environment, including VCNs, subnets, gateways, routing, DRG peering, VPN connectivity, and on-premises integration.",
+  "diagram.zoom_in": "Zoom in",
+  "diagram.zoom_out": "Zoom out",
+  "diagram.fit_screen": "Fit to screen",
+  "diagram.download_png": "Download as PNG",
+  "diagram.add_to_doc": "Add to document",
+  "diagram.hint": "Scroll to zoom · Drag to pan · Double-click to fit",
+  "diagram.no_resources": "no resources"
 }
