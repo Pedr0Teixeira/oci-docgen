@@ -1,7 +1,3 @@
-# ==============================================================================
-# Celery worker for the OCI DocGen application.
-# ==============================================================================
-
 import os
 from celery import Celery
 from celery.exceptions import Ignore

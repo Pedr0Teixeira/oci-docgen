@@ -1,9 +1,3 @@
-# ==============================================================================
-# doc_generator.py — .docx document generation module for OCI DocGen.
-#     Converts collected infrastructure data into formatted Word documents.
-#     Supports multiple document types and bilingual output (PT-BR / EN).
-# ==============================================================================
-
 import os
 import re
 from datetime import datetime
@@ -23,9 +17,7 @@ from docx.text.paragraph import Paragraph
 
 from schemas import InfrastructureData, InstanceData, LoadBalancerData
 
-# ==============================================================================
-# Internationalisation (i18n) — Embedded PT-BR and EN string tables
-# ==============================================================================
+# --- i18n: Embedded PT-BR and EN string tables ---
 
 DOC_STRINGS = {
     "pt": {
@@ -554,9 +546,7 @@ def t(key: str, lang: str) -> str:
     return strings.get(key, DOC_STRINGS.get("pt", {}).get(key, key))
 
 
-# ==============================================================================
-# Table of Contents and Hyperlink Helpers
-# ==============================================================================
+# --- Table of Contents and Hyperlink Helpers ---
 def _define_toc_styles(document: Document):
     """Creates and configures 'TOC 1-3' styles with correct indentation if they don't exist."""
     styles = document.styles
@@ -663,9 +653,7 @@ def _add_and_bookmark_heading(
     return heading
 
 
-# ==============================================================================
-# Table Styling Helpers
-# ==============================================================================
+# --- Table Styling Helpers ---
 def _shade_cell(cell, color="4472C4"):
     """Applies a background color shading to a table cell."""
     shading_xml = r'<w:shd {} w:fill="{}"/>'.format(nsdecls("w"), color)
@@ -801,9 +789,7 @@ def _create_titled_key_value_table(
     document.add_paragraph()
 
 
-# ==============================================================================
-# Content Formatting Helpers
-# ==============================================================================
+# --- Content Formatting Helpers ---
 def _add_network_resource_details(
     document: Document,
     resource_title: str,
@@ -875,9 +861,7 @@ def _add_network_resource_details(
     document.add_paragraph()
 
 
-# ==============================================================================
-# Document Section Generators
-# ==============================================================================
+# --- Document Section Generators ---
 def _add_instances_table(document: Document, instances: List[InstanceData], lang: str):
     """Adds the main summary table of compute instances to the document."""
     if not instances:
@@ -1658,9 +1642,7 @@ def _add_responsible_section(
     document.add_paragraph()
 
 
-# ==============================================================================
-# Main Orchestrator Function — Entry point for document generation
-# ==============================================================================
+# --- Document Body Helpers ---
 def _add_network_resource_details(
     document: Document,
     resource_title: str,
@@ -1899,6 +1881,7 @@ def _apply_letterhead(
             _add_page_num(ftr_para)
 
 
+# --- Document Generation ---
 def generate_documentation(
     doc_type: str,
     infra_data: InfrastructureData,

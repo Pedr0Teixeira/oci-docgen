@@ -74,6 +74,7 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 - **Wizard step dependency enforcement** — Generator steps for region, document type, and compartment are locked until an active profile is selected. Selecting an inactive profile clears downstream state immediately.
 - **Asynchronous collection** — Celery and Redis execute OCI API calls in the background, with real-time progress feedback via polling. No page refresh needed.
 - **Interactive summary** — Before generating, the collected dataset is rendered in a collapsible panel for review and validation.
+- **Network topology diagram** — After collection, a live SVG architecture diagram is rendered directly in the browser. It displays VCNs, subnets, instances, gateways, and VPN connectivity in a horizontal flow layout (Cloud on the left, On-Premises on the right). The diagram can be exported as a 4K PNG or added to the document as a "Network Topology" section with a single click.
 - **Visual state indicators** — Lifecycle states (`TERMINATED`, `STOPPED`, `PENDING_DELETION`) are highlighted with color in both the interface and the generated document.
 - **VPN tunnel status** — `DOWN` tunnels flagged in amber; `UP` tunnels in soft green.
 - **Full DRG and VPN coverage** — Dynamic Routing Gateways with VCN name resolution on attachments, RPCs, CPEs, and IPSec tunnels with Phase 1/2, IKE, BGP, and Oracle compliance validation.
@@ -132,7 +133,7 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 ```mermaid
 flowchart TD
   subgraph Browser["Browser (SPA)"]
-    UI["index.html + app.js<br/>Vanilla JS · Bilingual · RBAC-aware"]
+    UI["index.html + app.js + diagram.js<br/>Vanilla JS · Bilingual · RBAC-aware"]
   end
 
   subgraph DockerNetwork["Docker Network"]
@@ -197,9 +198,16 @@ sequenceDiagram
   C->>C: Validate via Pydantic schemas
   C->>R: Store serialised result
 
-  A-->>B: {status: "SUCCESS", result: {...}}
+  A-->>B: {status: "SUCCESS", result: {infra_data}}
 
-  B->>A: POST /api/generate-document<br/>{infra_data, doc_type, compartment_name, images[], language}
+  Note over B: diagram.js renders topology SVG from infra_data<br/>Cloud (left) / On-Premises (right) — no server round-trip
+
+  opt User clicks "Add to document"
+    B->>B: Export diagram as 4K PNG (canvas 4× scale)
+    B->>B: Push PNG into image_sections[] as "Network Topology"
+  end
+
+  B->>A: POST /api/generate-document<br/>{infra_data, doc_type, compartment_name, image_sections[] (opt. diagram PNG), language}
   A->>DocGen: generate_documentation(infra_data, compartment_name, ...)
   DocGen-->>A: .docx bytes
   A-->>B: Stream download
@@ -471,7 +479,8 @@ oci-docgen/
 │   ├── css/
 │   │   └── style.css        # Design system (dark/light mode, bilingual tooltips)
 │   ├── js/
-│   │   └── app.js           # Frontend logic — wizard, rendering, API calls, UI state
+│   │   ├── app.js           # Frontend logic — wizard, rendering, API calls, UI state
+│   │   └── diagram.js       # OCI architecture diagram engine — SVG layout, zoom/pan, PNG export
 │   └── locales/
 │       ├── pt.json          # PT-BR translations
 │       └── en.json          # EN translations
@@ -1554,6 +1563,7 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 
 **Frontend**
 
+- **Network topology diagram:** `diagram.js` renders a self-contained SVG architecture diagram from the collected `InfrastructureData`. The layout is horizontal — Cloud zone (VCNs, subnets, gateways) on the left, On-Premises zone (CPEs) on the right, with IPSec tunnels drawn as horizontal connectors between them. After rendering, the user can export a 4K PNG (canvas scale factor 4×) or click "Add to document" to insert the diagram as an image section named "Network Topology" at the start of the document. The section is injected via `window._diagramApi.addImageSection()`, which feeds directly into the existing image sections pipeline consumed by `/api/generate-document`.
 - **Wizard step dependency model:** The `setDownstreamStepsState(enabled)` function controls the `disabled` CSS class on the region, doc-type, and compartment select containers. It is called whenever the profile selection changes and on page load. Disabled selects are visually distinct and non-interactive via the existing `.disabled` class contract in `createCustomSelect`.
 - **Tooltip direction for topbar buttons:** `applyTooltips()` detects whether a button is inside `#app-topbar` and assigns `data-tooltip-pos="bottom"` automatically, so tooltips open downward and are never clipped by the top edge of the viewport.
 - **Admin table hover effects:** `transform: scale()` on action icon buttons was replaced with `filter: brightness() + box-shadow` because `scale` causes Chromium to include the transformed paint bounds in the overflow scroll calculation of the parent container, triggering a spurious horizontal scrollbar. `box-shadow` does not affect layout bounds.

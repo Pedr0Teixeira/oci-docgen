@@ -1,21 +1,10 @@
-// =============================================================================
-// OCI DocGen frontend application.
-// Manages the complete UI flow: region/compartment selection,
-// async collection start, infrastructure summary display,
-// and .docx document generation/download.
-// =============================================================================
-
 document.addEventListener('DOMContentLoaded', () => {
 
-  // ===========================================================================
-  // Settings and Constants
-  // ===========================================================================
+  // --- Settings and Constants ---
   //const API_BASE_URL = 'http://127.0.0.1:8000'; // Local dev (sem Docker)
   const API_BASE_URL = ''; // Docker / produção (nginx proxy)
 
-  // ===========================================================================
-  // DOM Element Selectors
-  // ===========================================================================
+  // --- DOM Element Selectors ---
   const mainAppContainer = document.getElementById('app-shell');
   const profileContainer = document.getElementById('profile-select-container');
   const regionContainer = document.getElementById('region-select-container');
@@ -84,9 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const metricsGuestNotice = document.getElementById('metrics-guest-notice');
   const metricsLoginCta    = document.getElementById('metrics-login-cta');
 
-  // ===========================================================================
-  // Inline SVG Icon Definitions
-  // ===========================================================================
+  // --- Inline SVG Icon Definitions ---
   const ICONS = {
     WAF:          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>`,
     INSTANCES:    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
@@ -105,10 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
 
-  // ===========================================================================
-  // PT-BR: Helper para normalizar labels de estado de ciclo de vida
-  // EN: Helper to normalize lifecycle state display labels
-  // ===========================================================================
+  // --- Helper to normalize lifecycle state display labels ---
   function getStateLabel(state) {
     const s = (state || '').toUpperCase();
     if (s === 'TERMINATED') return currentLanguage === 'pt' ? 'Excluído' : 'Terminated';
@@ -123,10 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return s.toLowerCase().replace(/_/g, '-');
   }
 
-  // ===========================================================================
-  // PT-BR: Estado Global da Aplicação
-  // EN: Global Application State
-  // ===========================================================================
+  // --- Global Application State ---
   let selectedRegion = null;
   let selectedDocType = null;
   let selectedCompartmentId = null;
@@ -147,10 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let allCompartmentsData = [];
   let allInstancesData = [];
 
-  // ===========================================================================
-  // PT-BR: Funções de Internacionalização (i18n)
-  // EN: Internationalization (i18n) Functions
-  // ===========================================================================
+  // --- Internationalization (i18n) Functions ---
 
   const loadTranslations = async (lang) => {
     try {
@@ -313,10 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (metricsVisible) loadMetrics?.();
   };
 
-  // ===========================================================================
-  // PT-BR: Funções de Interface do Usuário
-  // EN: User Interface Functions
-  // ===========================================================================
+  // --- User Interface Functions ---
 
   // SVG icons per toast/notification type
   const _TOAST_ICONS = {
@@ -377,9 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return msg;
   }
 
-  // ===========================================================================
-  // Notification Center
-  // ===========================================================================
+  // --- Notification Center ---
   let _notifications = [];   // { id, type, title, message, time, unread }
   let _notifUnread   = 0;
 
@@ -483,7 +456,6 @@ document.addEventListener('DOMContentLoaded', () => {
     _renderNotifList();
   });
 
-  // window.addSystemAnnouncement removed — announcements have their own panel now
   window.addSystemAnnouncement = function(title, message) {
     _addNotification('warning', title, message);
   };
@@ -626,7 +598,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateUiForDocType() {
     const isNewHost = selectedDocType === 'new_host';
-    // Show storage option only for full infra
     const storageOptRow = document.getElementById('storage-options-row');
     if (storageOptRow) storageOptRow.classList.toggle('hidden', selectedDocType !== 'full_infra');
     const isKubernetes = selectedDocType === 'kubernetes';
@@ -873,14 +844,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ===========================================================================
-  // PT-BR: Funções de Chamadas à API Backend
-  // EN: Backend API Call Functions
-  // ===========================================================================
+  // --- Backend API Call Functions ---
 
-  /**
-   * Fetches the list of available OCI regions and populates the selector.
-   */
   /**
    * Enables or disables all wizard steps downstream of the profile selector
    * (region, doc-type, compartment) and the fetch button.
@@ -897,7 +862,6 @@ document.addEventListener('DOMContentLoaded', () => {
         sel.classList.remove('disabled');
       } else {
         sel.classList.add('disabled');
-        // Reset display back to placeholder
         const disp = sel.querySelector('.selected-item-display');
         const placeholders = {
           [regionContainer]:      t('step1_placeholder'),
@@ -905,7 +869,6 @@ document.addEventListener('DOMContentLoaded', () => {
           [compartmentContainer]: t('step3_placeholder'),
         };
         if (disp) disp.innerHTML = `<span class="placeholder-text">${placeholders[c] || '—'}</span>`;
-        // Close dropdown if open
         const dd = c.querySelector('.custom-select-dropdown, .select-items');
         if (dd) { dd.classList.remove('open'); dd.classList.add('select-hide'); }
       }
@@ -1095,10 +1058,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // ===========================================================================
-  // PT-BR: Fluxo Assíncrono e Coleta de Dados
-  // EN: Asynchronous Flow and Data Collection
-  // ===========================================================================
+  // --- Asynchronous Flow and Data Collection ---
 
   /**
    * Formats milliseconds into a MM:SS string.
@@ -1275,22 +1235,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2000);
   };
 
-  // ===========================================================================
-  // PT-BR: Geração de Resumo de Infraestrutura e Documentos
-  // EN: Infrastructure Summary and Document Generation
-  // ===========================================================================
+  // --- Infrastructure Summary and Document Generation ---
 
   /**
    * Generates the HTML summary of the fetched infrastructure data.
    * @param {object} data The infrastructure data from the API.
    * @returns {string} The generated HTML string.
    */
-  // ===========================================================================
-  // PT-BR: Constrói o HTML das políticas WAF para o resumo de infraestrutura completa.
-  //        Separado para evitar backticks aninhados em template literals.
-  // EN: Builds WAF policy HTML for the full infrastructure summary.
-  //     Extracted to avoid nested backtick issues inside template literals.
-  // ===========================================================================
+  // --- WAF Policy HTML Builder ---
+  // Extracted to avoid nested backtick issues inside template literals.
   function buildWafInfraSectionHtml(policies, createTable) {
     let html = '';
     policies.forEach(function(policy) {
@@ -1300,8 +1253,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let wafCardContent   = '';
 
       if (!isDeleted) {
-        // PT-BR: Itera sobre todos os firewalls vinculados (integrations) com fallback para integration singular.
-        // EN: Iterate over all bound firewalls (integrations) with fallback to singular integration.
+        // Use `integrations` (all firewalls bound to this policy) with fallback to the legacy singular `integration`.
         const integrations = (policy.integrations && policy.integrations.length > 0)
           ? policy.integrations
           : (policy.integration ? [policy.integration] : []);
@@ -1373,8 +1325,6 @@ document.addEventListener('DOMContentLoaded', () => {
             p.lifecycle_state?.toUpperCase() !== 'DELETED'
         );
         activePolicies.forEach(policy => {
-            // PT-BR: Itera sobre todos os firewalls da política para popular todos os LBs.
-            // EN: Iterate over all policy firewalls to populate all LBs.
             const integrations = (policy.integrations && policy.integrations.length > 0)
                 ? policy.integrations
                 : (policy.integration ? [policy.integration] : []);
@@ -1857,8 +1807,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isDeleted) {
             wafCardContent = `<p class="no-data-message">${t('doc.messages.resource_deleted_info') || 'Recurso deletado.'}</p>`;
         } else {
-            // PT-BR: Usa `integrations` (todos os firewalls) com fallback para `integration` singular.
-            // EN: Use `integrations` (all firewalls) with fallback to singular `integration`.
+            // Use `integrations` (all firewalls bound to this policy) with fallback to the legacy singular `integration`.
             const integrations = (policy.integrations && policy.integrations.length > 0)
                 ? policy.integrations
                 : (policy.integration ? [policy.integration] : []);
@@ -2169,8 +2118,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('doc.messages.no_network_found')}</p>`}</div></fieldset>
       `;
     } else { // Full Infra
-      // PT-BR: WAF ativo: integra políticas ao resumo de infraestrutura completa.
-      // EN: Active WAF: merges policies into the full infrastructure summary.
       const activeWafPolicies = (waf_policies || []).filter(p =>
           p.lifecycle_state?.toUpperCase() !== 'DELETED'
       );
@@ -2179,12 +2126,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ['ACTIVE','PENDING_DELETION'].includes((c.lifecycle_state || '').toUpperCase())
       ).length > 0;
 
-      // PT-BR: Se há políticas WAF no compartimento, injeta a seção de WAF e Certificados.
-      //        Reutiliza `wafHtml` — já calculado acima com o UX idêntico ao WAF Report
-      //        (tabela de Firewall com Attachment State, grid de regras, etc.).
-      // EN: If WAF policies exist, inject WAF and Certificates sections.
-      //     Reuses `wafHtml` — already computed above with the same UX as the WAF Report
-      //     (Firewall table with Attachment State, rules grid, etc.).
+      // Reuses `wafHtml` computed above — same UI as the WAF Report view (firewall table, rules grid).
       const wafInfraSection  = hasWaf  ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.WAF + t('summary.waf_policies') + '</legend><div class="instances-container">' + wafHtml + '</div></fieldset>' : '';
       const certInfraSection = hasCerts ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.CERTIFICATES + (t('summary.section.certificates') || 'Certificados TLS/SSL') + '</legend><div class="instances-container">' + renderCertificates(certificates) + '</div></fieldset>' : '';
 
@@ -2208,9 +2150,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return `<div>${diagramHtml}<h3 class="infra-summary-main-title">${title}</h3>${mainContentHtml}</div>`;
   }
 
-  // ===========================================================================
-  // Storage Section — unified Boot + Block Volume panel with in-use indicator
-  // ===========================================================================
+  // --- Storage Section — unified Boot + Block Volume panel with in-use indicator ---
   function generateStorageSectionHtml(data) {
     const instances        = data.instances || [];
     const standaloneVols   = data.standalone_volumes || [];
@@ -2584,9 +2524,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
 
-  // ===========================================================================
-  // Image Section Manager
-  // ===========================================================================
+  // --- Image Section Manager ---
 
   function renderImageSections() {
     imageSectionsList.innerHTML = '';
@@ -2890,9 +2828,7 @@ document.addEventListener('DOMContentLoaded', () => {
     getImageSections: () => imageSections,
   };
 
-  // ===========================================================================
-  // Letterhead Manager — header, footer and cover image slots
-  // ===========================================================================
+  // --- Letterhead Manager — header, footer and cover image slots ---
 
   function initLetterheadManager() {
     const toggle = document.getElementById('letterhead-toggle');
@@ -2972,9 +2908,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (img) img.src = '';
   }
 
-  // ===========================================================================
-  // Lightbox
-  // ===========================================================================
+  // --- Lightbox ---
 
   function openLightbox(src, alt) {
     lightboxImg.src = src;
@@ -2992,9 +2926,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') closeLightbox();
   }
 
-  // ===========================================================================
-  // Document Preview
-  // ===========================================================================
+  // --- Document Preview ---
 
   function openDocPreview() {
     previewModalBody.innerHTML = '';
@@ -3359,9 +3291,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 
-  // ===========================================================================
-  // Auth System (login optional — app always accessible without login)
-  // ===========================================================================
+  // --- Auth System (login optional — app always accessible without login) ---
   const SESSION_KEY = 'oci-docgen-session';   // { token, username, user_id }
   const HISTORY_KEY = 'oci-docgen-history';
 
@@ -4621,9 +4551,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>`).join('');
   };
 
-  // ===========================================================================
-  // Admin Panel
-  // ===========================================================================
+  // --- Admin Panel ---
 
   const DOC_TYPES_ALL = ['new_host', 'full_infra', 'kubernetes', 'waf_report'];
 
@@ -5405,9 +5333,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ===========================================================================
-  // Admin Announcements Management
-  // ===========================================================================
+  // --- Admin Announcements Management ---
 
   // SVG icons for announcement type badges (no emoji)
   const _ANN_ICONS = {
@@ -5674,9 +5600,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('ann-panel-backdrop')?.classList.add('hidden');
   });
 
-  // ===========================================================================
-  // Admin tab switching
-  // Admin tab switching
+  // --- Admin tab switching ---
   document.querySelectorAll('.admin-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
@@ -5730,9 +5654,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ===========================================================================
-  // App Initialization
-  // ===========================================================================
+  // --- App Initialization ---
   const initializeApp = async () => {
     const savedLang = localStorage.getItem('oci-docgen-lang') || 'pt';
     const savedTheme = localStorage.getItem('oci-docgen-theme') || 'dark';
@@ -5804,10 +5726,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ===========================================================================
-  // PT-BR: Registros de Event Listeners
-  // EN: Event Listener Registrations
-  // ===========================================================================
+  // --- Event Listener Registrations ---
   fetchBtn.addEventListener('click', fetchAllDetails);
   generateBtn.addEventListener('click', generateDocument);
   newDocBtn.addEventListener('click', resetApp);
@@ -5834,9 +5753,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
   });
 
-  // ===========================================================================
-  // PEM Key UI — create vs edit state machine
-  // ===========================================================================
+  // --- PEM Key UI — create vs edit state machine ---
   (function initPemUI() {
     const choosePnl  = document.getElementById('pem-choose-panel');
     const filePnl    = document.getElementById('pem-file-panel');
@@ -5990,9 +5907,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('profile-modal')?.setAttribute('data-tenancy-name', tnVal);
   }, true /* capture */);
 
-  // ===========================================================================
-  // Validation helper — highlight missing required step selectors
-  // ===========================================================================
+  // --- Validation helper — highlight missing required step selectors ---
   function highlightMissingField(containerId, labelText) {
     const el = document.getElementById(containerId);
     if (!el) return;
@@ -6068,9 +5983,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById(id)?.addEventListener('click', () => clearFieldError(id), true);
   });
 
-  // ===========================================================================
-  // Admin User Modal — create & edit
-  // ===========================================================================
+  // --- Admin User Modal — create & edit ---
   let _editingUserId = null;
 
   function openAdminUserModal(userId = null, userData = null) {
@@ -6191,9 +6104,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // ===========================================================================
-  // PT-BR: Inicialização da Aplicação
-  // EN: Application Initialization
-  // ===========================================================================
+  // --- Application Initialization ---
   initializeApp();
 });
