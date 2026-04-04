@@ -1,26 +1,20 @@
 // =============================================================================
-// PT-BR: Aplicação frontend do OCI DocGen.
-//        Gerencia o fluxo completo da interface: seleção de região/compartimento,
-//        inicio de coletas assíncronas, exibição do resumo de infraestrutura
-//        e geração/download de documentos .docx.
-// EN: OCI DocGen frontend application.
-//     Manages the complete UI flow: region/compartment selection,
-//     async collection start, infrastructure summary display,
-//     and .docx document generation/download.
+// OCI DocGen frontend application.
+// Manages the complete UI flow: region/compartment selection,
+// async collection start, infrastructure summary display,
+// and .docx document generation/download.
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
 
   // ===========================================================================
-  // PT-BR: Configurações e Constantes
-  // EN: Settings and Constants
+  // Settings and Constants
   // ===========================================================================
   //const API_BASE_URL = 'http://127.0.0.1:8000'; // Local dev (sem Docker)
   const API_BASE_URL = ''; // Docker / produção (nginx proxy)
 
   // ===========================================================================
-  // PT-BR: Seletores de Elementos do DOM
-  // EN: DOM Element Selectors
+  // DOM Element Selectors
   // ===========================================================================
   const mainAppContainer = document.getElementById('app-shell');
   const profileContainer = document.getElementById('profile-select-container');
@@ -91,8 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const metricsLoginCta    = document.getElementById('metrics-login-cta');
 
   // ===========================================================================
-  // PT-BR: Definições de Ícones SVG inline
-  // EN: Inline SVG Icon Definitions
+  // Inline SVG Icon Definitions
   // ===========================================================================
   const ICONS = {
     WAF:          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>`,
@@ -204,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const setLanguage = async (lang) => {
     currentLanguage = lang;
+    window.currentLanguage = lang; // expose to diagram.js (global scope)
     localStorage.setItem('oci-docgen-lang', lang);
     // Update flag buttons
     document.querySelectorAll('.lang-flag-btn').forEach(btn => {
@@ -298,6 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (Object.keys(allInfrastructureData).length > 0) {
       summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
+      if (typeof initDiagramInteraction === 'function') initDiagramInteraction();
     }
 
     // Rebuild image section cards so button labels update (Início/Final, etc.)
@@ -1242,9 +1237,9 @@ document.addEventListener('DOMContentLoaded', () => {
           // Wrapped so rendering errors never block hideProgress
           try {
             summaryContainer.innerHTML = generateInfrastructureSummary(allInfrastructureData);
+            if (typeof initDiagramInteraction === 'function') initDiagramInteraction();
             detailsContainer.classList.remove('hidden');
             addToHistory(selectedDocType || 'doc', selectedCompartmentName, selectedRegion);
-            if (typeof initDiagramInteraction === 'function') initDiagramInteraction();
           } catch (renderErr) {
             console.error('Summary render error:', renderErr);
             showToast('Erro ao renderizar o resumo: ' + renderErr.message, 'error');
@@ -2209,10 +2204,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.VPN}${t('summary.vpn_connectivity')}</legend><h4 class="subheader">${t('summary.vpn.cpes')}</h4>${cpesHtml}<h4 class="subheader">${t('summary.vpn.ipsec_connections')}</h4><div class="ipsec-container">${ipsecHtml || `<p class="no-data-message">${t('summary.no_ipsec_found')}</p>`}</div></fieldset>`;
     }
 
-    const diagramHtml = (typeof renderOciDiagram === 'function')
-      ? renderOciDiagram(data, selectedDocType)
-      : '';
-
+    const diagramHtml = (typeof renderOciDiagram === 'function') ? renderOciDiagram(data, selectedDocType) : '';
     return `<div>${diagramHtml}<h3 class="infra-summary-main-title">${title}</h3>${mainContentHtml}</div>`;
   }
 
@@ -2890,6 +2882,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 
+
+  // Expose image section API for diagram integration
+  window._diagramApi = {
+    addImageSection,
+    addFilesToSection,
+    getImageSections: () => imageSections,
+  };
 
   // ===========================================================================
   // Letterhead Manager — header, footer and cover image slots
