@@ -1,10 +1,7 @@
-// ===========================================================================
-//  OCI Architecture Diagram — Horizontal Flow Layout
-//  Cloud(left) / On-Premises(right), subnets stacked, gateways lateral
-// ===========================================================================
+// OCI Architecture Diagram — Horizontal Flow: Cloud(left) / On-Premises(right)
 'use strict';
 
-/* ─── Public API ─────────────────────────────────────────────────────────── */
+// Public API
 window.renderOciDiagram = function (data, docType) {
   try { return new OciDiagram(data || {}, docType || 'full_infra').render(); }
   catch (e) { console.warn('[OciDiagram]', e); return ''; }
@@ -88,7 +85,7 @@ window.initDiagramInteraction = function () {
 };
 
 
-/* ─── PNG Export (4K resolution) ────────────────────────────────────────── */
+// PNG Export (4K resolution)
 window.exportDiagramPng = async function () {
   const svg = document.querySelector('.arch-svg');
   if (!svg) return null;
@@ -206,7 +203,7 @@ window._archAddToDoc = async function () {
 };
 
 
-/* ─── Layout Constants ──────────────────────────────────────────────────── */
+// Layout Constants
 const K = {
   W: 2000, MARG: 32,
   VGAP: 28, HGAP: 20, COL_GAP: 24,
@@ -245,7 +242,7 @@ const K = {
   LEGEND_W: 190, LEGEND_PAD: 10, LEGEND_ITEM_H: 20, LEGEND_R: 8,
 };
 
-/* ─── Service Colors ────────────────────────────────────────────────────── */
+// Service Colors
 const C = {
   instance: '#f89e2a', lb: '#a371f7', vcn: '#2f81f7', drg: '#58a6ff',
   oke: '#4cc9f0', waf: '#f85149', cert: '#d4a017', ipsec: '#d29922',
@@ -258,13 +255,13 @@ const C = {
   cloud_zone: '#2f81f7', onprem_zone: '#848d97',
 };
 
-/* ─── i18n helper ───────────────────────────────────────────────────────── */
+// i18n helper
 function _lang() {
   return (typeof currentLanguage !== 'undefined' && currentLanguage === 'en') ? 'en' : 'pt';
 }
 function _i(pt, en) { return _lang() === 'en' ? en : pt; }
 
-/* ─── SVG Icons (28×28 coord space) ─────────────────────────────────────── */
+// SVG Icons (28×28 coord space)
 const SVG_ICONS = {
   instance: `<rect x="2" y="4" width="24" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
 <rect x="2" y="14" width="24" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
@@ -673,7 +670,7 @@ class OciDiagram {
   }
 
 
-  /* ── IPSec nodes — vertical column, right side of Cloud zone ─────────── */
+  // IPSec nodes — vertical column, right side of Cloud zone
   _layIpsec(ipsecs, x, y) {
     const { NW, NH, VGAP } = K;
     ipsecs.forEach((ipsec, i) => {
@@ -686,7 +683,7 @@ class OciDiagram {
   }
 
 
-  /* ── CPE nodes (On-Premises zone — right panel) ────────────────────────── */
+  // CPE nodes (On-Premises zone — right panel)
   _layOnPremCpes(ipsecs, cpes, onpremX, onpremW) {
     const { CW, CH, VGAP } = K;
     const cpeMap = Object.fromEntries(cpes.map(c => [c.id, c]));
@@ -724,7 +721,7 @@ class OciDiagram {
   }
 
 
-  /* ── Vertical separator: Cloud OCI | On-Premises ─────────────────────── */
+  // Vertical separator: Cloud OCI | On-Premises
   _verticalSeparator(sepX, y, h, cloudW, onpremW) {
     const { MARG, FN, ZONE_HDR_H } = K;
     const cloudLabelX = sepX - cloudW / 2;
@@ -740,7 +737,7 @@ class OciDiagram {
   }
 
 
-  /* ── Tunnel line (horizontal, IPSec ↔ CPE) ───────────────────────────── */
+  // Tunnel line (horizontal, IPSec ↔ CPE)
   _tunnelLine(x1, y, x2, _y2, up, down) {
     const clr = down === 0 && up > 0 ? '#3fb950' : up === 0 && down > 0 ? '#f85149' : '#e3b341';
     const dash = down > 0 ? 'stroke-dasharray:8,4;' : '';
@@ -752,14 +749,14 @@ class OciDiagram {
   }
 
 
-  /* ── Edge Security Row ────────────────────────────────────────────────── */
+  // Edge Security Row
   _layEdgeRow(items, x, y, w) {
     const nodes = items.map(item => item.type === 'waf' ? this._descWaf(item.data) : this._descCert(item.data));
     return this._layFloatingRow(nodes, x, y, w, _i('SEGURANÇA', 'SECURITY'), C.waf);
   }
 
 
-  /* ── Floating row (generic) ───────────────────────────────────────────── */
+  // Floating row (generic)
   _layFloatingRow(nodes, x, y, w, label, color) {
     const { NW, NH, HGAP } = K;
     const pr = Math.max(1, Math.min(nodes.length, Math.floor((w + HGAP) / (NW + HGAP))));
@@ -779,7 +776,7 @@ class OciDiagram {
   }
 
 
-  /* ── On-Premises column (vertical stack) ─────────────────────────────── */
+  // On-Premises column (vertical stack)
   _layOnPremColumn(nodes, x, y, w, label, color) {
     const { NW, NH, HGAP } = K;
     const nodeW = Math.min(NW, w - 40);
@@ -800,7 +797,7 @@ class OciDiagram {
   }
 
 
-  /* ── CPE column (On-Premises) ─────────────────────────────────────────── */
+  // CPE column (On-Premises)
   _layCpeColumn(cpes, x, y, w) {
     const { CW, CH, HGAP } = K;
     const nodeW = Math.min(CW, w - 20);
@@ -817,7 +814,7 @@ class OciDiagram {
   }
 
 
-  /* ── Pre-measure VCN max width (without rendering) ────────────────────── */
+  // Pre-measure VCN max width (without rendering)
   _measureVcnMaxWidth(vcnTopos) {
     const { VCN_PAD, SUB_PAD, SUB_MIN_W, NW, HGAP, GW_NW, ARROW_GAP } = K;
     return vcnTopos.reduce((maxW, vt) => {
@@ -838,7 +835,7 @@ class OciDiagram {
   }
 
 
-  /* ── VCN Containers ───────────────────────────────────────────────────── */
+  // VCN Containers
   _layVcnContainers(vcnTopos, x, y, totalW) {
     const { VCN_PAD, VCN_HDR, VCN_GAP, DRG_W, DRG_H, RPC_H, SUB_PAD, SUB_HDR, SUB_GAP,
             NW, NH, HGAP, SUB_MIN_W, META_BADGE_H, LPG_W, LPG_H, GW_NW, GW_NH, GW_GAP, ARROW_GAP } = K;
@@ -975,7 +972,7 @@ class OciDiagram {
   }
 
 
-  /* ── Render a single VCN (horizontal flow layout) ────────────────────── */
+  // Render a single VCN (horizontal flow layout)
   _renderVcn(m, x, y, w) {
     const { VCN_PAD, VCN_HDR, VCN_R, VCN_BDR, SUB_GAP, DRG_W, DRG_H, RPC_W, RPC_H,
             NW, NH, HGAP, FN, FS, FT, LPG_W, LPG_H, GW_NW, GW_NH, GW_GAP, ARROW_GAP,
@@ -1083,7 +1080,7 @@ class OciDiagram {
   }
 
 
-  /* ── Render Subnet ────────────────────────────────────────────────────── */
+  // Render Subnet
   _renderSubnet(sub, x, y, w, h, vcn) {
     const { SUB_PAD, SUB_HDR, SUB_R, NW, NH, HGAP, FN, FS, FT, META_BADGE_H } = K;
     const sn = sub.subnet;
@@ -1181,7 +1178,7 @@ class OciDiagram {
   }
 
 
-  /* ── DRG badge ────────────────────────────────────────────────────────── */
+  // DRG badge
   _renderDrgBadge(drg, x, y) {
     const { DRG_W: W, DRG_H: H, FN, FT } = K;
     const cx = x + W/2;
@@ -1197,7 +1194,7 @@ class OciDiagram {
   }
 
 
-  /* ── RPC badge ────────────────────────────────────────────────────────── */
+  // RPC badge
   _renderRpcBadge(rpc, x, y) {
     const { RPC_W: W, RPC_H: H, FT, FS } = K;
     const sc = rpc.peering_status === 'PEERED' ? C.rpc : '#e3b341';
@@ -1214,7 +1211,7 @@ class OciDiagram {
   }
 
 
-  /* ── LPG badge ───────────────────────────────────────────────────────── */
+  // LPG badge
   _renderLpg(lpg, x, y) {
     const { LPG_W: W, LPG_H: H, FT, FS } = K;
     const sc = lpg.peering_status === 'PEERED' ? C.lpg : '#e3b341';
@@ -1238,7 +1235,7 @@ class OciDiagram {
   }
 
 
-  /* ── CPE node ─────────────────────────────────────────────────────────── */
+  // CPE node
   _cpeNode(x, y, cpe, nodeW) {
     const W = nodeW || K.CW;
     const { CH: H, NR: R, FN, FS, FT, ICO_SIZE } = K;
@@ -1259,7 +1256,7 @@ class OciDiagram {
   }
 
 
-  /* ── Storage Row ──────────────────────────────────────────────────────── */
+  // Storage Row
   _layStorageRow(items, x, y, w) {
     const nodes = items.map(item => {
       if (item.type === 'vg') {
@@ -1551,7 +1548,7 @@ class OciDiagram {
      SVG RENDERERS
   ══════════════════════════════════════════════════════════════════════════ */
 
-  /* ── Instance card — redesigned layout with separate IP rows and NSG badge ─ */
+  // Instance card — redesigned layout with separate IP rows and NSG badge
   _instCard(x, y, item) {
     const { NW: W, NH: H, NR: R, ICO_SIZE, FT, FN, FS } = K;
     const clr = C.instance;
@@ -1612,7 +1609,7 @@ class OciDiagram {
   }
 
 
-  /* ── Icon-centered node card ──────────────────────────────────────────── */
+  // Icon-centered node card
   _nodeCard(x, y, item) {
     if (item.kind === 'instance') return this._instCard(x, y, item);
 
@@ -1666,7 +1663,7 @@ class OciDiagram {
   }
 
 
-  /* ── Zone background ──────────────────────────────────────────────────── */
+  // Zone background
   _zoneBg(x, y, w, h, color, label) {
     const { ZONE_R, ZONE_HDR } = K;
     return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${ZONE_R}" style="fill:${color};fill-opacity:0.04;stroke:${color};stroke-width:1;stroke-opacity:0.25;"/>
@@ -1685,7 +1682,7 @@ class OciDiagram {
   }
 
 
-  /* ── Gateway Node ─────────────────────────────────────────────────────── */
+  // Gateway Node
   _gwNode(x, y, gw) {
     const { GW_NW: W, GW_NH: H, FN, FT, FS } = K;
     const clr = gw.color;
@@ -1706,7 +1703,7 @@ class OciDiagram {
   }
 
 
-  /* ── Legend panel (top-right corner) ─────────────────────────────────── */
+  // Legend panel (top-right corner)
   _renderLegend(x, y) {
     const { LEGEND_W, LEGEND_PAD, LEGEND_ITEM_H, LEGEND_R, FT, FN } = K;
     const label = _i('LEGENDA', 'LEGEND');
@@ -1811,7 +1808,7 @@ class OciDiagram {
   }
 
 
-  /* ── Gateway helpers ──────────────────────────────────────────────────── */
+  // Gateway helpers
   _getGwRules(vcn, subnet) {
     if (!subnet.route_table_id || !vcn.route_tables) return [];
     const rt = vcn.route_tables.find(t => t.id === subnet.route_table_id);
@@ -1883,7 +1880,7 @@ class OciDiagram {
   }
 
 
-  /* ── Helpers ─────────────────────────────────────────────────────────── */
+  // Helpers
   _typeTag() {
     return {
       full_infra: _i('Infraestrutura Completa', 'Full Infrastructure'),

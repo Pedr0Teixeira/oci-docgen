@@ -1,9 +1,3 @@
-# ==============================================================================
-# OCI (Oracle Cloud Infrastructure) data collection module.
-#     Responsible for authentication, client initialization, and collecting
-#     all infrastructure data needed for documentation generation.
-# ==============================================================================
-
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -59,9 +53,7 @@ from schemas import (
     LoadBalancerCertificateData,
 )
 
-# ==============================================================================
-# Constants and Resilience Configuration
-# ==============================================================================
+# --- Constants and Resilience Configuration ---
 
 # IANA protocol code to human-readable name mapping.
 IANA_PROTOCOL_MAP: Dict[str, str] = {
@@ -83,9 +75,7 @@ retry_strategy = oci.retry.RetryStrategyBuilder(
     backoff_type=oci.retry.BACKOFF_EQUAL_JITTER_VALUE,
 ).get_retry_strategy()
 
-# ==============================================================================
-# IAM Error Detection
-# ==============================================================================
+# --- IAM Error Detection ---
 
 # Maps each OCI resource family to the policy statement needed to collect it.
 # Used by _iam_error_msg() to produce actionable error messages.
@@ -145,9 +135,7 @@ def _check_iam(e: oci.exceptions.ServiceError, resource_key: str) -> None:
         raise PermissionError(_iam_error_msg(resource_key)) from e
     raise e
 
-# ==============================================================================
-# OCI Authentication and Client Initialization
-# ==============================================================================
+# --- OCI Authentication and Client Initialization ---
 
 def get_auth_provider() -> Dict[str, Any]:
     """
@@ -246,9 +234,7 @@ def get_client(client_class, region: str, profile: Optional[Dict[str, Any]] = No
         logging.error(f"Failed to create client {client_class.__name__} for region {region}: {e}")
         return None
 
-# ==============================================================================
-# General-Purpose Helper Functions
-# ==============================================================================
+# --- Helper Functions ---
 
 def _safe_api_call(func, *args, **kwargs):
     """Wrapper for OCI API calls. Suppresses 404 errors and logs all others."""
@@ -362,9 +348,7 @@ def _validate_ipsec_parameters(
         return "Conforme a recomendação Oracle", None
     return "Fora da recomendação Oracle", docs_link
 
-# ==============================================================================
-# Public API Functions — Resource Listing
-# ==============================================================================
+# --- Resource Listing ---
 def list_regions(profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
     """Returns all subscribed and active OCI regions for the given profile's tenancy."""
     auth = _auth_from_profile(profile)
@@ -440,9 +424,7 @@ def list_instances_in_compartment(region: str, compartment_id: str, profile: Opt
         if i.lifecycle_state in ["RUNNING", "STOPPED"]
     ]
 
-# ==============================================================================
-# Detailed Instance and Storage Data Collection
-# ==============================================================================
+# --- Instance and Storage Data Collection ---
 def get_instance_details(region: str, instance_id: str, compartment_name: str = "N/A", profile: Optional[Dict[str, Any]] = None) -> InstanceData:
     compute_client = get_client(oci.core.ComputeClient, region, profile)
     virtual_network_client = get_client(oci.core.VirtualNetworkClient, region, profile)
@@ -791,9 +773,7 @@ def _get_oke_clusters(
         )
     return oke_clusters_data
 
-# ==============================================================================
-# OCI Certificates Service Data Collection
-# ==============================================================================
+# --- Certificates Data Collection ---
 
 def _infer_resource_type_from_ocid(ocid: str) -> str:
     """Infers a human-readable resource label from an OCI OCID."""
@@ -1056,9 +1036,7 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
     logging.info("Certificate collection complete. Returning %d certificate(s).", len(certs_data))
     return certs_data
 
-# ==============================================================================
-# WAF Data Collection Helpers
-# ==============================================================================
+# --- WAF Data Collection ---
 
 def _get_waf_firewall_attachments(waf_client: WafClient, compartment_id: str) -> Dict[str, Dict[str, str]]:
     """
@@ -1145,9 +1123,7 @@ def _get_waf_policies(
         )
     return policies_data
 
-# ==============================================================================
-# Main Orchestrator Functions — Entry points for Celery tasks
-# ==============================================================================
+# --- Orchestrator Functions ---
 def get_infrastructure_details(
     task, region: str, compartment_id: str, doc_type: str,
     include_standalone: bool = True,

@@ -1,10 +1,3 @@
-# ==============================================================================
-# main.py — FastAPI entry point for OCI DocGen.
-#     Defines all REST endpoints: auth, admin, async collection, document
-#     generation, metrics, user profiles, and feedback.
-#     Database is initialised at startup via auth.init_db().
-# ==============================================================================
-
 import json
 import logging
 import os
@@ -29,14 +22,6 @@ from schemas import GenerateDocRequest, TaskCreationResponse, TaskStatusResponse
 
 logging.basicConfig(level=logging.INFO)
 
-
-# ==============================================================================
-# App + CORS
-# ==============================================================================
-
-# ==============================================================================
-# Helper functions
-# ==============================================================================
 
 # Map OCI error substrings to i18n keys so the frontend can translate them.
 # Patterns are checked in order; first match wins.
@@ -82,9 +67,7 @@ async def on_startup():
     auth.init_db()
 
 
-# ==============================================================================
-# Auth helpers
-# ==============================================================================
+# --- Auth helpers ---
 
 def _get_token(request: Request) -> Optional[str]:
     """Extract Bearer token from Authorization header."""
@@ -100,18 +83,14 @@ def _optional_user(request: Request) -> Optional[dict]:
     return auth.get_session_user(token) if token else None
 
 
-# ==============================================================================
-# Auth Pydantic models
-# ==============================================================================
+# --- Auth Pydantic models ---
 
 class AuthRequest(BaseModel):
     username: str
     password: str
 
 
-# ==============================================================================
-# Auth endpoints  (all under /api/auth/*)
-# ==============================================================================
+# --- Auth endpoints ---
 
 @app.post("/api/auth/register", summary="Criar conta")
 async def register(body: AuthRequest):
@@ -159,9 +138,7 @@ async def me(request: Request):
     return {"username": user["username"], "user_id": user["id"], "is_admin": bool(user.get("is_admin", 0))}
 
 
-# ==============================================================================
-# Admin helper
-# ==============================================================================
+# --- Admin helper ---
 
 def _require_admin(request: Request) -> dict:
     user = _optional_user(request)
@@ -172,9 +149,7 @@ def _require_admin(request: Request) -> dict:
     return user
 
 
-# ==============================================================================
-# Admin endpoints
-# ==============================================================================
+# --- Admin endpoints ---
 
 @app.get("/api/admin/users", summary="Listar usuários (admin)")
 async def admin_list_users(request: Request):
@@ -303,9 +278,7 @@ async def admin_set_group_permissions(group_id: int, request: Request):
     return {"ok": True}
 
 
-# ==============================================================================
-# Tenancy Profile endpoints
-# ==============================================================================
+# --- Tenancy Profile endpoints ---
 
 @app.get("/api/profiles", summary="Listar Tenancy Profiles disponíveis para o usuário")
 async def list_profiles(request: Request):
@@ -443,9 +416,7 @@ async def admin_set_profile_users(profile_id: int, request: Request):
     return {"ok": True}
 
 
-# ==============================================================================
-# Metrics endpoint (admin only)
-# ==============================================================================
+# --- Metrics endpoint ---
 
 @app.get("/api/metrics", summary="Métricas de geração (admin)")
 async def get_metrics(request: Request):
@@ -454,9 +425,7 @@ async def get_metrics(request: Request):
     return auth.get_metrics(user_id=None)
 
 
-# ==============================================================================
-# Announcements (system-wide pinned notifications)
-# ==============================================================================
+# --- Announcements ---
 
 @app.get("/api/announcements", summary="Listar avisos ativos (todos os usuarios)")
 async def get_active_announcements(request: Request):
@@ -515,9 +484,7 @@ async def admin_delete_announcement(ann_id: int, request: Request):
     return {"ok": True}
 
 
-# ==============================================================================
-# Profile connection validation (inline credentials, nothing saved to DB)
-# ==============================================================================
+# --- Profile connection validation ---
 
 @app.post("/api/admin/profiles/validate", summary="Validar credenciais de um Tenancy Profile (admin)")
 async def validate_profile_credentials(request: Request):
@@ -566,9 +533,7 @@ async def validate_profile_credentials(request: Request):
         raise HTTPException(503, _translate_oci_error(str(e)))
 
 
-# ==============================================================================
-# Query endpoints
-# ==============================================================================
+# --- Query endpoints ---
 
 @app.get("/api/regions", summary="Listar Regiões Disponíveis")
 async def get_regions(profile_id: Optional[int] = None, request: Request = None):
@@ -602,9 +567,7 @@ async def get_instances(region: str, compartment_id: str, profile_id: Optional[i
     return oci_connector.list_instances_in_compartment(region, compartment_id, profile)
 
 
-# ==============================================================================
-# Async collection
-# ==============================================================================
+# --- Async collection ---
 
 @app.post(
     "/api/start-collection",
@@ -695,9 +658,7 @@ async def get_collection_status(task_id: str):
     return {"task_id": task_id, "status": "SUCCESS", "result": task_result.result}
 
 
-# ==============================================================================
-# Document generation
-# ==============================================================================
+# --- Document generation ---
 
 @app.post("/api/generate-document", summary="Gerar Documento de Infraestrutura")
 async def create_document(
@@ -786,9 +747,7 @@ async def create_document(
         traceback.print_exc()
         raise HTTPException(500, f"Erro interno ao gerar documento: {exc}")
 
-# ==============================================================================
-# Change password endpoint
-# ==============================================================================
+# --- Change password endpoint ---
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = ""
@@ -807,9 +766,7 @@ async def change_password(body: ChangePasswordRequest, request: Request):
     return {"ok": True}
 
 
-# ==============================================================================
-# User profile endpoints
-# ==============================================================================
+# --- User profile endpoints ---
 
 class ProfileRequest(BaseModel):
     first_name: str = ""
@@ -837,9 +794,7 @@ async def update_profile(body: ProfileRequest, request: Request):
     return {"ok": True}
 
 
-# ==============================================================================
-# Feedback endpoints
-# ==============================================================================
+# --- Feedback endpoints ---
 
 class FeedbackRequest(BaseModel):
     category: str = "outro"
@@ -872,9 +827,7 @@ async def update_feedback(feedback_id: int, request: Request):
     return {"ok": True}
 
 
-# ==============================================================================
-# Per-user generation logs
-# ==============================================================================
+# --- Per-user generation logs ---
 
 @app.get("/api/admin/users/{user_id}/logs", summary="Logs de geração por usuário (admin)")
 async def get_user_logs(user_id: int, request: Request):

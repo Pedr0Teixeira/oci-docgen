@@ -1,17 +1,9 @@
-# ==============================================================================
-# schemas.py — Pydantic data models for OCI DocGen.
-#     Defines the data contract used for validation, serialization, and
-#     transfer between application layers (API ↔ Celery ↔ DocGen).
-# ==============================================================================
-
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
 
-# ==============================================================================
-# Network Rule Models
-# ==============================================================================
+# --- Network Rule Models ---
 
 class SecurityRule(BaseModel):
     """Ingress/Egress security rule from a Security List or NSG."""
@@ -29,9 +21,7 @@ class RouteRule(BaseModel):
     description: Optional[str] = None
 
 
-# ==============================================================================
-# Compute and Storage Models
-# ==============================================================================
+# --- Compute and Storage Models ---
 
 class BlockVolume(BaseModel):
     """Block volume attached to a compute instance."""
@@ -73,9 +63,7 @@ class VolumeGroupData(BaseModel):
     validation: VolumeGroupValidation
 
 
-# ==============================================================================
-# Virtual Network (VCN) Models
-# ==============================================================================
+# --- Virtual Network (VCN) Models ---
 
 class SecurityList(BaseModel):
     """Security List with its ingress/egress rules."""
@@ -137,9 +125,7 @@ class VcnData(BaseModel):
     lpgs: List[LpgData]
 
 
-# ==============================================================================
-# Load Balancer Models
-# ==============================================================================
+# --- Load Balancer Models ---
 
 class BackendData(BaseModel):
     """Backend server within a Backend Set."""
@@ -212,9 +198,7 @@ class LoadBalancerData(BaseModel):
     waf_policy_name: Optional[str] = None
 
 
-# ==============================================================================
-# External Connectivity Models (DRG / VPN IPSec)
-# ==============================================================================
+# --- External Connectivity Models (DRG / VPN IPSec) ---
 
 class RpcData(BaseModel):
     """Remote Peering Connection (RPC) attached to a DRG."""
@@ -304,9 +288,7 @@ class IpsecData(BaseModel):
     tunnels: List[TunnelData]
 
 
-# ==============================================================================
-# Kubernetes (OKE) Models
-# ==============================================================================
+# --- Kubernetes (OKE) Models ---
 
 class NodePoolData(BaseModel):
     """Node Pool within an OKE cluster."""
@@ -335,9 +317,7 @@ class OkeClusterData(BaseModel):
     node_pools: List[NodePoolData]
 
 
-# ==============================================================================
-# WAF (Web Application Firewall) Models
-# ==============================================================================
+# --- WAF Models ---
 
 class WafAction(BaseModel):
     """Action configured in a WAF Policy."""
@@ -418,9 +398,7 @@ class WafPolicyData(BaseModel):
     network_infrastructure: Optional[WafNetworkInfrastructure] = None
 
 
-# ==============================================================================
-# Main Infrastructure Aggregator Model
-# ==============================================================================
+# --- Infrastructure Aggregator ---
 
 class InstanceData(BaseModel):
     """Aggregator for all collected data from a single OCI compute instance."""
@@ -465,9 +443,7 @@ class InfrastructureData(BaseModel):
     standalone_volumes: List[StandaloneVolumeData] = []
 
 
-# ==============================================================================
-# API Request / Response Schemas
-# ==============================================================================
+# --- API Schemas ---
 
 class NewHostRequest(BaseModel):
     """Request body for new host data collection."""

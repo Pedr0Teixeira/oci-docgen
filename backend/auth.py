@@ -1,9 +1,3 @@
-# ==============================================================================
-# auth.py — Authentication, session management, and metrics for OCI DocGen.
-#     Tables: users, sessions, doc_generations, groups, user_groups,
-#             user_profiles, feedback
-# ==============================================================================
-
 import base64
 import hashlib
 import logging
@@ -19,9 +13,7 @@ _data_dir = os.environ.get("DATA_DIR", os.path.dirname(os.path.abspath(__file__)
 DB_PATH = os.path.join(_data_dir, "oci_docgen.db")
 
 
-# ==============================================================================
-# Encryption helpers for sensitive credential storage
-# ==============================================================================
+# --- Encryption helpers ---
 
 def _get_fernet() -> Fernet:
     """
@@ -44,9 +36,7 @@ def decrypt_value(ciphertext: str) -> str:
     return _get_fernet().decrypt(ciphertext.encode()).decode()
 
 
-# ==============================================================================
-# Database bootstrap
-# ==============================================================================
+# --- Database bootstrap ---
 
 def init_db() -> None:
     """Create tables and run migrations. Called once at FastAPI startup."""
@@ -207,17 +197,13 @@ def _conn() -> sqlite3.Connection:
     return c
 
 
-# ==============================================================================
-# Password helpers
-# ==============================================================================
+# --- Password helpers ---
 
 def _hash(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
-# ==============================================================================
-# User management
-# ==============================================================================
+# --- User management ---
 
 def create_user(username: str, password: str) -> Optional[dict]:
     """Returns the new user dict, or None if username already exists."""
@@ -248,9 +234,7 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-# ==============================================================================
-# Session management
-# ==============================================================================
+# --- Session management ---
 
 def create_session(user_id: int) -> str:
     """Creates and persists a new session token, returning it."""
@@ -298,9 +282,7 @@ def delete_session(token: str) -> None:
         conn.close()
 
 
-# ==============================================================================
-# Password management
-# ==============================================================================
+# --- Password management ---
 
 def _validate_password_complexity(password: str) -> Optional[str]:
     """
@@ -368,9 +350,7 @@ def update_user_password(user_id: int, new_password: str) -> bool:
     return cursor.rowcount > 0
 
 
-# ==============================================================================
-# Metrics logging
-# ==============================================================================
+# --- Metrics logging ---
 
 def log_generation(
     doc_type: str,
@@ -515,9 +495,7 @@ def get_user_generation_logs(user_id: Optional[int] = None) -> list:
     return [dict(r) for r in rows]
 
 
-# ==============================================================================
-# User roles (is_admin flag)
-# ==============================================================================
+# --- User roles ---
 
 def set_user_admin(user_id: int, is_admin: bool) -> None:
     """Legacy name kept for compatibility."""
@@ -592,9 +570,7 @@ def delete_user(user_id: int) -> bool:
     return True
 
 
-# ==============================================================================
-# Groups
-# ==============================================================================
+# --- Groups ---
 
 def list_groups() -> list:
     conn = _conn()
@@ -712,9 +688,7 @@ def get_user_allowed_doc_types(user_id: int) -> Optional[list]:
     return sorted(allowed)
 
 
-# ==============================================================================
-# User profiles
-# ==============================================================================
+# --- User profiles ---
 
 def get_user_profile(user_id: int) -> dict:
     """Returns the profile for a user, with empty defaults if not yet set."""
@@ -754,9 +728,7 @@ def upsert_user_profile(
     conn.close()
 
 
-# ==============================================================================
-# Feedback
-# ==============================================================================
+# --- Feedback ---
 
 def add_feedback(user_id: Optional[int], category: str, message: str) -> dict:
     """Stores a new feedback entry. Returns the created record's id."""
@@ -807,9 +779,7 @@ def update_feedback_status(feedback_id: int, status: str) -> bool:
     conn.close()
     return cursor.rowcount > 0
 
-# ==============================================================================
-# Tenancy Profiles
-# ==============================================================================
+# --- Tenancy Profiles ---
 
 def create_tenancy_profile(
     name: str,
@@ -1099,9 +1069,7 @@ def get_group_profiles(group_id: int) -> list:
     conn.close()
     return [dict(r) for r in rows]
 
-# ==============================================================================
-# Announcements (system-wide pinned notifications)
-# ==============================================================================
+# --- Announcements ---
 
 def list_announcements(active_only: bool = False) -> list:
     """Returns all announcements, newest first. Optionally filter to active & non-expired."""
