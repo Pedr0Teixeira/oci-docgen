@@ -95,9 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Helper to normalize lifecycle state display labels ---
   function getStateLabel(state) {
     const s = (state || '').toUpperCase();
-    if (s === 'TERMINATED') return currentLanguage === 'pt' ? 'Excluído' : 'Terminated';
-    if (s === 'RUNNING')    return currentLanguage === 'pt' ? 'Ativo'    : 'Running';
-    if (s === 'STOPPED')    return currentLanguage === 'pt' ? 'Parado'   : 'Stopped';
+    if (s === 'TERMINATED') return t('state.terminated');
+    if (s === 'RUNNING')    return t('state.running');
+    if (s === 'STOPPED')    return t('state.stopped');
     return state;
   }
 
@@ -162,6 +162,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
       const key = element.getAttribute('data-i18n-placeholder');
       element.setAttribute('placeholder', t(key));
+    });
+
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(element => {
+      const key = element.getAttribute('data-i18n-aria-label');
+      element.setAttribute('aria-label', t(key));
     });
 
     updateUiForDocType();
@@ -282,10 +287,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminVisible = viewAdmin && !viewAdmin.classList.contains('hidden');
     if (adminVisible) {
       // Re-render whichever admin tab is active
-      const activeTab = document.querySelector('.admin-tab-btn.active')?.dataset?.tab;
-      if (activeTab === 'users')    loadAdminUsers();
-      else if (activeTab === 'groups') loadAdminGroups();
-      else if (activeTab === 'feedback') loadAdminFeedback?.();
+      const activeTab = document.querySelector('.admin-tab.active')?.dataset?.tab;
+      if (activeTab === 'users')              loadAdminUsers();
+      else if (activeTab === 'groups')        loadAdminGroups();
+      else if (activeTab === 'profiles')      loadAdminProfiles();
+      else if (activeTab === 'notifications') loadAdminAnnouncements();
+      else if (activeTab === 'feedback')      loadAdminFeedback?.();
     }
     const metricsVisible = viewMetrics && !viewMetrics.classList.contains('hidden');
     if (metricsVisible) loadMetrics?.();
@@ -3417,13 +3424,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const msgEl = document.getElementById('no-profile-msg-text');
         const actionsEl = document.getElementById('no-profile-actions');
         if (msgEl) msgEl.textContent = isAdmin
-          ? 'Nenhum Tenancy Profile configurado.'
-          : 'Nenhum Tenancy Profile disponível para sua conta.';
+          ? t('no_profile.admin_msg')
+          : t('no_profile.user_msg');
         if (actionsEl) {
           if (isAdmin) {
             actionsEl.innerHTML = `<button class="button-primary" id="goto-create-profile" style="margin-top:4px">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Criar Tenancy Profile
+              ${t('no_profile.create_btn')}
             </button>`;
             document.getElementById('goto-create-profile')?.addEventListener('click', () => {
               showView('admin');
@@ -3433,7 +3440,7 @@ document.addEventListener('DOMContentLoaded', () => {
               }, 150);
             });
           } else {
-            actionsEl.innerHTML = `<p style="font-size:12px;color:var(--text-muted);margin:0">Entre em contato com o administrador para solicitar acesso.</p>`;
+            actionsEl.innerHTML = `<p style="font-size:12px;color:var(--text-muted);margin:0">${t('no_profile.contact_admin')}</p>`;
           }
         }
       }
@@ -4437,7 +4444,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/feedback`, { headers: getAuthHeaders() });
       const items = await res.json();
-      if (!items.length) { wrap.innerHTML = '<p class="no-data-message">Nenhum feedback recebido ainda.</p>'; return; }
+      if (!items.length) { wrap.innerHTML = `<p class="no-data-message">${t('admin.no_feedback')}</p>`; return; }
       const catEmoji = { sugestao: '💡', bug: '🐛', melhoria: '✨', outro: '📝' };
       const statusColor = { open: '#f0883e', reviewed: '#3fb950', closed: '#6b7280' };
       wrap.innerHTML = `<table class="admin-table">
@@ -4582,7 +4589,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!res.ok) throw new Error('Erro ao carregar profiles.');
       const profiles = await res.json();
       if (!profiles.length) {
-        wrap.innerHTML = '<p class="no-data-message">Nenhum profile criado ainda.</p>';
+        wrap.innerHTML = `<p class="no-data-message">${t('admin.no_profiles')}</p>`;
         return;
       }
       const visConfig = {
