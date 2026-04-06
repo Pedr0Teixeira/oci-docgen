@@ -29,7 +29,7 @@
         </svg>
       </div>
       <span id="progress-timer" class="progress-timer">00:00</span>
-      <span id="progress-text" class="progress-text">Carregando...</span>
+      <span id="progress-text" class="progress-text" data-i18n="progress_loading">Carregando...</span>
       <div class="progress-bar-container"><div id="progress-bar"></div></div>
     </div>
   </div>
@@ -44,10 +44,10 @@
       <!-- Tab switcher + close button in the same row -->
       <div class="auth-modal-header">
         <div class="auth-tabs">
-          <button class="auth-tab active" data-tab="login">Entrar</button>
-          <button class="auth-tab" data-tab="register">Criar conta</button>
+          <button class="auth-tab active" data-tab="login" data-i18n="auth.tab.login">Entrar</button>
+          <button class="auth-tab" data-tab="register" data-i18n="auth.tab.register">Criar conta</button>
         </div>
-        <button class="auth-modal-close" id="auth-modal-close-btn" aria-label="Fechar">
+        <button class="auth-modal-close" id="auth-modal-close-btn" aria-label="Fechar" data-i18n-aria-label="action.close">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
@@ -57,16 +57,16 @@
       <!-- Login form -->
       <div class="auth-form" id="auth-form-login">
         <div class="auth-field">
-          <label class="auth-label">Usuário</label>
+          <label class="auth-label" data-i18n="auth.field.username">Usuário</label>
           <div class="auth-input-wrap">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
             </svg>
-            <input type="text" id="login-username" placeholder="seu_usuario" autocomplete="username">
+            <input type="text" id="login-username" data-i18n-placeholder="auth.placeholder.username" placeholder="seu_usuario" autocomplete="username">
           </div>
         </div>
         <div class="auth-field">
-          <label class="auth-label">Senha</label>
+          <label class="auth-label" data-i18n="auth.field.password">Senha</label>
           <div class="auth-input-wrap">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -80,7 +80,7 @@
             <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
             <polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>
           </svg>
-          Entrar
+          <span data-i18n="auth.login.btn">Entrar</span>
         </button>
       </div>
 
@@ -88,14 +88,14 @@
       <div class="auth-form hidden" id="auth-form-register">
         <div class="auth-field-row" style="display:flex;gap:10px">
           <div class="auth-field" style="flex:1">
-            <label class="auth-label">Nome</label>
+            <label class="auth-label" data-i18n="auth.field.first_name">Nome</label>
             <div class="auth-input-wrap">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <input type="text" id="register-first-name" placeholder="João" autocomplete="given-name">
             </div>
           </div>
           <div class="auth-field" style="flex:1">
-            <label class="auth-label">Sobrenome</label>
+            <label class="auth-label" data-i18n="auth.field.last_name">Sobrenome</label>
             <div class="auth-input-wrap">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <input type="text" id="register-last-name" placeholder="Silva" autocomplete="family-name">
@@ -103,12 +103,12 @@
           </div>
         </div>
         <div class="auth-field">
-          <label class="auth-label">Usuário (login) <span style="color:var(--s-stopped)">*</span></label>
+          <label class="auth-label"><span data-i18n="auth.field.username_required">Usuário (login)</span> <span style="color:var(--s-stopped)">*</span></label>
           <div class="auth-input-wrap">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
             </svg>
-            <input type="text" id="register-username" placeholder="min. 3 caracteres" autocomplete="username">
+            <input type="text" id="register-username" data-i18n-placeholder="auth.placeholder.username_min" placeholder="min. 3 caracteres" autocomplete="username">
           </div>
         </div>
         <div class="auth-field">
@@ -119,21 +119,21 @@
           </div>
         </div>
         <div class="auth-field">
-          <label class="auth-label">Senha <span style="color:var(--s-stopped)">*</span></label>
+          <label class="auth-label"><span data-i18n="auth.field.password">Senha</span> <span style="color:var(--s-stopped)">*</span></label>
           <div class="auth-input-wrap">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            <input type="password" id="register-password" placeholder="min. 6 caracteres" autocomplete="new-password">
+            <input type="password" id="register-password" data-i18n-placeholder="auth.placeholder.password_min" placeholder="min. 6 caracteres" autocomplete="new-password">
           </div>
         </div>
         <div class="auth-field">
-          <label class="auth-label">Confirmar senha <span style="color:var(--s-stopped)">*</span></label>
+          <label class="auth-label"><span data-i18n="auth.field.confirm_password">Confirmar senha</span> <span style="color:var(--s-stopped)">*</span></label>
           <div class="auth-input-wrap">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            <input type="password" id="register-confirm-password" placeholder="repita a senha" autocomplete="new-password">
+            <input type="password" id="register-confirm-password" data-i18n-placeholder="auth.placeholder.confirm_password" placeholder="repita a senha" autocomplete="new-password">
           </div>
         </div>
         <p id="register-error" class="auth-error hidden"></p>
@@ -143,7 +143,7 @@
             <circle cx="9" cy="7" r="4"/>
             <line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/>
           </svg>
-          Criar conta
+          <span data-i18n="auth.tab.register">Criar conta</span>
         </button>
       </div>
 
@@ -208,7 +208,7 @@
           🔒 <a href="#" id="history-login-cta" data-i18n="history_login_required">Faça login para ver seu histórico.</a>
         </div>
         <div id="sidebar-history" class="sidebar-history hidden">
-          <p class="sidebar-empty">Nenhum documento gerado ainda.</p>
+          <p class="sidebar-empty" data-i18n="sidebar_empty">Nenhum documento gerado ainda.</p>
         </div>
 
       </div>
@@ -218,13 +218,13 @@
 
         <!-- Logged-out state -->
         <div id="sidebar-guest" class="sidebar-guest">
-          <p class="sidebar-guest-text">Faça login para ver suas métricas pessoais.</p>
+          <p class="sidebar-guest-text" data-i18n="sidebar_guest_text">Faça login para métricas pessoais.</p>
           <button id="sidebar-login-btn" class="sidebar-login-btn">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
               <polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>
             </svg>
-            Entrar / Criar conta
+            <span data-i18n="sidebar_login_btn">Entrar / Criar conta</span>
           </button>
         </div>
 
@@ -700,32 +700,32 @@
         <!-- Users panel -->
         <div id="admin-panel-users" class="admin-panel">
           <div class="admin-panel-toolbar">
-            <input type="text" id="admin-user-search" class="admin-search-input" placeholder="Filtrar usuários…">
+            <input type="text" id="admin-user-search" class="admin-search-input" data-i18n-placeholder="admin.search.users" placeholder="Filtrar usuários…">
             <button class="button-primary" id="admin-create-user-btn" style="margin-left:auto">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-              Novo Usuário
+              <span data-i18n="admin.btn.new_user">Novo Usuário</span>
             </button>
             <button class="button-secondary" id="admin-refresh-users">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-              Atualizar
+              <span data-i18n="admin.btn.refresh">Atualizar</span>
             </button>
           </div>
           <div id="admin-users-table-wrap" class="admin-table-wrap">
-            <p class="no-data-message">Carregando…</p>
+            <p class="no-data-message" data-i18n="loading">Carregando…</p>
           </div>
         </div>
 
         <!-- Groups panel -->
         <div id="admin-panel-groups" class="admin-panel hidden">
           <div class="admin-panel-toolbar">
-            <input type="text" id="admin-new-group-name" class="admin-search-input" placeholder="Nome do novo grupo…">
+            <input type="text" id="admin-new-group-name" class="admin-search-input" data-i18n-placeholder="admin.input.new_group" placeholder="Nome do novo grupo…">
             <button class="button-primary" id="admin-create-group-btn">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Criar Grupo
+              <span data-i18n="admin.btn.new_group">Criar Grupo</span>
             </button>
           </div>
           <div id="admin-groups-table-wrap" class="admin-table-wrap">
-            <p class="no-data-message">Carregando…</p>
+            <p class="no-data-message" data-i18n="loading">Carregando…</p>
           </div>
         </div>
 
@@ -734,11 +734,11 @@
           <div class="admin-panel-toolbar">
             <button class="button-primary" id="admin-create-profile-btn">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Novo Profile
+              <span data-i18n="admin.btn.new_profile">Novo Profile</span>
             </button>
           </div>
           <div id="admin-profiles-table-wrap" class="admin-table-wrap">
-            <p class="no-data-message">Carregando…</p>
+            <p class="no-data-message" data-i18n="loading">Carregando…</p>
           </div>
         </div>
 
@@ -751,14 +751,14 @@
             </button>
           </div>
           <div id="admin-announcements-wrap" class="admin-table-wrap">
-            <p class="no-data-message">Carregando…</p>
+            <p class="no-data-message" data-i18n="loading">Carregando…</p>
           </div>
         </div>
 
         <!-- Feedback panel (admin only) -->
         <div id="admin-panel-feedback" class="admin-panel hidden">
           <div id="admin-feedback-wrap" class="admin-table-wrap">
-            <p class="no-data-message">Carregando…</p>
+            <p class="no-data-message" data-i18n="loading">Carregando…</p>
           </div>
         </div>
 
@@ -782,33 +782,33 @@
         <div class="profile-form-section">
           <div class="profile-form-row">
             <div class="profile-form-group profile-form-group--full">
-              <label class="profile-form-label">Nome do Profile <span class="profile-form-required">*</span></label>
+              <label class="profile-form-label"><span data-i18n="profile.label.name">Nome do Profile</span> <span class="profile-form-required">*</span></label>
               <input id="profile-field-name" class="profile-form-input" placeholder="ex: ACME Prod">
             </div>
           </div>
           <div class="profile-form-row">
             <div class="profile-form-group profile-form-group--full">
-              <label class="profile-form-label">Nome da Tenancy <span class="profile-form-required">*</span></label>
+              <label class="profile-form-label"><span data-i18n="profile.label.tenancy_name">Nome da Tenancy</span> <span class="profile-form-required">*</span></label>
               <input id="profile-field-tenancy-name" class="profile-form-input" placeholder="ex: ACME Cloud, Lab OCI...">
             </div>
           </div>
           <div class="profile-form-row">
             <div class="profile-form-group">
-              <label class="profile-form-label">Método de Autenticação</label>
+              <label class="profile-form-label" data-i18n="profile.label.auth_method">Método de Autenticação</label>
               <select id="profile-field-auth-method" class="profile-form-input">
                 <option value="API_KEY">API Key</option>
                 <option value="INSTANCE_PRINCIPAL">Instance Principal</option>
               </select>
             </div>
             <div class="profile-form-group">
-              <label class="profile-form-label">Região Padrão</label>
+              <label class="profile-form-label" data-i18n="profile.label.default_region">Região Padrão</label>
               <input id="profile-field-region" class="profile-form-input" placeholder="ex: sa-saopaulo-1">
             </div>
           </div>
         </div>
 
         <div id="profile-apikey-fields" class="profile-form-section">
-          <p class="profile-form-section-title">Credenciais API Key</p>
+          <p class="profile-form-section-title" data-i18n="profile.section.credentials">Credenciais API Key</p>
           <div class="profile-form-row">
             <div class="profile-form-group profile-form-group--full">
               <label class="profile-form-label">Tenancy OCID</label>
@@ -856,14 +856,14 @@
                 <div class="pem-choose-mode">
                   <button type="button" class="pem-mode-btn" id="pem-btn-file">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    Arquivo
+                    <span data-i18n="profile.pem.btn_file">Arquivo</span>
                   </button>
                   <button type="button" class="pem-mode-btn" id="pem-btn-text">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-                    Texto / Colar
+                    <span data-i18n="profile.pem.btn_text">Texto / Colar</span>
                   </button>
                 </div>
-                <span class="pem-paste-hint">Formato PEM — inclua as linhas BEGIN e END</span>
+                <span class="pem-paste-hint" data-i18n="profile.pem.hint_format">Formato PEM — inclua as linhas BEGIN e END</span>
               </div>
 
               <!-- FILE mode: after file selected, show preview item -->
@@ -874,7 +874,7 @@
                   </div>
                   <div class="pem-file-info">
                     <div class="pem-file-name" id="pem-file-name-label">chave.pem</div>
-                    <div class="pem-file-meta" id="pem-file-meta-label">Carregada</div>
+                    <div class="pem-file-meta" id="pem-file-meta-label" data-i18n="profile.pem.loaded_status">Carregada</div>
                   </div>
                   <div class="pem-file-actions">
                     <button type="button" class="pem-action-sm pem-action-danger" id="pem-file-clear" title="Remover chave">
@@ -882,7 +882,7 @@
                     </button>
                   </div>
                 </div>
-                <span class="pem-paste-hint">Clique no lixo para remover e escolher outro método</span>
+                <span class="pem-paste-hint" data-i18n="profile.pem.remove_hint">Clique no lixo para remover e escolher outro método</span>
               </div>
 
               <!-- TEXT/PASTE mode -->
@@ -891,16 +891,16 @@
                   <textarea id="pem-text-input" class="profile-pem-textarea" placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;MIIEpAIBAAKCAQEA...&#10;-----END RSA PRIVATE KEY-----" rows="5" spellcheck="false"></textarea>
                 </div>
                 <div class="profile-pem-toolbar">
-                  <span class="profile-pem-hint">Cole ou digite a chave PEM</span>
+                  <span class="profile-pem-hint" data-i18n="profile.pem.hint_paste">Cole ou digite a chave PEM</span>
                   <div class="pem-action-toggle">
                     <button type="button" class="pem-toggle-btn" id="profile-pem-paste-btn" title="Colar da área de transferência">
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-                      Colar (Ctrl+V)
+                      <span data-i18n="profile.pem.paste_btn">Colar (Ctrl+V)</span>
                     </button>
                     <span class="pem-toggle-sep"></span>
                     <button type="button" class="pem-toggle-btn" id="pem-text-back" title="Voltar">
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-                      Voltar
+                      <span data-i18n="profile.pem.back_btn">Voltar</span>
                     </button>
                   </div>
                 </div>
@@ -913,8 +913,8 @@
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                   </div>
                   <div class="pem-file-info">
-                    <div class="pem-file-name">Chave PEM salva</div>
-                    <div class="pem-file-meta">Chave privada configurada — não exibida por segurança</div>
+                    <div class="pem-file-name" data-i18n="profile.pem.saved">Chave PEM salva</div>
+                    <div class="pem-file-meta" data-i18n="profile.pem.saved_meta">Chave privada configurada — não exibida por segurança</div>
                   </div>
                   <div class="pem-file-actions">
                     <button type="button" class="pem-action-sm" id="pem-edit-preview" title="Visualizar chave">
@@ -925,7 +925,7 @@
                     </button>
                   </div>
                 </div>
-                <span class="pem-paste-hint">Clique no ícone de lixeira para substituir a chave</span>
+                <span class="pem-paste-hint" data-i18n="profile.pem.replace_hint">Clique no ícone de lixeira para substituir a chave</span>
               </div>
 
 
@@ -934,39 +934,39 @@
         </div>
 
         <div class="profile-form-section">
-          <p class="profile-form-section-title">Controle de Acesso</p>
+          <p class="profile-form-section-title" data-i18n="profile.section.access_control">Controle de Acesso</p>
 
           <div class="profile-form-row">
             <div class="profile-form-group profile-form-group--full">
-              <label class="profile-form-label">Visibilidade</label>
+              <label class="profile-form-label" data-i18n="th.visibility">Visibilidade</label>
               <div class="profile-vis-grid" id="profile-vis-grid">
                 <label class="profile-vis-card" data-value="all_users">
                   <input type="radio" name="profile-visibility" value="all_users" class="profile-vis-radio">
                   <div class="profile-vis-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                   </div>
-                  <span class="profile-vis-label">Todos os usuários</span>
+                  <span class="profile-vis-label" data-i18n="vis.all_users">Todos os usuários</span>
                 </label>
                 <label class="profile-vis-card" data-value="by_group">
                   <input type="radio" name="profile-visibility" value="by_group" class="profile-vis-radio">
                   <div class="profile-vis-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
                   </div>
-                  <span class="profile-vis-label">Por grupo</span>
+                  <span class="profile-vis-label" data-i18n="vis.by_group">Por grupo</span>
                 </label>
                 <label class="profile-vis-card" data-value="by_user">
                   <input type="radio" name="profile-visibility" value="by_user" class="profile-vis-radio">
                   <div class="profile-vis-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   </div>
-                  <span class="profile-vis-label">Por usuário</span>
+                  <span class="profile-vis-label" data-i18n="vis.by_user">Por usuário</span>
                 </label>
                 <label class="profile-vis-card" data-value="admin_only">
                   <input type="radio" name="profile-visibility" value="admin_only" class="profile-vis-radio">
                   <div class="profile-vis-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                   </div>
-                  <span class="profile-vis-label">Somente admins</span>
+                  <span class="profile-vis-label" data-i18n="vis.admin_only">Somente admins</span>
                 </label>
               </div>
             </div>
@@ -1268,7 +1268,7 @@
       </div>
       <div class="profile-field">
         <label data-i18n="profile_notes">Observações</label>
-        <textarea id="profile-notes" placeholder="Notas internas..."></textarea>
+        <textarea id="profile-notes" data-i18n-placeholder="admin.user.notes_placeholder" placeholder="Notas internas..."></textarea>
       </div>
 
       <hr class="profile-divider">
@@ -1338,7 +1338,7 @@
       </div>
       <div class="profile-field">
         <label data-i18n="profile_notes">Observações</label>
-        <textarea id="aum-notes" placeholder="Notas internas..."></textarea>
+        <textarea id="aum-notes" data-i18n-placeholder="admin.user.notes_placeholder" placeholder="Notas internas..."></textarea>
       </div>
 
       <hr class="profile-divider">
