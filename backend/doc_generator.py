@@ -539,7 +539,6 @@ DOC_STRINGS = {
 
 
 def t(key: str, lang: str) -> str:
-    """Fetches a translation string based on the key and language."""
     # Fallback chain: requested lang → "pt" → the key itself.
     lang_to_use = lang if lang in DOC_STRINGS else "pt"
     strings = DOC_STRINGS.get(lang_to_use, {})
@@ -548,7 +547,6 @@ def t(key: str, lang: str) -> str:
 
 # --- Table of Contents and Hyperlink Helpers ---
 def _define_toc_styles(document: Document):
-    """Creates and configures 'TOC 1-3' styles with correct indentation if they don't exist."""
     styles = document.styles
     if "TOC 1" not in styles:
         style = styles.add_style("TOC 1", WD_STYLE_TYPE.PARAGRAPH)
@@ -580,7 +578,6 @@ def _define_toc_styles(document: Document):
 
 
 def add_hyperlink(paragraph: Paragraph, text: str, url: str):
-    """Adds an external hyperlink to a paragraph."""
     part = paragraph.part
     r_id = part.relate_to(url, RT.HYPERLINK, is_external=True)
     hyperlink = OxmlElement("w:hyperlink")
@@ -597,7 +594,6 @@ def add_hyperlink(paragraph: Paragraph, text: str, url: str):
 
 
 def _add_bookmark(paragraph: Paragraph, bookmark_name: str):
-    """Adds a bookmark anchor to a paragraph, which can be linked to internally."""
     run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
     bookmark_id = str(abs(hash(bookmark_name)) % (10**8))
     start_tag = OxmlElement("w:bookmarkStart")
@@ -610,7 +606,6 @@ def _add_bookmark(paragraph: Paragraph, bookmark_name: str):
 
 
 def _add_internal_hyperlink(paragraph: Paragraph, text: str, anchor_name: str):
-    """Adds an internal hyperlink that jumps to a bookmark within the document."""
     hyperlink = OxmlElement("w:hyperlink")
     hyperlink.set(qn("w:anchor"), anchor_name)
     sub_run = OxmlElement("w:r")
@@ -633,7 +628,6 @@ def _add_and_bookmark_heading(
     toc_list: list,
     counters: Dict[int, int],
 ):
-    """Adds a numbered heading, creates a bookmark for it, and adds it to the TOC list."""
     if level not in counters:
         counters[level] = 0
     counters[level] += 1
@@ -655,7 +649,6 @@ def _add_and_bookmark_heading(
 
 # --- Table Styling Helpers ---
 def _shade_cell(cell, color="4472C4"):
-    """Applies a background color shading to a table cell."""
     shading_xml = r'<w:shd {} w:fill="{}"/>'.format(nsdecls("w"), color)
     shading_elm = parse_xml(shading_xml)
     cell._tc.get_or_add_tcPr().append(shading_elm)
@@ -684,11 +677,7 @@ _STATE_TEXT_COLORS: Dict[str, str] = {
 
 
 def _style_row_by_state(row, state_raw: str) -> None:
-    """
-    Applies background color and text color to all cells in a row based on the
-    resource lifecycle state. TERMINATED rows also get strikethrough to visually
-    reinforce that the resource has been deleted.
-    """
+    # TERMINATED rows also get strikethrough to make it clear the resource is gone.
     state_key = state_raw.upper()
     bg_color   = _STATE_ROW_COLORS.get(state_key)
     text_color = _STATE_TEXT_COLORS.get(state_key)
@@ -722,11 +711,7 @@ def _style_row_by_state(row, state_raw: str) -> None:
 
 
 def _style_cert_kv_table_by_state(document: Document, state: str) -> None:
-    """
-    Locates the last table added to the document (certificate key-value table)
-    and applies background color to all data rows based on the certificate
-    lifecycle state. The title row keeps the default blue color.
-    """
+    # Colors the last table (cert KV) by lifecycle state; skips the title row.
     state_key  = state.upper()
     bg_color   = _STATE_ROW_COLORS.get(state_key)
     text_color = _STATE_TEXT_COLORS.get(state_key)
@@ -752,7 +737,6 @@ def _style_cert_kv_table_by_state(document: Document, state: str) -> None:
                         run.font.color.rgb = RGBColor.from_string(text_color)
 
 def _style_table_headers(table, headers, shade_color="4472C4"):
-    """Applies standard formatting to a table's header row."""
     for i, header_text in enumerate(headers):
         cell = table.cell(0, i)
         cell.text = ""
@@ -766,7 +750,6 @@ def _style_table_headers(table, headers, shade_color="4472C4"):
 def _create_titled_key_value_table(
     document, title, data_dict, col_widths=(Inches(2.0), Inches(4.5))
 ):
-    """Creates a two-column table with a merged, styled title header."""
     table = document.add_table(rows=len(data_dict) + 1, cols=2, style="Table Grid")
     table.autofit = False
     table.allow_autofit = False
@@ -799,7 +782,6 @@ def _add_network_resource_details(
     rule_type: str,
     lang: str,
 ):
-    """Adds a standardized section for a network resource (SL, NSG, RT) and its rules."""
     p = document.add_paragraph()
     p.add_run(f"{resource_title}: {resource_name}").bold = True
 
@@ -863,7 +845,6 @@ def _add_network_resource_details(
 
 # --- Document Section Generators ---
 def _add_instances_table(document: Document, instances: List[InstanceData], lang: str):
-    """Adds the main summary table of compute instances to the document."""
     if not instances:
         return
     # State label map for instances — normalises TERMINATED to a display-friendly string.
@@ -912,7 +893,6 @@ def _add_volume_and_backup_section(
     counters: Dict[int, int],
     lang: str,
 ):
-    """Adds the section covering attached block volumes and backup policies."""
     instances = infra_data.instances
     if not instances:
         return
@@ -1070,7 +1050,6 @@ def _add_volume_groups_section(
     counters: Dict[int, int],
     lang: str,
 ):
-    """Adds the Volume Groups details section to the document."""
     if not infra_data.volume_groups:
         return
     _add_and_bookmark_heading(
@@ -1125,7 +1104,6 @@ def _add_vcn_details_section(
     counters: Dict[int, int],
     lang: str,
 ):
-    """Adds the detailed VCN topology section, including subnets, SLs, RTs, NSGs, and LPGs."""
     sl_to_hosts, rt_to_hosts, nsg_to_hosts = {}, {}, {}
     for instance in infra_data.instances:
         for sl in instance.security_lists:
@@ -1258,7 +1236,6 @@ def _add_kubernetes_section(
     counters: Dict[int, int],
     lang: str,
 ):
-    """Adds the OKE (Kubernetes) clusters section to the document."""
     if (
         not hasattr(infra_data, "kubernetes_clusters")
         or not infra_data.kubernetes_clusters
@@ -1331,7 +1308,6 @@ def _add_load_balancers_section(
     counters: Dict[int, int],
     lang: str,
 ):
-    """Adds the Load Balancers (LBaaS) section to the document."""
     if not hasattr(infra_data, "load_balancers") or not infra_data.load_balancers:
         return
     _add_and_bookmark_heading(
@@ -1365,10 +1341,7 @@ _TUNNEL_STATUS_TEXT_COLORS: Dict[str, str] = {
 
 
 def _style_row_by_tunnel_status(row, status_raw: str) -> None:
-    """
-    Applies subtle background/text color to a row based on VPN tunnel status.
-    DOWN = amber-yellow (attention); UP = very light green (ok).
-    """
+    # DOWN = amber-yellow; UP = soft green.
     key        = (status_raw or "").upper()
     bg_color   = _TUNNEL_STATUS_ROW_COLORS.get(key)
     text_color = _TUNNEL_STATUS_TEXT_COLORS.get(key)
@@ -1396,7 +1369,6 @@ def _add_connectivity_section(
     counters: Dict[int, int],
     lang: str,
 ):
-    """Adds the external connectivity section — DRGs first, then CPEs and VPN tunnels."""
     _add_and_bookmark_heading(
         document, t("doc.headings.connectivity", lang), 2, toc_list, counters
     )
@@ -1628,7 +1600,6 @@ def _add_responsible_section(
     responsible_name: str,
     lang: str,
 ):
-    """Adds the final 'Responsible' signature section to the document."""
     _add_and_bookmark_heading(
         document, t("doc.headings.responsible", lang), 1, toc_list, counters
     )
@@ -1652,7 +1623,6 @@ def _add_network_resource_details(
     rule_type: str,
     lang: str,
 ):
-    """Adds a standardized section for a network resource (SL, NSG, RT) and its rules."""
     p = document.add_paragraph()
     p.add_run(f"{resource_title}: {resource_name}").bold = True
 
@@ -1722,11 +1692,6 @@ def _insert_image_sections(
     counters: dict,
     lang: str,
 ) -> None:
-    """Insert user-defined image sections into the document.
-
-    Each section: level-1 heading → optional text_above → images → optional text_below.
-    Only sections whose position matches the given argument are inserted.
-    """
     for sec in sections:
         if sec.get("position") != position:
             continue
@@ -1761,23 +1726,10 @@ def _apply_letterhead(
     header_bytes: Optional[bytes],
     footer_bytes: Optional[bytes],
 ) -> None:
-    """Stamp header/footer images using the full-page-width bleed technique.
-
-    Replicates exactly what the CCM template does:
-
-    1. header_distance = footer_distance = 0  →  header area starts at y=0 (top of page).
-    2. w:ind hanging = left_margin_twips  →  negative indent pulls the image LEFT
-       by exactly the left margin, so the image starts at the physical left page edge.
-    3. Image width = section.page_width (full physical page width, not text width).
-
-    This combination produces a header/footer that bleeds edge-to-edge with no
-    lateral gaps regardless of the document's margin settings.
-
-    Footer layout
-    -------------
-    Paragraph 1 (hanging indent): footer image at full page width.
-    Paragraph 2 (right-aligned):  page number field below the image.
-    """
+    # Full-page-width bleed technique: header/footer distance = 0, hanging indent =
+    # left_margin_twips, image width = page_width. Produces edge-to-edge letterhead
+    # images regardless of margin settings.
+    # Footer: image paragraph + right-aligned page number paragraph below it.
     from docx.oxml.ns import qn as _qn
     from docx.oxml.shared import OxmlElement as _OE
 
@@ -1793,7 +1745,6 @@ def _apply_letterhead(
         return el
 
     def _add_page_num(para):
-        """Insert a PAGE field run into *para*."""
         run = para.add_run()
         run._r.append(_fld_char("begin"))
         run._r.append(_instr(" PAGE "))
@@ -1803,12 +1754,6 @@ def _apply_letterhead(
         run.font.size = Pt(9)
 
     def _set_bleed_para(para, left_twips: int):
-        """Apply the hanging-indent bleed technique to *para*.
-
-        Removes all left/right/firstLine ind overrides and sets ONLY
-        w:hanging = left_margin_twips.  This mirrors the pPr of the template
-        header/footer paragraphs exactly.
-        """
         pPr = para._p.get_or_add_pPr()
         # Remove any existing ind and spacing elements
         for tag in (_qn("w:ind"), _qn("w:spacing")):
@@ -1891,15 +1836,8 @@ def generate_documentation(
     compartment_name: Optional[str] = None,
     letterhead: Optional[dict] = None,
 ) -> str:
-    """Main function to generate a .docx file.
-
-    image_sections: list of dicts {name, position ("start"|"end"), images: List[bytes]}
-    compartment_name: explicit compartment name passed from the API request; used as the
-                      primary source for the "Cliente" field so it is always populated
-                      regardless of which resources exist in the collected data.
-    letterhead: optional dict {enabled, header, footer, cover} — header/footer images are
-                stamped into every section using the full-page-width bleed technique.
-    """
+    # compartment_name is the primary source for the "Cliente" field — always populated from the API request.
+    # letterhead dict: {enabled, header, footer, cover} — header/footer stamped via full-page-width bleed.
     document = Document()
     # ── Global font: Gotham Light for body, Gotham Medium for headings/title ──
     _ns = document.styles["Normal"]
@@ -2214,7 +2152,6 @@ def _add_waf_report_section(
     counters: Dict[int, int],
     lang: str,
 ):
-    """Adds the WAF Policies details section to the document."""
     if not hasattr(infra_data, "waf_policies") or not infra_data.waf_policies:
         return
 
@@ -2370,7 +2307,6 @@ def _render_single_load_balancer(
     lang: str,
     base_level: int = 3,
 ):
-    """Renders the standard details of a Load Balancer."""
 
     # ── General info ──────────────────────────────────────────────────────────
     ip_strings = [
@@ -2493,11 +2429,7 @@ def _add_compartment_certificates_section(
     counters: Dict[int, int],
     lang: str,
 ) -> None:
-    """
-    Adds an OCI Certificates Service section to the infrastructure document.
-    Lists Common Name, algorithms, validity window, and associations for each certificate.
-    Only ACTIVE and PENDING_DELETION certificates are included.
-    """
+    # Only ACTIVE and PENDING_DELETION certs are included; others are filtered out upstream in oci_connector.
     certificates = [
         c for c in (getattr(infra_data, "certificates", []) or [])
         if isinstance(c, dict)

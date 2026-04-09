@@ -984,6 +984,64 @@ body.light-mode .multi-select-chip { color: #4338ca; }
   white-space: nowrap;
 }
 
+/* Instance status pill — shown inside the dropdown item */
+.instance-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  margin-left: auto;
+}
+.instance-status-pill::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.instance-status-pill.running {
+  background: rgba(63,185,80,.12);
+  color: #3fb950;
+  border-color: rgba(63,185,80,.25);
+}
+.instance-status-pill.stopped {
+  background: rgba(248,81,73,.12);
+  color: #f85149;
+  border-color: rgba(248,81,73,.25);
+}
+.instance-status-pill:not(.running):not(.stopped) {
+  background: rgba(210,153,34,.12);
+  color: #d2992a;
+  border-color: rgba(210,153,34,.25);
+}
+body.light-mode .instance-status-pill.running  { background: #dcfce7; color: #16a34a; border-color: #bbf7d0; }
+body.light-mode .instance-status-pill.stopped  { background: #fee2e2; color: #dc2626; border-color: #fecaca; }
+body.light-mode .instance-status-pill:not(.running):not(.stopped) { background: #fef9c3; color: #ca8a04; border-color: #fef08a; }
+
+/* instance-info row: keep name left, pill pushed right */
+.instance-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.instance-info .item-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tag dot colors in the selected area */
+.selected-item-tag-dot.running    { background: #3fb950; }
+.selected-item-tag-dot.stopped    { background: #f85149; }
+
 /* =============================================================================
    7. BUTTONS
    ============================================================================= */

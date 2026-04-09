@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedCompartmentId = null;
   let selectedCompartmentName = null;
   let selectedInstances = {};
+  let selectedInstanceStatuses = {}; // id → lifecycle status for tag dot coloring
   let allInfrastructureData = {};
   // imageSections: [{id, name, position, files:[File]}]
   let imageSections = [];
@@ -256,11 +257,13 @@ document.addEventListener('DOMContentLoaded', () => {
       instanceContainer,
       allInstancesData,
       instPlaceholder,
-      (value, name, isChecked) => {
+      (value, name, isChecked, option) => {
         if (isChecked) {
           selectedInstances[value] = name;
+          selectedInstanceStatuses[value] = option?.status || '';
         } else {
           delete selectedInstances[value];
+          delete selectedInstanceStatuses[value];
         }
         updateMultiSelectDisplay();
         updateFetchButtonState();
@@ -308,11 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
     info:    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><polyline points="11 12 12 12 12 16"/></svg>`,
   };
 
-  /**
-   * Copies the native `title` attribute to `data-tooltip` on every icon button
-   * inside `root` (defaults to document). This lets our CSS tooltip replace
-   * the slow browser default while keeping the semantic title for accessibility.
-   */
+  // Moves `title` → `data-tooltip` so our CSS tooltip fires instead of the slow browser default.
   function applyTooltips(root = document) {
     root.querySelectorAll(
       '.admin-btn-icon[title], .admin-icon-btn[title], .topbar-icon-btn[title], ' +
@@ -346,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
     'OCI_ERR:forbidden':                   'oci_err.forbidden',
   };
 
-  /** Translates an OCI_ERR: key to the current language, or returns the raw string. */
   function translateOciError(msg) {
     if (!msg) return msg;
     const key = _OCI_ERR_MAP[msg.trim()];
@@ -468,12 +466,11 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   /**
-   * Shows a toast notification in the top-right corner AND records it in the
-   * notification center.
-   * @param {string}  message   - Main text (or subtitle when title is provided).
-   * @param {string}  type      - 'success' | 'error' | 'warning' | 'info'
-   * @param {string}  [title]   - Optional bold heading above the message.
-   * @param {number}  [duration]- Auto-dismiss in ms. Defaults: success=5000, error/warning=8000.
+   * Shows a toast and records it in the notification center.
+   * @param message  - Main text (subtitle when title is provided).
+   * @param type     - 'success' | 'error' | 'warning' | 'info'
+   * @param title    - Optional bold heading above the message.
+   * @param duration - Auto-dismiss ms. Defaults: errors/warnings=8000, rest=5000.
    */
   function showToast(message, type = 'success', title = '', duration = -1) {
     // Translate OCI backend error codes before display
@@ -585,6 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedCompartmentId = null;
     selectedCompartmentName = null;
     selectedInstances = {};
+    selectedInstanceStatuses = {};
     allInfrastructureData = {};
     imageSections = [];
     sectionIdCounter = 0;
@@ -636,6 +634,13 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       fetchBtn.disabled = !selectedCompartmentId;
     }
+  }
+
+  function _instanceStatusLabel(status) {
+    const s = (status || '').toUpperCase();
+    if (s === 'RUNNING')  return t('summary.instance.running')  || 'Running';
+    if (s === 'STOPPED')  return t('summary.instance.stopped')  || 'Stopped';
+    return status;
   }
 
   function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false) {
@@ -726,9 +731,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="custom-checkbox${isChecked ? ' checked' : ''}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
           <div class="instance-info">
              ${iconSvg}
-             <span class="instance-status status-${statusClass}"></span>
              <span class="item-text">${optionName}</span>
-             <span class="status-text">(${status})</span>
+             <span class="instance-status-pill ${statusClass}">${_instanceStatusLabel(status)}</span>
           </div>`;
       } else {
         item.classList.add('select-item-parent');
@@ -772,7 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
           item.classList.toggle('checked', checkbox.checked);
           const customCb = item.querySelector('.custom-checkbox');
           if (customCb) customCb.classList.toggle('checked', checkbox.checked);
-          onSelectCallback(checkbox.value, checkbox.dataset.name, checkbox.checked);
+          onSelectCallback(checkbox.value, checkbox.dataset.name, checkbox.checked, option);
         });
       } else {
         item.addEventListener('click', () => {
@@ -811,9 +815,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /**
-   * Updates the display of the multi-select component to show selected items as tags.
-   */
   function updateMultiSelectDisplay() {
     const container = instanceContainer.querySelector('.selected-items-container');
     if (!container) return;
@@ -826,7 +827,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const tag = document.createElement('span');
         tag.className = 'selected-item-tag';
         const dot = document.createElement('span');
-        dot.className = 'selected-item-tag-dot';
+        const statusClass = (selectedInstanceStatuses[id] || '').toLowerCase();
+        dot.className = `selected-item-tag-dot${statusClass ? ' ' + statusClass : ''}`;
         tag.appendChild(dot);
         tag.appendChild(document.createTextNode(selectedInstances[id]));
         container.appendChild(tag);
@@ -834,10 +836,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /**
-   * Closes all custom select dropdowns.
-   * @param {HTMLElement | null} except - An optional element to exclude from closing.
-   */
+  // except: container element to leave open (used when opening a different select).
   function closeAllSelects(except = null) {
     document.querySelectorAll('.select-items').forEach(item => {
       if (item.parentElement !== except) {
@@ -853,12 +852,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Backend API Call Functions ---
 
-  /**
-   * Enables or disables all wizard steps downstream of the profile selector
-   * (region, doc-type, compartment) and the fetch button.
-   * Called whenever the selected profile changes or the page loads.
-   * @param {boolean} enabled
-   */
+  // Enables/disables the region, doc-type, and compartment selects plus the fetch button.
+  // Called on profile change and on page load.
   function setDownstreamStepsState(enabled) {
     const containers = [regionContainer, docTypeContainer, compartmentContainer];
     containers.forEach(c => {
@@ -916,9 +911,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /**
-   * Populates the documentation type selector with predefined options.
-   */
   const populateDocTypes = () => {
     const ALL_DOC_TYPES = [
       { id: 'new_host',   name: t('doc_type_new') },
@@ -966,9 +958,6 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   };
 
-  /**
-   * Fetches the list of compartments for the selected region.
-   */
   const fetchCompartments = async () => {
     if (!selectedRegion) return;
     try {
@@ -1000,9 +989,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /**
-   * Fetches the list of instances for the selected compartment.
-   */
   const fetchInstances = async () => {
     if (!selectedRegion || !selectedCompartmentId) return;
     try {
@@ -1013,16 +999,22 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error('Erro ao buscar instâncias');
       }
       const instances = await response.json();
-      allInstancesData = instances;
+      // Filter out terminated/terminating — user can't do anything with them
+      allInstancesData = instances.filter(inst => {
+        const s = (inst.status || '').toUpperCase();
+        return s !== 'TERMINATED' && s !== 'TERMINATING';
+      });
       createCustomSelect(
         instanceContainer,
         allInstancesData,
         t('step4_placeholder'),
-        (value, name, isChecked) => {
+        (value, name, isChecked, option) => {
           if (isChecked) {
             selectedInstances[value] = name;
+            selectedInstanceStatuses[value] = option?.status || '';
           } else {
             delete selectedInstances[value];
+            delete selectedInstanceStatuses[value];
           }
           updateMultiSelectDisplay();
           updateFetchButtonState();
@@ -1038,23 +1030,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /**
-   * Resets compartment and instance selections when the region changes.
-   */
   const resetAndFetchCompartments = () => {
     selectedCompartmentId = null;
     selectedInstances = {};
+    selectedInstanceStatuses = {};
     updateFetchButtonState();
     detailsContainer.classList.add('hidden');
     createCustomSelect(instanceContainer, [], t('instance_select_compartment_first'), () => {}, false, true);
     fetchCompartments();
   };
 
-  /**
-   * Resets instance selections when the compartment changes.
-   */
   const resetAndFetchInstances = () => {
     selectedInstances = {};
+    selectedInstanceStatuses = {};
     updateMultiSelectDisplay();
     updateFetchButtonState();
     detailsContainer.classList.add('hidden');
@@ -1067,11 +1055,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Asynchronous Flow and Data Collection ---
 
-  /**
-   * Formats milliseconds into a MM:SS string.
-   * @param {number} ms - Milliseconds to format.
-   * @returns {string} The formatted time string.
-   */
+  // MM:SS display for the collection timer.
   const formatTime = (ms) => {
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -1079,9 +1063,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${minutes}:${seconds}`;
   };
 
-  /**
-   * Starts the data collection task and begins polling for results.
-   */
   const fetchAllDetails = async () => {
     clearInterval(pollingIntervalId);
     detailsContainer.classList.add('hidden');
@@ -1158,10 +1139,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /**
-   * Polls the backend for the status of the collection task.
-   * @param {string} taskId The ID of the task to check.
-   */
+  // Polls every 2s until SUCCESS, FAILURE, or a network error.
   const checkTaskStatus = (taskId) => {
     pollingIntervalId = setInterval(async () => {
       try {
@@ -1244,11 +1222,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Infrastructure Summary and Document Generation ---
 
-  /**
-   * Generates the HTML summary of the fetched infrastructure data.
-   * @param {object} data The infrastructure data from the API.
-   * @returns {string} The generated HTML string.
-   */
   // --- WAF Policy HTML Builder ---
   // Extracted to avoid nested backtick issues inside template literals.
   function buildWafInfraSectionHtml(policies, createTable) {

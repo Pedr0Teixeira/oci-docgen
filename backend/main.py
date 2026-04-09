@@ -39,7 +39,6 @@ _OCI_ERROR_MAP = [
 ]
 
 def _translate_oci_error(msg: str) -> str:
-    """Returns an OCI_ERR: key if the message matches a known pattern, else the raw message."""
     for pattern, key in _OCI_ERROR_MAP:
         if pattern in msg:
             return key
@@ -70,7 +69,6 @@ async def on_startup():
 # --- Auth helpers ---
 
 def _get_token(request: Request) -> Optional[str]:
-    """Extract Bearer token from Authorization header."""
     header = request.headers.get("Authorization", "")
     if header.startswith("Bearer "):
         return header[7:].strip()
@@ -78,7 +76,6 @@ def _get_token(request: Request) -> Optional[str]:
 
 
 def _optional_user(request: Request) -> Optional[dict]:
-    """Return authenticated user dict if a valid Bearer token is present, else None."""
     token = _get_token(request)
     return auth.get_session_user(token) if token else None
 
@@ -94,10 +91,6 @@ class AuthRequest(BaseModel):
 
 @app.post("/api/auth/register", summary="Criar conta")
 async def register(body: AuthRequest):
-    """
-    Creates a new account. Returns a session token on success.
-    Username must be unique and >= 3 chars; password >= 6 chars.
-    """
     if len(body.username.strip()) < 3:
         raise HTTPException(400, "Username precisa ter pelo menos 3 caracteres.")
     if len(body.password) < 6:
@@ -113,7 +106,6 @@ async def register(body: AuthRequest):
 
 @app.post("/api/auth/login", summary="Login")
 async def login(body: AuthRequest):
-    """Authenticate with username + password and receive a session token."""
     user = auth.authenticate_user(body.username, body.password)
     if not user:
         raise HTTPException(401, "Usuário ou senha inválidos.")
@@ -488,13 +480,8 @@ async def admin_delete_announcement(ann_id: int, request: Request):
 
 @app.post("/api/admin/profiles/validate", summary="Validar credenciais de um Tenancy Profile (admin)")
 async def validate_profile_credentials(request: Request):
-    """
-    Validates OCI credentials inline or from an existing saved profile.
-    When profile_id is supplied without an inline private_key_pem, the saved
-    (decrypted) key is loaded from the database. This covers the edit-mode
-    case where the PEM is stored but not re-transmitted to the browser.
-    Returns {"ok": true, "region_count": N} on success, or raises HTTP 422/503.
-    """
+    # When profile_id is provided without inline private_key_pem, we load the saved
+    # (decrypted) key from the DB — handles the edit-profile case where the PEM isn't re-sent.
     _require_admin(request)
     body = await request.json()
 

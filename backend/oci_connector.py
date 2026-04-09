@@ -66,8 +66,7 @@ IANA_PROTOCOL_MAP: Dict[str, str] = {
 
 MAX_WORKERS_FOR_DETAILS = 15
 
-# Retry strategy with exponential jitter to tolerate transient OCI API
-#     failures (throttling, 5xx errors).
+# Retry with exponential jitter — handles throttling (429) and transient 5xx errors.
 retry_strategy = oci.retry.RetryStrategyBuilder(
     max_attempts=8,
     max_wait_seconds=60,
@@ -117,7 +116,6 @@ _IAM_RESOURCE_LABEL = {
 
 
 def _iam_error_msg(resource_key: str) -> str:
-    """Returns a human-readable IAM error message for the given resource family key."""
     policy = _IAM_POLICY_MAP.get(resource_key, "allow dynamic-group '<seu-grupo>' to read <resource-family> in tenancy")
     label  = _IAM_RESOURCE_LABEL.get(resource_key, resource_key.upper())
     return (
@@ -127,10 +125,6 @@ def _iam_error_msg(resource_key: str) -> str:
 
 
 def _check_iam(e: oci.exceptions.ServiceError, resource_key: str) -> None:
-    """
-    Raises PermissionError with an actionable IAM message when e is a
-    NotAuthorizedOrNotFound 404. Re-raises e unchanged for all other errors.
-    """
     if e.status == 404 and e.code == "NotAuthorizedOrNotFound":
         raise PermissionError(_iam_error_msg(resource_key)) from e
     raise e
@@ -138,11 +132,6 @@ def _check_iam(e: oci.exceptions.ServiceError, resource_key: str) -> None:
 # --- OCI Authentication and Client Initialization ---
 
 def get_auth_provider() -> Dict[str, Any]:
-    """
-    Determines the auth method from the OCI_AUTH_METHOD environment variable.
-    Supports INSTANCE_PRINCIPAL (for workloads running inside OCI)
-    and API_KEY (default, uses ~/.oci/config).
-    """
     auth_method = os.environ.get("OCI_AUTH_METHOD", "API_KEY").upper()
     if auth_method == "INSTANCE_PRINCIPAL":
         try:
@@ -187,10 +176,6 @@ if _default_tenancy_id:
 
 
 def _auth_from_profile(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Builds an auth dict from a tenancy profile row (with decrypted private_key_pem).
-    Falls back to the default auth if profile is None.
-    """
     if not profile:
         return _default_auth
     if profile.get("auth_method", "").upper() == "INSTANCE_PRINCIPAL":
@@ -218,10 +203,6 @@ def _auth_from_profile(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def get_client(client_class, region: str, profile: Optional[Dict[str, Any]] = None):
-    """
-    OCI client factory. Accepts an optional profile dict (with decrypted key).
-    Falls back to default auth when profile is None.
-    """
     auth = _auth_from_profile(profile)
     client_kwargs = {"retry_strategy": retry_strategy}
     try:
@@ -249,11 +230,9 @@ def _safe_api_call(func, *args, **kwargs):
         return None
 
 def _translate_protocol(protocol_code: str) -> str:
-    """Converts an IANA numeric protocol code to a human-readable name."""
     return IANA_PROTOCOL_MAP.get(str(protocol_code), str(protocol_code))
 
 def _format_rule_ports(rule: Any) -> str:
-    """Extracts the port range from an OCI security rule as a string (e.g. "80-443"). Returns "" if unspecified."""
     options = None
     if hasattr(rule, "tcp_options") and rule.tcp_options:
         options = rule.tcp_options
@@ -267,7 +246,6 @@ def _format_rule_ports(rule: Any) -> str:
     return f"{port_range.min}-{port_range.max}"
 
 def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
-    """Resolves the display name of a network resource (IGW, NAT, SGW, LPG, DRG, Private IP) from its OCID."""
     if not entity_id:
         return "N/A"
     try:
@@ -297,21 +275,18 @@ def get_network_entity_name(virtual_network_client, entity_id: str) -> str:
     return entity_id
 
 def _get_drg_route_table_name(virtual_network_client, drg_route_table_id: str) -> str:
-    """Resolves the display name of a DRG Route Table from its OCID."""
     if not drg_route_table_id:
         return "N/A"
     route_table = _safe_api_call(virtual_network_client.get_drg_route_table, drg_route_table_id)
     return route_table.display_name if route_table else drg_route_table_id
 
 def _get_source_dest_name(virtual_network_client, source_dest: str) -> str:
-    """Resolves an NSG display name from its OCID. Returns the original value if it is not an NSG OCID."""
     if not source_dest or not source_dest.startswith("ocid1.networksecuritygroup"):
         return source_dest
     nsg = _safe_api_call(virtual_network_client.get_network_security_group, source_dest)
     return nsg.display_name if nsg else source_dest
 
 def get_compartment_name(compartment_id: str) -> str:
-    """Returns the display name of a compartment by its OCID."""
     if not identity_client_for_compartment:
         return "N/A"
     if compartment_id == _default_tenancy_id:
@@ -322,10 +297,8 @@ def get_compartment_name(compartment_id: str) -> str:
 def _validate_ipsec_parameters(
     tunnel: oci.core.models.IPSecConnectionTunnel,
 ) -> Tuple[str, Optional[str]]:
-    """
-    Validates IPSec tunnel encryption parameters against Oracle's official
-    recommendations. Returns a (status, docs_link_or_None) tuple.
-    """
+    # Compares Phase 1/2 params against Oracle's recommended values.
+    # Returns (status_label, docs_link_or_None).
     p1, p2 = tunnel.phase_one_details, tunnel.phase_two_details
     if not p1 or not p2:
         return "Indisponível", "Detalhes de IKE/IPSec não encontrados."
@@ -350,7 +323,6 @@ def _validate_ipsec_parameters(
 
 # --- Resource Listing ---
 def list_regions(profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
-    """Returns all subscribed and active OCI regions for the given profile's tenancy."""
     auth = _auth_from_profile(profile)
     tenancy_id = auth.get("tenancy_id")
     if not tenancy_id:
@@ -369,7 +341,6 @@ def list_regions(profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, str
     return [{"key": r.region_key, "name": r.region_name} for r in regions if r.status == "READY"]
 
 def list_compartments(region: str, profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """Returns all active compartments in the tenancy as a flattened hierarchical list."""
     auth = _auth_from_profile(profile)
     tenancy_id = auth.get("tenancy_id")
     if not tenancy_id:
@@ -409,7 +380,6 @@ def list_compartments(region: str, profile: Optional[Dict[str, Any]] = None) -> 
     return hierarchical_list
 
 def list_instances_in_compartment(region: str, compartment_id: str, profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
-    """Returns RUNNING and STOPPED compute instances from the specified compartment."""
     compute_client = get_client(oci.core.ComputeClient, region, profile)
     if not compute_client:
         raise ConnectionError("OCI_ERR:compute_client_init_failed")
@@ -594,10 +564,7 @@ def _get_standalone_block_volumes(
     compartment_id: str,
     attached_volume_ids: set,
 ) -> list:
-    """
-    Returns block volumes in the compartment NOT attached to any instance.
-    Uses the set of volume IDs already collected from instances for exclusion.
-    """
+    # Excludes volumes already collected per-instance to avoid duplicates.
     results = []
     try:
         all_vols_sdk = oci.pagination.list_call_get_all_results(
@@ -646,7 +613,6 @@ def _get_volume_groups(
     compartment_id: str,
     all_volumes_map: Dict[str, str],
 ) -> List[VolumeGroupData]:
-    """Collects Volume Groups from the compartment, including backup policy and cross-region replication data."""
     volume_groups_data = []
     try:
         all_vgs_sdk = oci.pagination.list_call_get_all_results(
@@ -700,7 +666,6 @@ def _get_oke_clusters(
     compartment_id: str,
     vcn_map: Dict[str, Any],
 ) -> List[OkeClusterData]:
-    """Collects active OKE clusters with their Node Pools and associated network information."""
     oke_clusters_data = []
     try:
         all_clusters_summary_sdk = oci.pagination.list_call_get_all_results(
@@ -776,7 +741,6 @@ def _get_oke_clusters(
 # --- Certificates Data Collection ---
 
 def _infer_resource_type_from_ocid(ocid: str) -> str:
-    """Infers a human-readable resource label from an OCI OCID."""
     if not ocid:
         return "Unknown"
     ocid_lower = ocid.lower()
@@ -797,11 +761,8 @@ def _infer_resource_type_from_ocid(ocid: str) -> str:
     return "Unknown"
 
 def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> list:
-    """
-    Collects OCI Certificates Service certificates and their associations.
-    Only ACTIVE and PENDING_DELETION states are kept; others are discarded silently.
-    """
-
+    # Only ACTIVE and PENDING_DELETION certs are kept; other lifecycle states are skipped.
+    # Uses getattr() throughout because SDK cert objects don't always implement to_dict().
     def _ga(obj, attr, default=None):
         return getattr(obj, attr, default) or default
 

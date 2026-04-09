@@ -16,23 +16,17 @@ DB_PATH = os.path.join(_data_dir, "oci_docgen.db")
 # --- Encryption helpers ---
 
 def _get_fernet() -> Fernet:
-    """
-    Returns a Fernet instance keyed from the SECRET_KEY environment variable.
-    The key is SHA-256 hashed and base64url-encoded to always produce a valid
-    32-byte Fernet key regardless of the raw SECRET_KEY length.
-    """
+    # SHA-256 + base64url-encode so any SECRET_KEY length produces a valid 32-byte Fernet key.
     raw = os.environ.get("SECRET_KEY", "dev-insecure-change-in-production")
     derived = base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest())
     return Fernet(derived)
 
 
 def encrypt_value(plaintext: str) -> str:
-    """Encrypts a string and returns a base64-encoded ciphertext string."""
     return _get_fernet().encrypt(plaintext.encode()).decode()
 
 
 def decrypt_value(ciphertext: str) -> str:
-    """Decrypts a base64-encoded ciphertext string back to plaintext."""
     return _get_fernet().decrypt(ciphertext.encode()).decode()
 
 
@@ -206,7 +200,6 @@ def _hash(password: str) -> str:
 # --- User management ---
 
 def create_user(username: str, password: str) -> Optional[dict]:
-    """Returns the new user dict, or None if username already exists."""
     try:
         conn = _conn()
         conn.execute(
@@ -224,7 +217,6 @@ def create_user(username: str, password: str) -> Optional[dict]:
 
 
 def authenticate_user(username: str, password: str) -> Optional[dict]:
-    """Returns user dict if credentials match, else None."""
     conn = _conn()
     row = conn.execute(
         "SELECT * FROM users WHERE username = ? AND password_hash = ?",
@@ -237,7 +229,6 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
 # --- Session management ---
 
 def create_session(user_id: int) -> str:
-    """Creates and persists a new session token, returning it."""
     token = str(uuid.uuid4())
     conn = _conn()
     try:
@@ -252,11 +243,7 @@ def create_session(user_id: int) -> str:
 
 
 def get_session_user(token: str) -> Optional[dict]:
-    """
-    Returns the user dict for a valid session token, else None.
-    Includes is_admin and force_password_change so callers don't need
-    a separate query.
-    """
+    # Joins users + sessions in one query so callers get is_admin and force_password_change included.
     if not token:
         return None
     conn = _conn()
@@ -285,11 +272,7 @@ def delete_session(token: str) -> None:
 # --- Password management ---
 
 def _validate_password_complexity(password: str) -> Optional[str]:
-    """
-    Returns an error message if the password does not meet complexity requirements,
-    or None if it is valid.
-    Requirements: 8+ chars, 1 uppercase, 1 lowercase, 1 digit, 1 special character.
-    """
+    # 8+ chars, uppercase, lowercase, digit, special char. Returns error string or None.
     import re
     if len(password) < 8:
         return "Senha deve ter pelo menos 8 caracteres."
@@ -310,11 +293,7 @@ def change_password(
     new_password: str,
     skip_verify: bool = False,
 ) -> tuple:
-    """
-    Changes the user's password.
-    Returns (True, None) on success or (False, error_message) on failure.
-    skip_verify=True skips the current-password check (used on first login).
-    """
+    # skip_verify=True bypasses the current-password check — used for forced resets.
     err = _validate_password_complexity(new_password)
     if err:
         return False, err
@@ -339,7 +318,6 @@ def change_password(
 
 
 def update_user_password(user_id: int, new_password: str) -> bool:
-    """Admin-only: forcibly resets a user's password without checking current one."""
     conn = _conn()
     cursor = conn.execute(
         "UPDATE users SET password_hash = ? WHERE id = ?",
@@ -358,7 +336,6 @@ def log_generation(
     region: str,
     user_id: Optional[int] = None,
 ) -> None:
-    """Record every document generation — anonymous or authenticated."""
     conn = _conn()
     try:
         conn.execute(

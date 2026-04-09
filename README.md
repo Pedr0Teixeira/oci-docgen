@@ -67,17 +67,19 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 
 ## Features
 
-- **Four document modes** — New Host, Full Infrastructure, Kubernetes (OKE), and WAF Report, each scoped to a specific set of OCI resources.
+- **Five document modes** — New Host, Full Infrastructure, Database (DBaaS), Kubernetes (OKE), and WAF Report, each scoped to a specific set of OCI resources.
 - **Tenancy Profiles** — Admins register OCI credentials (API Key or Instance Principal) as named profiles, encrypted at rest with Fernet (AES-128-CBC). Users never handle raw keys.
 - **Profile active/inactive state** — Profiles can be deactivated without deletion. Inactive profiles appear as locked items in the generator selector and are blocked from use at both the UI and API layers.
 - **4-tier visibility model** — Each profile can be scoped to `admin_only`, `all_users`, specific groups (`by_group`), or individually assigned users (`by_user`).
 - **Wizard step dependency enforcement** — Generator steps for region, document type, and compartment are locked until an active profile is selected. Selecting an inactive profile clears downstream state immediately.
 - **Asynchronous collection** — Celery and Redis execute OCI API calls in the background, with real-time progress feedback via polling. No page refresh needed.
-- **Interactive summary** — Before generating, the collected dataset is rendered in a collapsible panel for review and validation.
-- **Network topology diagram** — After collection, a live SVG architecture diagram is rendered directly in the browser. It displays VCNs, subnets, instances, gateways, and VPN connectivity in a horizontal flow layout (Cloud on the left, On-Premises on the right). The diagram can be exported as a 4K PNG or added to the document as a "Network Topology" section with a single click.
+- **Multi-compartment collection** — A single collection request can target one or more compartments. Resources are aggregated into a unified dataset, the diagram renders a distinct zone per compartment, and the generated document header uses a `Compartimento` / `Compartimentos` label that pluralizes automatically based on the number of selected compartments.
+- **Interactive summary** — Before generating, the collected dataset is rendered in a collapsible panel for review and validation. In multi-compartment mode, every resource card (instances, volumes, LBs, OKE, etc.) carries a color-coded compartment badge so users can tell at a glance where each resource lives; in single-compartment mode the badges are hidden to keep the view clean.
+- **Network topology diagram** — After collection, a live SVG architecture diagram is rendered directly in the browser with a horizontal flow layout (Cloud on the left, On-Premises on the right). It renders every collected compartment as its own zone, VCNs with subnets and gateways, instances with shape/private IP/public IP labels and NSG badges, Volume Groups as container cards with a tree-style list of member volumes and a prominent backup-policy indicator, DB Systems with edition/OCPUs/storage/nodes, Local Peering Gateways with same-tenancy peer-name resolution or a cross-tenancy globe icon for peerings across tenancies, subnet→gateway arrows with collapsed `N rotas` badges for dense routing, and IPSec tunnels to the on-premises zone. The diagram can be exported as a 4K PNG or added to the document as a "Network Topology" section with a single click.
 - **Visual state indicators** — Lifecycle states (`TERMINATED`, `STOPPED`, `PENDING_DELETION`) are highlighted with color in both the interface and the generated document.
 - **VPN tunnel status** — `DOWN` tunnels flagged in amber; `UP` tunnels in soft green.
 - **Full DRG and VPN coverage** — Dynamic Routing Gateways with VCN name resolution on attachments, RPCs, CPEs, and IPSec tunnels with Phase 1/2, IKE, BGP, and Oracle compliance validation.
+- **Database (DBaaS) coverage** — Bare-metal and VM DB Systems with full drill-down: DB nodes (hostname, state, fault domain), DB Homes, individual databases, PDB names, connection strings, character sets, workload type, and backup configuration (retention, window, destination). Available as a dedicated `database` document mode and also surfaced inside `full_infra` reports.
 - **WAF and Certificates** — Full WAF policies: actions, access control, rate limiting, protection rules, firewall bindings, and complete TLS certificate lifecycle (SANs, validity, stages, associations).
 - **Bilingual (PT-BR / EN)** — Interface, progress messages, and generated document are fully bilingual with instant switching.
 - **Image attachments** — Upload diagrams or screenshots to embed in the document before or after the infrastructure section.
@@ -92,37 +94,43 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 
 ## Documentation Modes
 
-| Mode                    | `doc_type`   | Scope                                                                                            |
-| :---------------------- | :----------- | :----------------------------------------------------------------------------------------------- |
-| **New Host**            | `new_host`   | Specific instances: shape, volumes, OS, network rules.                                           |
-| **Full Infrastructure** | `full_infra` | Complete report: instances, volumes, VCN, load balancers, certificates, WAF, DRG, VPN, OKE.      |
-| **Kubernetes (OKE)**    | `kubernetes` | OKE clusters, node pools, networking, and API endpoints.                                         |
-| **WAF Report**          | `waf_report` | WAF policies, firewalls, LB binding, certificates (full lifecycle), and associated VCN topology. |
+| Mode                    | `doc_type`   | Scope                                                                                                                    |
+| :---------------------- | :----------- | :----------------------------------------------------------------------------------------------------------------------- |
+| **New Host**            | `new_host`   | Specific instances: shape, volumes, OS, network rules.                                                                   |
+| **Full Infrastructure** | `full_infra` | Complete report: instances, volumes, VCN, load balancers, certificates, WAF, DRG, VPN, OKE, DB Systems.                  |
+| **Database (DBaaS)**    | `database`   | DB Systems, DB Homes, databases, DB Nodes, backup configuration, connection strings, and associated VCN/subnet topology. |
+| **Kubernetes (OKE)**    | `kubernetes` | OKE clusters, node pools, networking, and API endpoints.                                                                 |
+| **WAF Report**          | `waf_report` | WAF policies, firewalls, LB binding, certificates (full lifecycle), and associated VCN topology.                         |
 
 ---
 
 ## OCI Resources Covered
 
-| Category           | Resource          | Collected Details                                              |
-| :----------------- | :---------------- | :------------------------------------------------------------- |
-| **Compute**        | Instances         | Shape, OCPUs, memory, OS, lifecycle state, private/public IPs  |
-| **Storage**        | Boot Volumes      | Size, backup policy                                            |
-|                    | Block Volumes     | Size, backup policy, attachment status                         |
-|                    | Volume Groups     | Members, policy validation, replication target                 |
-| **Networking**     | VCNs              | CIDR, subnets, security lists, route tables, NSGs, LPGs        |
-|                    | Security Lists    | Ingress/egress rules with protocol, ports, source/destination  |
-|                    | NSGs              | Rules with name resolution                                     |
-|                    | Route Tables      | Rules with target entity resolution (IGW, NAT, SGW, LPG, DRG)  |
-|                    | LPGs              | Peering status, advertised CIDR, cross-tenancy flag            |
-| **Load Balancing** | Load Balancers    | Shape, IPs, listeners, backend sets, health checkers, backends |
-| **Security**       | WAF Policies      | Actions, access control, rate limiting, protection rules       |
-|                    | Web App Firewalls | Instance, LB binding, enforcement point                        |
-|                    | OCI Certificates  | Common name, SANs, algorithms, validity, stages, associations  |
-| **Connectivity**   | DRGs              | Attachments (with resolved VCN name), route tables, RPCs       |
-|                    | CPEs              | IP address, vendor                                             |
-|                    | IPSec VPN         | Tunnels, Phase 1/2, IKE, BGP, Oracle compliance validation     |
-| **Containers**     | OKE Clusters      | Kubernetes version, VCN, endpoint visibility, LB subnet        |
-|                    | Node Pools        | Shape, OCPU/memory, OS, node count, boot volume, subnet        |
+| Category           | Resource          | Collected Details                                                                                                                               |
+| :----------------- | :---------------- | :---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Compute**        | Instances         | Shape, OCPUs, memory, OS, lifecycle state, private/public IPs                                                                                   |
+| **Storage**        | Boot Volumes      | Size, backup policy                                                                                                                             |
+|                    | Block Volumes     | Size, backup policy, attachment status                                                                                                          |
+|                    | Volume Groups     | Members, policy validation, replication target                                                                                                  |
+| **Networking**     | VCNs              | CIDR, subnets, security lists, route tables, NSGs, LPGs                                                                                         |
+|                    | Security Lists    | Ingress/egress rules with protocol, ports, source/destination                                                                                   |
+|                    | NSGs              | Rules with name resolution                                                                                                                      |
+|                    | Route Tables      | Rules with target entity resolution (IGW, NAT, SGW, LPG, DRG)                                                                                   |
+|                    | LPGs              | Peering status, advertised CIDR, cross-tenancy flag                                                                                             |
+| **Load Balancing** | Load Balancers    | Shape, IPs, listeners, backend sets, health checkers, backends                                                                                  |
+| **Security**       | WAF Policies      | Actions, access control, rate limiting, protection rules                                                                                        |
+|                    | Web App Firewalls | Instance, LB binding, enforcement point                                                                                                         |
+|                    | OCI Certificates  | Common name, SANs, algorithms, validity, stages, associations                                                                                   |
+| **Connectivity**   | DRGs              | Attachments (with resolved VCN name), route tables, RPCs                                                                                        |
+|                    | CPEs              | IP address, vendor                                                                                                                              |
+|                    | IPSec VPN         | Tunnels, Phase 1/2, IKE, BGP, Oracle compliance validation                                                                                      |
+| **Containers**     | OKE Clusters      | Kubernetes version, VCN, endpoint visibility, LB subnet                                                                                         |
+|                    | Node Pools        | Shape, OCPU/memory, OS, node count, boot volume, subnet                                                                                         |
+| **Database**       | DB Systems        | Shape, edition, OCPUs, storage (GB), version, cluster name, time zone, license model, VCN/subnet, hostname, domain, data-guard, lifecycle state |
+|                    | DB Nodes          | Hostname, state, fault domain, VNIC OCID                                                                                                        |
+|                    | DB Homes          | Display name, DB version, lifecycle state                                                                                                       |
+|                    | Databases         | Name, DB unique name, PDB name, character set, national charset, workload, connection strings                                                   |
+|                    | Backup Config     | Auto-backup enabled, window, retention (days), destination                                                                                      |
 
 ---
 
@@ -181,9 +189,9 @@ sequenceDiagram
   participant C as Celery Worker
   participant O as OCI API
 
-  B->>A: POST /api/start-collection<br/>{doc_type, region, compartment, profile_id}
+  B->>A: POST /api/start-collection<br/>{doc_type, region, compartment_ids[], profile_id}
   A->>A: Validate profile exists and is_active
-  A->>R: Dispatch collect_infrastructure task
+  A->>R: Dispatch Celery task by doc_type<br/>collect_full_infrastructure_task · collect_database_task<br/>collect_kubernetes_task · collect_waf_report_task · collect_new_host_task<br/>(one worker task per compartment when multi-comp, `full_infra` only)
   A-->>B: {task_id}
 
   loop Polling every 2s
@@ -196,11 +204,12 @@ sequenceDiagram
   C->>O: Parallel SDK calls (ThreadPoolExecutor)
   O-->>C: Raw OCI objects
   C->>C: Validate via Pydantic schemas
+  C->>C: Merge per-compartment datasets into<br/>unified InfrastructureData (populates `compartments[]`)
   C->>R: Store serialised result
 
   A-->>B: {status: "SUCCESS", result: {infra_data}}
 
-  Note over B: diagram.js renders topology SVG from infra_data<br/>Cloud (left) / On-Premises (right) — no server round-trip
+  Note over B: diagram.js renders topology SVG from infra_data<br/>One compartment zone per entry in `compartments[]`<br/>Cloud (left) / On-Premises (right) — no server round-trip
 
   opt User clicks "Add to document"
     B->>B: Export diagram as 4K PNG (canvas 4× scale)
@@ -466,7 +475,7 @@ oci-docgen/
 ├── backend/
 │   ├── Dockerfile
 │   ├── main.py              # FastAPI — all REST endpoints
-│   ├── celery_worker.py     # Celery tasks: OCI collection (full_infra, new_host, waf_report)
+│   ├── celery_worker.py     # Celery tasks: OCI collection (full_infra, database, new_host, kubernetes, waf_report)
 │   ├── oci_connector.py     # OCI SDK integration (parallel, profile-aware)
 │   ├── doc_generator.py     # .docx rendering engine (bilingual, compartment-aware)
 │   ├── auth.py              # Auth, sessions, RBAC, tenancy profiles, metrics, announcements
@@ -1284,6 +1293,7 @@ allow dynamic-group 'oci-docgen-dg' to read volume-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read virtual-network-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read load-balancers in tenancy
 allow dynamic-group 'oci-docgen-dg' to read cluster-family in tenancy
+allow dynamic-group 'oci-docgen-dg' to read database-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read waf-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read leaf-certificate-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to use network-security-groups in tenancy where any {
@@ -1295,6 +1305,8 @@ allow dynamic-group 'oci-docgen-dg' to use network-security-groups in tenancy wh
 > All verbs are `read` or restricted `use`. The application never creates, modifies, or deletes OCI resources.
 
 > **Note:** **`waf-family` vs `waas-family`:** These are two distinct OCI services. `waf-family` covers the **OCI WAF** (new service, used by this application). `waas-family` covers the legacy **WAAS** service. Using `waas-family` instead of `waf-family` will result in a `NotAuthorizedOrNotFound` error when generating WAF reports.
+
+> **Note:** **`database-family`** is required for the `database` doc type and for the DB Systems section rendered inside `full_infra` reports. It covers `db-systems`, `db-homes`, `databases`, `db-nodes`, and backup configurations — all read via `DatabaseClient` (`list_db_systems`, `list_db_nodes`, `list_db_homes`, `list_databases`, `get_db_home`). When this policy is missing, the collection task aborts with an actionable toast that spells out the exact policy statement (handled by `_iam_error_msg("database")` in `oci_connector.py`).
 
 Reference: [OCI IAM Policy Reference](https://docs.oracle.com/en-us/iaas/Content/Identity/Reference/policyreference.htm)
 
@@ -1312,7 +1324,7 @@ flowchart TD
     D -- "No" --> E[Re-raise original exception]
     D -- "Yes" --> F["PermissionError<br/>_iam_error_msg(resource_key)"]
 
-    F --> H["PermissionError propagates freely<br/>waf_report · full_infra · new_host"]
+    F --> H["PermissionError propagates freely<br/>full_infra · database · kubernetes · waf_report · new_host"]
 
     H --> K["Celery task catches PermissionError"]
     K --> L["update_state<br/>state='IAM_ERROR'<br/>meta={error, error_type}"]
@@ -1339,16 +1351,17 @@ flowchart TD
 
 **Resource criticality matrix** — determines whether a missing IAM policy aborts the task or silently skips the resource:
 
-| Resource          | Family                    | Task aborts? | Reason                                                          |
-| ----------------- | ------------------------- | ------------ | --------------------------------------------------------------- |
-| Instances         | `instance-family`         | Yes          | Primary deliverable for all doc types                           |
-| VCN / Network     | `virtual-network-family`  | Yes          | Required for topology sections                                  |
-| Load Balancers    | `load-balancers`          | Yes          | Required for LB and WAF binding                                 |
-| WAF               | `waf-family`              | Yes          | Required for WAF report and full infrastructure                 |
-| Certificates      | `leaf-certificate-family` | Yes          | Required for WAF report and full infrastructure                 |
-| OKE Clusters      | `cluster-family`          | Yes          | Required for kubernetes doc type                                |
-| DRG / CPE / IPSec | `virtual-network-family`  | Yes          | All use VirtualNetworkClient; covered by the same policy as VCN |
-| Volumes           | `volume-family`           | Yes          | Required for storage section                                    |
+| Resource          | Family                    | Task aborts? | Reason                                                                  |
+| ----------------- | ------------------------- | ------------ | ----------------------------------------------------------------------- |
+| Instances         | `instance-family`         | Yes          | Primary deliverable for all doc types                                   |
+| VCN / Network     | `virtual-network-family`  | Yes          | Required for topology sections                                          |
+| Load Balancers    | `load-balancers`          | Yes          | Required for LB and WAF binding                                         |
+| WAF               | `waf-family`              | Yes          | Required for WAF report and full infrastructure                         |
+| Certificates      | `leaf-certificate-family` | Yes          | Required for WAF report and full infrastructure                         |
+| OKE Clusters      | `cluster-family`          | Yes          | Required for kubernetes doc type                                        |
+| DRG / CPE / IPSec | `virtual-network-family`  | Yes          | All use VirtualNetworkClient; covered by the same policy as VCN         |
+| Volumes           | `volume-family`           | Yes          | Required for storage section                                            |
+| DB Systems        | `database-family`         | Yes          | Required for `database` doc type and DB Systems section in `full_infra` |
 
 ---
 
@@ -1375,15 +1388,15 @@ All endpoints are prefixed with `/api`. Authentication uses a Bearer token sent 
 
 ### Generator
 
-| Method | Path                                | Auth Required | Description                                                                                                                                                         |
-| :----- | :---------------------------------- | :------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| GET    | `/my-permissions`                   | Optional      | Permitted doc types + profile list. Anonymous users receive `new_host` only.                                                                                        |
-| GET    | `/profiles`                         | Optional      | Tenancy profiles visible to this user, including inactive (marked `is_active: false`)                                                                               |
-| GET    | `/{region}/compartments`            | —             | List compartments (via selected profile)                                                                                                                            |
-| GET    | `/{region}/instances/{compartment}` | —             | List instances for New Host mode                                                                                                                                    |
-| POST   | `/start-collection`                 | **Partial**   | `new_host` — no auth required. `full_infra`, `waf_report`, `kubernetes` — Bearer token mandatory (HTTP 401 if absent). Returns HTTP 403 if the profile is inactive. |
-| GET    | `/collection-status/{task_id}`      | —             | Poll collection progress                                                                                                                                            |
-| POST   | `/generate-document`                | Optional      | Render and download `.docx`                                                                                                                                         |
+| Method | Path                                | Auth Required | Description                                                                                                                                                                     |
+| :----- | :---------------------------------- | :------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/my-permissions`                   | Optional      | Permitted doc types + profile list. Anonymous users receive `new_host` only.                                                                                                    |
+| GET    | `/profiles`                         | Optional      | Tenancy profiles visible to this user, including inactive (marked `is_active: false`)                                                                                           |
+| GET    | `/{region}/compartments`            | —             | List compartments (via selected profile)                                                                                                                                        |
+| GET    | `/{region}/instances/{compartment}` | —             | List instances for New Host mode                                                                                                                                                |
+| POST   | `/start-collection`                 | **Partial**   | `new_host` — no auth required. `full_infra`, `database`, `waf_report`, `kubernetes` — Bearer token mandatory (HTTP 401 if absent). Returns HTTP 403 if the profile is inactive. |
+| GET    | `/collection-status/{task_id}`      | —             | Poll collection progress                                                                                                                                                        |
+| POST   | `/generate-document`                | Optional      | Render and download `.docx`                                                                                                                                                     |
 
 ### Admin
 
@@ -1544,12 +1557,16 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 - **Certificates as `dict`:** Structure varies by certificate type (`IMPORTED`, `MANAGED_INTERNALLY`, `ISSUED_BY_INTERNAL_CA`). Stored as raw dicts to avoid a rigid Pydantic schema.
 - **Certificate version attribute naming:** `list_certificates` exposes `.current_version_summary`; `get_certificate` exposes `.current_version` — different names for the same concept. Handled in `_get_compartment_certificates`.
 - **WAF backward compatibility:** `WafPolicyData.integration` holds the first firewall integration; `WafPolicyData.integrations` holds the full list. Both fields are maintained to avoid breaking existing flows.
+- **DB Systems collection — 5-level drill-down:** `oci_connector._get_db_systems()` walks the full OCI Database hierarchy in a single pass: DB System → DB Nodes → DB Homes → Databases → Backup Configuration. Each level is fetched with the OCI Database SDK (`database_client.list_db_systems`, `list_db_nodes`, `list_db_homes`, `list_databases`) and hydrated into the corresponding Pydantic models (`DbSystemData`, `DbNodeData`, `DbHomeData`, `DatabaseData`, `DbBackupConfigData`) in `schemas.py` (lines 420-491). Connection strings from `database.connection_strings` are flattened into `DatabaseData.connection_strings` as a dict keyed by type (`allConnectionStrings`, `cdbDefault`, `cdbIpDefault`). Any database-level failure is caught and logged so the collection never aborts mid-traversal.
+- **Database-focused collection path:** The `database` doc_type dispatches `collect_database_task` in `celery_worker.py`, which calls `oci_connector.get_database_details()`. This is a lighter variant of `get_infrastructure_details()` that collects DB Systems first, then restricts the VCN/subnet collection to only the VCNs actually referenced by those DB Systems (via `db_system.vcn_id`). This avoids pulling the entire network topology for reports that only care about databases while still providing enough context to render the DB System's subnet and gateway placement in the diagram.
 
 **Document generation**
 
-- **Compartment name resolution:** `generate_documentation()` accepts an explicit `compartment_name` parameter passed from the API request. This is used as the primary source for the "Cliente" field in the document header, ensuring it is always populated correctly regardless of which resource types exist in the collected data. The previous fallback logic (deriving the name from `instances[0].compartment_name`) remains as a secondary option for backwards compatibility.
+- **Compartment name resolution:** `generate_documentation()` accepts an explicit `compartment_name` parameter passed from the API request. This is used as the primary source for the compartment meta-line on the document cover page, ensuring it is always populated correctly regardless of which resource types exist in the collected data. The previous fallback logic (deriving the name from `instances[0].compartment_name`) remains as a secondary option for backwards compatibility.
+- **Singular/plural cover label:** The cover meta-line previously used a static `Cliente` / `Client` label. It now uses `Compartimento` / `Compartment` when exactly one compartment is selected and `Compartimentos` / `Compartments` when two or more are selected. The decision is made by `generate_documentation()` from the comma-separated `client_name` value (`len([p for p in client_name.split(",") if p.strip()])`), with matching i18n keys `doc.common.compartment` / `doc.common.compartments` in both the backend `DOC_STRINGS` table and the frontend `pt.json` / `en.json` locale files. The frontend document preview (`app.js::openDocPreview()`) mirrors the same logic using `Object.keys(selectedCompartments).length`. The legacy `doc.common.client` key is retained in the dictionaries for backwards compatibility but is no longer referenced in any cover or preview render path.
+- **DB Systems document section:** `_add_database_section()` in `doc_generator.py` (lines 2086-2259) renders a 5-level heading structure per DB System — **DB System → Network → DB Nodes → DB Home → Databases (with Connection strings) → Backup configuration**. Identifying fields (shape, edition, OCPUs, storage in GB, version, cluster name, time zone, license model, hostname, domain, data-guard, lifecycle state) go into the top-level "General information" table; VCN + subnet are resolved from the collected network data and rendered in the "Network" subsection so readers get the database's full network context without flipping to the networking chapter. Connection strings are pretty-printed as a key/value table under each database (not inlined into paragraph text) so they remain copy-pasteable from the generated `.docx`. This section is invoked by both the `database` doc*type (as the main body) and `full_infra` (as a chapter alongside the other resources), so a single rendering path covers both document modes. All strings are bilingual via keys under `doc.headings.db*\*`and`doc.identifier.database`in the`DOC_STRINGS` table.
 
-**Database**
+**Application database (SQLite)**
 
 - **SQLite WAL mode:** The database runs in Write-Ahead Logging mode to support concurrent reads from multiple API worker processes without blocking.
 - **Schema migrations:** `auth.init_db()` runs all `ALTER TABLE` migrations wrapped individually so a column-already-exists error on one statement does not prevent the remaining migrations from running.
@@ -1558,12 +1575,19 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 
 - **Fernet key derivation:** The `SECRET_KEY` env variable is SHA-256 hashed and base64url-encoded to produce a valid 32-byte Fernet key, regardless of the original key length.
 - **Profile active state enforcement (dual-layer):** At the API layer, `/api/start-collection` validates `is_active` before dispatching any Celery task and returns HTTP 403 if the profile is inactive. At the frontend layer, inactive profiles are shown as locked items and wizard steps are disabled, preventing the request from being formed in the first place. Both layers are required: the API guard protects against direct API calls and stale browser state; the UI guard provides immediate feedback.
-- **Collection auth enforcement (dual-layer):** `POST /api/start-collection` requires a valid Bearer token for `full_infra`, `waf_report`, and `kubernetes` collection types — the three modes that perform a full OCI compartment scan and return sensitive infrastructure data. `new_host` remains accessible without authentication. At the API layer (`main.py`), `_optional_user()` is called before the Celery task is dispatched and raises HTTP 401 if no valid token is present. At the frontend layer, `app.js` always includes the `Authorization: Bearer <token>` header via `getAuthHeaders()` on every `/start-collection` request; a 401 response triggers a toast notification and redirects the user to the login screen. Both guards are required: the API guard protects against direct API calls and automation tools; the frontend guard ensures a clean UX on session expiry.
+- **Collection auth enforcement (dual-layer):** `POST /api/start-collection` requires a valid Bearer token for `full_infra`, `database`, `waf_report`, and `kubernetes` collection types — the four modes that perform a full OCI compartment scan and return sensitive infrastructure data. `new_host` remains accessible without authentication. At the API layer (`main.py`), `_optional_user()` is called before the Celery task is dispatched and raises HTTP 401 if no valid token is present. At the frontend layer, `app.js` always includes the `Authorization: Bearer <token>` header via `getAuthHeaders()` on every `/start-collection` request; a 401 response triggers a toast notification and redirects the user to the login screen. Both guards are required: the API guard protects against direct API calls and automation tools; the frontend guard ensures a clean UX on session expiry.
 - **Permanent superadmin protection (dual-layer):** The built-in `admin` account cannot be deleted and its role cannot be downgraded — not even by itself. At the API layer, `PATCH /api/admin/users/{id}/role` checks the target username before applying any change and returns HTTP 400 if the target is `admin`. At the frontend layer, the role toggle for that row is rendered as permanently disabled with `pointer-events: none` and a tooltip explaining the restriction.
 
 **Frontend**
 
 - **Network topology diagram:** `diagram.js` renders a self-contained SVG architecture diagram from the collected `InfrastructureData`. The layout is horizontal — Cloud zone (VCNs, subnets, gateways) on the left, On-Premises zone (CPEs) on the right, with IPSec tunnels drawn as horizontal connectors between them. After rendering, the user can export a 4K PNG (canvas scale factor 4×) or click "Add to document" to insert the diagram as an image section named "Network Topology" at the start of the document. The section is injected via `window._diagramApi.addImageSection()`, which feeds directly into the existing image sections pipeline consumed by `/api/generate-document`.
+- **Multi-compartment diagram layout:** `_layCompartmentGroups()` invokes `_layVcnContainers()` once per entry in `InfrastructureData.compartments`, rendering each compartment as its own labeled zone. Cross-compartment connection accumulators (`_gwConns`, `_drgConns`) are appended (not overwritten) across the per-compartment calls so arrows between gateways/DRGs in different compartments are drawn in a single pass. The absence of `compartments[]` (empty list) falls back to single-compartment legacy mode for backwards compatibility.
+- **Deferred label rendering (z-order fix):** In `_drawGwConnections()`, all path labels — both the collapsed `N rotas` summary and individual CIDR badges — are accumulated in a local `deferredLabels[]` buffer and flushed onto `this.conn` **after** every arrow path has been pushed. This guarantees that label backgrounds mask any vertical segments of other arrows that cross them, which was previously causing stray lines to cut through the center of the badges. A similar concern drove `ARR_GAP = 20` (vs the default `LBL_GAP = 10`): arrival-zone labels are positioned with extra right-side clearance from the gateway so the arrow-head marker remains fully visible and never overlaps the label rectangle.
+- **LPG outbound cross-tenancy indicator:** When a Local Peering Gateway peer is not rendered in the diagram (e.g., the peer VCN is in a different tenancy), `_drawConnections()` draws a small outbound badge next to the LPG card. The peer identifier is resolved with a strict priority order — `peer_vcn_name` (same-tenancy, resolved backend-side) → short OCID suffix (`…abc123`) → generic `VCN Externa` / `External VCN` fallback. `peer_advertised_cidr` is intentionally **not** used here because that value is already rendered inside the LPG card and would be redundant. When `is_cross_tenancy_peering === true`, the badge also gets a small globe icon (circle + equator + meridian drawn in `#c397f6`) and a `CROSS-TENANT` caption above it — a purely visual indicator so users can identify cross-tenancy peerings without reading the text.
+- **Volume Group tree visualization:** `_layStorageRow()` renders each Volume Group as a wide container card (`NW*2 + 80` px) with a header, an info row (prominent `Backup: <policy>` shield badge + compartment pill when multi-comp), and a **1-column tree** of member volumes. Members are connected to the container via a vertical trunk line down the left side with horizontal stubs and junction dots to each member card, creating an explicit visual parent→child hierarchy. The 1-column layout (vs the previous 2-column grid) was chosen because it lets each member card span most of the container width, so full boot/block volume display names like `Boot Volume (srv_application_xyz)` fit without aggressive truncation.
+- **DB System diagram placement:** `diagram.js::_descDb()` renders each DB System as a dedicated card — edition + OCPUs in the header row, storage + node count + DB unique names in the body, and a compartment pill in the footer. During layout, DB Systems are placed **inside the subnet they belong to** via a `subnet_id` → subnet lookup in `_buildTopology()` (lines 552-561). When the subnet cannot be resolved (e.g., the DB System was collected in `database` mode with a partial network view), the card falls back to a standalone placement at the VCN level so it is still rendered. The web summary (`app.js` lines 2222-2332) renders a parallel "DB Systems" panel with a general-info table and collapsible children for DB Nodes, DB Homes, and Databases — the same hierarchy used in the `.docx`, keeping the review step and the final document consistent.
+- **NSG badges on instance cards:** Instance cards in the diagram use full-width left-aligned NSG badges rendered below the Priv/Pub IP section, with a shield icon on the left and the NSG name truncated only to fit the card width. Earlier layouts used centered, heavily-truncated chips that became unreadable when more than one NSG was attached; the current layout adapts its row count (`_nsgExtra(nsgCount)`) and card height dynamically.
+- **Web Summary volume compartment row:** `generateStorageSectionHtml(data, { isMultiComp, compBadge })` receives the multi-comp helpers from the parent scope and passes them down into `volCard()`. Each card renders an additional `Compartimento` / `Compartment` row with the color-coded `compBadge()` **only** when `isMultiComp === true`; in single-compartment mode the row is not rendered at all, keeping the card compact. Boot volumes inherit `compartment_name` from their instance, attached block volumes fall back to the instance's compartment (since `BlockVolume` does not carry its own `compartment_name` on the schema), and standalone volumes use their own `compartment_name` field directly.
 - **Wizard step dependency model:** The `setDownstreamStepsState(enabled)` function controls the `disabled` CSS class on the region, doc-type, and compartment select containers. It is called whenever the profile selection changes and on page load. Disabled selects are visually distinct and non-interactive via the existing `.disabled` class contract in `createCustomSelect`.
 - **Tooltip direction for topbar buttons:** `applyTooltips()` detects whether a button is inside `#app-topbar` and assigns `data-tooltip-pos="bottom"` automatically, so tooltips open downward and are never clipped by the top edge of the viewport.
 - **Admin table hover effects:** `transform: scale()` on action icon buttons was replaced with `filter: brightness() + box-shadow` because `scale` causes Chromium to include the transformed paint bounds in the overflow scroll calculation of the parent container, triggering a spurious horizontal scrollbar. `box-shadow` does not affect layout bounds.
