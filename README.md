@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Oracle%20Cloud-Automation-F80000?style=for-the-badge&logo=oracle" alt="OCI">
-  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/Celery-Queue-37814A?style=for-the-badge&logo=celery&logoColor=white" alt="Celery">
   <img src="https://img.shields.io/badge/Redis-Broker-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis">
@@ -75,14 +75,14 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 - **Asynchronous collection** — Celery and Redis execute OCI API calls in the background, with real-time progress feedback via polling. No page refresh needed.
 - **Multi-compartment collection** — A single collection request can target one or more compartments. Resources are aggregated into a unified dataset, the diagram renders a distinct zone per compartment, and the generated document header uses a `Compartimento` / `Compartimentos` label that pluralizes automatically based on the number of selected compartments.
 - **Interactive summary** — Before generating, the collected dataset is rendered in a collapsible panel for review and validation. In multi-compartment mode, every resource card (instances, volumes, LBs, OKE, etc.) carries a color-coded compartment badge so users can tell at a glance where each resource lives; in single-compartment mode the badges are hidden to keep the view clean.
-- **Network topology diagram** — After collection, a live SVG architecture diagram is rendered directly in the browser with a horizontal flow layout (Cloud on the left, On-Premises on the right). It renders every collected compartment as its own zone, VCNs with subnets and gateways, instances with shape/private IP/public IP labels and NSG badges, Volume Groups as container cards with a tree-style list of member volumes and a prominent backup-policy indicator, DB Systems with edition/OCPUs/storage/nodes, Local Peering Gateways with same-tenancy peer-name resolution or a cross-tenancy globe icon for peerings across tenancies, subnet→gateway arrows with collapsed `N rotas` badges for dense routing, and IPSec tunnels to the on-premises zone. The diagram can be exported as a 4K PNG or added to the document as a "Network Topology" section with a single click.
+- **Network topology diagram** — After collection, a live SVG architecture diagram is rendered directly in the browser with a horizontal flow layout (Cloud on the left, On-Premises on the right). It renders every collected compartment as its own zone, VCNs with subnets and gateways, instances with shape/private IP/public IP labels and NSG badges, Volume Groups as container cards with a tree-style list of member volumes and a prominent backup-policy indicator, DB Systems with edition/OCPUs/storage/nodes, Local Peering Gateways with same-tenancy peer-name resolution or a cross-tenancy globe icon for peerings across tenancies, subnet→gateway arrows with collapsed `N rotas` badges for dense routing, and IPSec tunnels to the on-premises zone. The diagram supports interactive zoom (mouse wheel / pinch), drag-to-pan, and touch gestures. It can be exported as a 4K PNG or added to the document as a "Network Topology" section with a single click.
 - **Visual state indicators** — Lifecycle states (`TERMINATED`, `STOPPED`, `PENDING_DELETION`) are highlighted with color in both the interface and the generated document.
 - **VPN tunnel status** — `DOWN` tunnels flagged in amber; `UP` tunnels in soft green.
 - **Full DRG and VPN coverage** — Dynamic Routing Gateways with VCN name resolution on attachments, RPCs, CPEs, and IPSec tunnels with Phase 1/2, IKE, BGP, and Oracle compliance validation.
 - **Database (DBaaS) coverage** — Bare-metal and VM DB Systems with full drill-down: DB nodes (hostname, state, fault domain), DB Homes, individual databases, PDB names, connection strings, character sets, workload type, and backup configuration (retention, window, destination). Available as a dedicated `database` document mode and also surfaced inside `full_infra` reports.
 - **WAF and Certificates** — Full WAF policies: actions, access control, rate limiting, protection rules, firewall bindings, and complete TLS certificate lifecycle (SANs, validity, stages, associations).
 - **Bilingual (PT-BR / EN)** — Interface, progress messages, and generated document are fully bilingual with instant switching.
-- **Image attachments** — Upload diagrams or screenshots to embed in the document before or after the infrastructure section.
+- **Image attachments & letterhead** — Upload diagrams or screenshots to embed in the document. Admins can configure a custom letterhead (header, footer, and cover page images) and the document font via the admin panel.
 - **Role-based access control** — Admins manage users, groups, and profiles. Regular users only see what they are permitted to see and generate.
 - **Generation history** — Per-user log of all generated documents: type, compartment, region, and timestamp.
 - **Metrics dashboard** — Time-series chart (spline/bar/pie) of generation volume by type, KPIs, and per-user breakdown. Visible to admins only.
@@ -116,7 +116,7 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 |                    | Security Lists    | Ingress/egress rules with protocol, ports, source/destination                                                                                   |
 |                    | NSGs              | Rules with name resolution                                                                                                                      |
 |                    | Route Tables      | Rules with target entity resolution (IGW, NAT, SGW, LPG, DRG)                                                                                   |
-|                    | LPGs              | Peering status, advertised CIDR, cross-tenancy flag                                                                                             |
+|                    | LPGs              | Peering status, advertised CIDR, cross-tenancy flag, peer VCN name                                                                              |
 | **Load Balancing** | Load Balancers    | Shape, IPs, listeners, backend sets, health checkers, backends                                                                                  |
 | **Security**       | WAF Policies      | Actions, access control, rate limiting, protection rules                                                                                        |
 |                    | Web App Firewalls | Instance, LB binding, enforcement point                                                                                                         |
@@ -490,13 +490,13 @@ oci-docgen/
 │   ├── js/
 │   │   ├── app.js           # Frontend logic — wizard, rendering, API calls, UI state
 │   │   └── diagram.js       # OCI architecture diagram engine — SVG layout, zoom/pan, PNG export
+│   ├── nginx.conf           # Default HTTP config
+│   ├── nginx.https.conf     # HTTPS template — copy over nginx.conf to enable TLS
 │   └── locales/
 │       ├── pt.json          # PT-BR translations
 │       └── en.json          # EN translations
 ├── docker-compose.yml
-├── nginx.conf               # Default HTTP config (used inside the frontend container)
-├── nginx.https.conf         # HTTPS template — copy over nginx.conf to enable TLS
-└── .env                     # SECRET_KEY, OCI_AUTH_METHOD, etc. (not committed)
+└── .env.example             # Template — copy to .env and fill in values
 ```
 
 ---
@@ -505,7 +505,7 @@ oci-docgen/
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - Redis running locally (`redis-server`)
 - OCI tenancy with read permissions and `~/.oci/config` configured
 
@@ -1090,7 +1090,7 @@ To activate HTTPS, copy the template over the active config and replace the doma
 
 ```bash
 # From the project root
-sed 's/YOUR_DOMAIN/your.domain.com/g' nginx.https.conf > frontend/nginx.conf
+sed 's/YOUR_DOMAIN/your.domain.com/g' frontend/nginx.https.conf > frontend/nginx.conf
 ```
 
 > If you cloned the repository and your `nginx.conf` is at the project root (not inside `frontend/`), adjust the destination path to match your structure.
@@ -1597,10 +1597,78 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 
 ## Contributing
 
-1. Fork the repository
-2. Create a branch: `git checkout -b feature/feature-name`
-3. Commit: `git commit -m 'feat: description'`
-4. Push and open a Pull Request
+Contributions are welcome! Please follow the branching strategy and commit conventions described below.
+
+### Branching Strategy
+
+This project uses a simplified **Git Flow**:
+
+```
+main          ← stable, always deployable, tagged with versions
+  └─ develop  ← integration branch; features land here first
+       ├─ feature/<name>   ← new functionality
+       ├─ fix/<name>       ← non-critical bug fixes
+       └─ hotfix/<name>    ← critical fixes branched directly from main
+```
+
+| Branch | Purpose | Merges into |
+|--------|---------|-------------|
+| `main` | Production-ready code. Every commit here represents a release. | — |
+| `develop` | Ongoing development. All features are integrated here before a release. | `main` (via PR) |
+| `feature/<name>` | Isolated development of a new capability. | `develop` (via PR) |
+| `fix/<name>` | Bug fixes that are not urgent. | `develop` (via PR) |
+| `hotfix/<name>` | Critical patches for production. Branch from `main`, not `develop`. | `main` + `develop` (via PRs) |
+
+**Rules:**
+- Never commit directly to `main`.
+- `develop` is merged into `main` when a release is ready — at that point `main` is tagged.
+- Delete branches after they are merged.
+
+### Versioning
+
+Releases on `main` are tagged with [Semantic Versioning](https://semver.org/): `vMAJOR.MINOR.PATCH`
+
+| Increment | When to use |
+|-----------|-------------|
+| `MAJOR` | Breaking changes (API incompatibility, major architectural change) |
+| `MINOR` | New backwards-compatible features (`feature/*` merged to `main`) |
+| `PATCH` | Bug fixes and small improvements (`fix/*` or `hotfix/*`) |
+
+### Commit Messages
+
+This project follows [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>: <short description>
+```
+
+| Type | When to use |
+|------|-------------|
+| `feat` | A new feature |
+| `fix` | A bug fix |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `docs` | Documentation only |
+| `style` | Formatting, whitespace — no logic change |
+| `chore` | Maintenance tasks (dependencies, configs, CI) |
+| `perf` | Performance improvement |
+
+### How to Contribute
+
+1. Fork the repository and clone it locally.
+2. Create a branch from `develop`:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b feature/your-feature-name
+   ```
+3. Make your changes and commit following the convention:
+   ```bash
+   git commit -m "feat: add support for XYZ"
+   ```
+4. Push and open a Pull Request targeting `develop` (not `main`).
+5. After review and merge, the branch is deleted automatically.
+
+> **Hotfixes only:** if the fix is critical and `develop` has unreleased work, branch from `main`, fix, and open PRs to both `main` and `develop`.
 
 ---
 
