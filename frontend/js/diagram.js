@@ -246,7 +246,7 @@ const K = {
 const C = {
   instance: '#f89e2a', lb: '#a371f7', vcn: '#2f81f7', drg: '#58a6ff',
   oke: '#4cc9f0', waf: '#f85149', cert: '#d4a017', ipsec: '#d29922',
-  cpe: '#848d97', vol: '#3fb950', vg: '#3fb950', subnet: '#388bfd',
+  cpe: '#848d97', vol: '#3fb950', vg: '#3fb950', db: '#4dabf7', subnet: '#388bfd',
   lpg: '#3fb950', nsg: '#e3b341', rt: '#58a6ff', sl: '#d29922',
   igw: '#3fb950', nat: '#f0883e', sgw: '#a371f7', rpc: '#4cc9f0',
   // Public/private subnet differentiation
@@ -416,6 +416,11 @@ class OciDiagram {
   }
 
   _diagramTitle() {
+    const comps = this.d.compartments || [];
+    if (comps.length > 1) {
+      const names = comps.map(c => c.name).join(' · ');
+      return `${_i('Multi-Compartimento', 'Multi-Compartment')}: ${names}`;
+    }
     return _i('Topologia de Rede', 'Network Topology');
   }
 
@@ -454,7 +459,7 @@ class OciDiagram {
     const vcns = (D.vcns || []).map(vcn => {
       const subMap = {};
       (vcn.subnets || []).forEach(sub => {
-        subMap[sub.id] = { subnet: sub, instances: [], lbs: [], oke_pools: [] };
+        subMap[sub.id] = { subnet: sub, instances: [], lbs: [], oke_pools: [], databases: [] };
       });
       return { vcn, subMap, drg: null, unplaced: [], lpgs: vcn.lpgs || [] };
     });
@@ -543,6 +548,18 @@ class OciDiagram {
       }
     });
 
+    // Place DB Systems
+    (D.db_systems || []).forEach(dbs => {
+      if (dbs.subnet_id && subToVcn[dbs.subnet_id] !== undefined) {
+        const vi = subToVcn[dbs.subnet_id];
+        if (vcns[vi].subMap[dbs.subnet_id]) {
+          vcns[vi].subMap[dbs.subnet_id].databases.push(dbs);
+        }
+      } else if (dbs.vcn_id && vcnIdMap[dbs.vcn_id] !== undefined) {
+        vcns[vcnIdMap[dbs.vcn_id]].unplaced.push({ type: 'db', data: dbs });
+      }
+    });
+
     // Attach DRGs from vcn_topology
     vcns.forEach(v => {
       const vt = (D.vcn_topology || []).find(t => t.vcn && t.vcn.id === v.vcn.id);
@@ -570,7 +587,24 @@ class OciDiagram {
       || ipsecs.length || cpes.length || storage.length || (D.kubernetes_clusters || []).length;
     if (!hasContent) return null;
 
-    return { edge, vcns, floatingLbs, floatingInstances, ipsecs, cpes, storage };
+    // Group VCNs by compartment for multi-compartment layout
+    const comps = D.compartments || [];
+    let compartmentGroups = null;
+    if (comps.length > 1) {
+      compartmentGroups = comps.map(comp => ({
+        comp,
+        vcns: vcns.filter(v => v.vcn.compartment_name === comp.name),
+      })).filter(g => g.vcns.length > 0);
+      // Catch-all for VCNs without compartment_name
+      const groupedIds = new Set(compartmentGroups.flatMap(g => g.vcns.map(v => v.vcn.id)));
+      const ungrouped = vcns.filter(v => !groupedIds.has(v.vcn.id));
+      if (ungrouped.length > 0) {
+        compartmentGroups.push({ comp: { id: '', name: _i('Outros', 'Others') }, vcns: ungrouped });
+      }
+      if (compartmentGroups.length < 2) compartmentGroups = null; // fallback to flat layout
+    }
+
+    return { edge, vcns, floatingLbs, floatingInstances, ipsecs, cpes, storage, compartmentGroups, comps };
   }
 
   _ipInCidr(ip, cidr) {
@@ -599,8 +633,8 @@ class OciDiagram {
     const vcnMaxW = topo.vcns.length > 0 ? this._measureVcnMaxWidth(topo.vcns) : 300;
     const vcnLayoutW = vcnMaxW;  // VCNs laid out at their natural width
 
-    // IPSec column: positioned right after VCN content (60px gap)
-    const ipsecGap   = hasIpsec ? HGAP * 3 : 0;
+    // IPSec column: positioned right after VCN content (100px gap for breathing room)
+    const ipsecGap   = hasIpsec ? HGAP * 5 : 0;
     const ipsecColX  = MARG + vcnMaxW + ipsecGap;
     const ipsecRightX = hasIpsec ? ipsecColX + NW : MARG + vcnMaxW;
 
@@ -626,10 +660,20 @@ class OciDiagram {
       y += VGAP;
     }
 
-    // 3) VCN containers
+    // 3) VCN containers — flat or grouped by compartment
+    // Initialize connection accumulators BEFORE any _layVcnContainers call (which may happen
+    // multiple times via _layCompartmentGroups). Each call APPENDS — never overwrites.
+    this._gwConns  = [];
+    this._drgConns = [];
+    this._drgVcnMap = {};
+
     let vcnEndY = y;
     if (topo.vcns.length) {
-      vcnEndY = this._layVcnContainers(topo.vcns, MARG, y, vcnLayoutW);
+      if (topo.compartmentGroups) {
+        vcnEndY = this._layCompartmentGroups(topo.compartmentGroups, MARG, y, vcnLayoutW);
+      } else {
+        vcnEndY = this._layVcnContainers(topo.vcns, MARG, y, vcnLayoutW);
+      }
       vcnEndY += VGAP;
     }
 
@@ -815,8 +859,10 @@ class OciDiagram {
 
 
   // Pre-measure VCN max width (without rendering)
+  // Must use the same dynGap formula as _layVcnContainers so ipsecColX is placed
+  // after the full DRG column and not overlapping it.
   _measureVcnMaxWidth(vcnTopos) {
-    const { VCN_PAD, SUB_PAD, SUB_MIN_W, NW, HGAP, GW_NW, ARROW_GAP } = K;
+    const { VCN_PAD, SUB_PAD, SUB_MIN_W, NW, HGAP, GW_NW } = K;
     return vcnTopos.reduce((maxW, vt) => {
       const subnets = Object.values(vt.subMap);
       const gateways = this._extractVcnGateways(vt.vcn);
@@ -828,7 +874,9 @@ class OciDiagram {
         const innerW = cols * NW + (cols - 1) * HGAP;
         return Math.max(m, Math.max(SUB_MIN_W, innerW + SUB_PAD * 2));
       }, SUB_MIN_W);
-      const gwColW = gateways.length > 0 ? GW_NW + ARROW_GAP : 0;
+      // Use same formula as _layVcnContainers: dynGap = max(280, 160 + 3*22 + n*8)
+      const dynGap = gateways.length > 0 ? Math.max(280, 226 + gateways.length * 8) : 0;
+      const gwColW = gateways.length > 0 ? GW_NW + dynGap : 0;
       const vcnW = Math.max(maxSubW + gwColW + VCN_PAD * 2, 400);
       return Math.max(maxW, vcnW);
     }, 200);
@@ -872,8 +920,11 @@ class OciDiagram {
         const badgeItemCount = (hasRt ? 1 : 0) + slCount;
         const badgeRows = hasMeta ? Math.ceil(badgeItemCount / 3) : 0;
         const metaH = badgeRows > 0 ? badgeRows * (META_BADGE_H + 2) + 8 : 0;
-        const subH = SUB_HDR + metaH + SUB_PAD + rows * (NH + 10) - (count > 0 ? 10 : 0) + SUB_PAD;
-        return { ...s, subW, subH, cols, count, metaH };
+        // Extra height per instance for NSG badges stacked vertically
+        const maxNsgExtra = s.instances.reduce((m, inst) =>
+          Math.max(m, this._nsgExtra((inst.network_security_groups || []).length)), 0);
+        const subH = SUB_HDR + metaH + SUB_PAD + rows * (NH + 10 + maxNsgExtra) - (count > 0 ? 10 : 0) + SUB_PAD;
+        return { ...s, subW, subH, cols, count, metaH, maxNsgExtra };
       });
 
       // v7: Subnets stacked vertically (one column)
@@ -892,8 +943,8 @@ class OciDiagram {
         });
       }
       const maxR = Math.min(3, Math.max(1, ...Object.values(routesByGw)));
-      // gap = CIDR label width (~110px) + stagger room (maxR routes × 22px) + per-gateway breathing room
-      const dynGap = Math.max(150, 90 + maxR * 22 + gateways.length * 8);
+      // gap = CIDR label width (~240px) + stagger room (maxR routes × 22px) + per-gateway breathing room
+      const dynGap = Math.max(280, 160 + maxR * 22 + gateways.length * 8);
 
       // Gateway column dimensions — DRG is last in the same column
       const gwColW = gateways.length > 0 ? GW_NW + dynGap : 0;
@@ -938,9 +989,14 @@ class OciDiagram {
         rpcCount, contentH, unusedRts, unusedSls, unusedNsgs, unusedNetH };
     });
 
-    // Store gateway and DRG connections for _drawConnections()
-    this._gwConns = measured.flatMap(m => m.gwConns || []);
-    this._drgConns = [];
+    // ACCUMULATE gateway and DRG connections — _layVcnContainers may be called multiple times
+    // (once per compartment via _layCompartmentGroups). We APPEND to the arrays initialised
+    // in _layoutTopology, never overwrite them.
+    if (!Array.isArray(this._gwConns))  this._gwConns  = [];
+    if (!Array.isArray(this._drgConns)) this._drgConns = [];
+    if (!this._drgVcnMap)               this._drgVcnMap = {};
+
+    this._gwConns.push(...measured.flatMap(m => m.gwConns || []));
     measured.forEach(m => {
       if (!m.hasDrg) return;
       const drgId = m.vt.drg.id;
@@ -949,13 +1005,11 @@ class OciDiagram {
         rules.forEach(rule => {
           const type = this._gwShort(rule.target);
           if (type === 'DRG') {
-            this._drgConns.push({ subnetId: s.subnet.id, drgId, destination: rule.destination });
+            this._drgConns.push({ subnetId: s.subnet.id, drgId, destination: rule.destination, vcnId: m.vt.vcn.id });
           }
         });
       });
     });
-    // Map each DRG id to the VCN DRG uid (for connection lookup after column render)
-    this._drgVcnMap = {};
     measured.forEach(m => {
       if (m.hasDrg) this._drgVcnMap[m.vt.drg.id] = m.vt.drg.id;
     });
@@ -969,6 +1023,46 @@ class OciDiagram {
       vy += h + K.VCN_GAP;
     });
     return vy - K.VCN_GAP;
+  }
+
+
+  // Compartment grouping boxes — one dashed-border rect per compartment, stacked vertically
+  _layCompartmentGroups(groups, x, y, totalW) {
+    const COMP_PAD = 20;
+    const COMP_HDR = 38;
+    const COMP_GAP = 44;
+    const { FN, VGAP } = K;
+    const PALETTE = ['#7c3aed', '#0d9488', '#d97706', '#16a34a', '#e11d48'];
+
+    let curY = y;
+
+    groups.forEach((group, idx) => {
+      if (group.vcns.length === 0) return;
+
+      const color = PALETTE[idx % PALETTE.length];
+      const innerX = x + COMP_PAD;
+      const innerY = curY + COMP_HDR + COMP_PAD;
+      const innerW = totalW - COMP_PAD * 2;
+
+      // Record bgs length so the compartment rect can be inserted beneath VCN content
+      const bgsBefore = this.bgs.length;
+
+      // Render VCNs inside the compartment box
+      const vcnEndY = this._layVcnContainers(group.vcns, innerX, innerY, innerW);
+      const compH = vcnEndY - curY + COMP_PAD;
+
+      // Insert compartment rect behind VCN content (splice at saved position)
+      this.bgs.splice(bgsBefore, 0,
+        `<rect x="${x}" y="${curY}" width="${totalW}" height="${compH}" rx="16"
+          style="fill:${color};fill-opacity:0.04;stroke:${color};stroke-width:2;stroke-dasharray:10,5;"/>
+        <text x="${x + COMP_PAD + 6}" y="${curY + COMP_HDR / 2 + 5}"
+          style="font:700 ${FN + 1}px/1 'Inter',sans-serif;fill:${color};letter-spacing:.08em;opacity:0.85;">&#9632; ${this._esc(group.comp.name.toUpperCase())}</text>`
+      );
+
+      curY = vcnEndY + COMP_PAD + COMP_GAP;
+    });
+
+    return curY - COMP_GAP;
   }
 
 
@@ -1169,11 +1263,13 @@ class OciDiagram {
     const startX = x + (w - rowW) / 2;
     const startY = badgeY + SUB_PAD - 2;
 
+    const rowExtra = sub.maxNsgExtra || 0;
     allItems.forEach((node, i) => {
       const nx = startX + (i % cols) * (NW + HGAP);
-      const ny = startY + Math.floor(i / cols) * (NH + 10);
+      const ny = startY + Math.floor(i / cols) * (NH + 10 + rowExtra);
+      const nodeH = node.kind === 'instance' ? NH + this._nsgExtra((node.nsgNames || []).length) : NH;
       this.els.push(this._nodeCard(nx, ny, node));
-      this._pos[node.id] = { cx: nx+NW/2, cy: ny+NH/2, x: nx, y: ny, w: NW, h: NH };
+      this._pos[node.id] = { cx: nx+NW/2, cy: ny+nodeH/2, x: nx, y: ny, w: NW, h: nodeH };
     });
   }
 
@@ -1256,17 +1352,167 @@ class OciDiagram {
   }
 
 
-  // Storage Row
+  // Storage Row — Volume Groups rendered as containers with member children;
+  // standalone volumes rendered as regular cards
   _layStorageRow(items, x, y, w) {
-    const nodes = items.map(item => {
-      if (item.type === 'vg') {
-        const v = item.data;
-        return { id: v.id, kind: 'vg', label: this._t(v.display_name, 18), sub: `${v.members?.length||0} volumes`, status: v.lifecycle_state };
-      }
+    const { NW, NH, HGAP, FT, FN, FS, NR } = K;
+    const isMulti = (this.d.compartments || []).length > 1;
+    const clr = C.vol;
+
+    // Separate VGs from standalone volumes
+    const vgs = items.filter(i => i.type === 'vg');
+    const vols = items.filter(i => i.type === 'vol');
+
+    // Standalone volumes → regular node cards
+    const volNodes = vols.map(item => {
       const v = item.data;
-      return { id: v.id, kind: 'vol', label: this._t(v.display_name, 18), sub: `${v.size_in_gbs||0} GB`, status: v.lifecycle_state };
+      const compLabel = isMulti && v.compartment_name ? v.compartment_name : '';
+      return {
+        id: v.id, kind: 'vol',
+        label: this._t(v.display_name, 18),
+        sub: `${v.size_in_gbs||0} GB`,
+        sub3: compLabel || undefined,
+        status: v.lifecycle_state,
+        backupPolicy: v.backup_policy_name,
+      };
     });
-    return this._layFloatingRow(nodes, x, y, w, _i('ARMAZENAMENTO', 'STORAGE'), C.vol);
+
+    // Measure total height needed
+    // VG containers: header(36) + info-row(22) + member rows(30 each, 1 column) + padding(12)
+    const MEMBER_H = 30, MEMBER_GAP = 6, VG_PAD = 12, VG_HDR = 36, VG_INFO = 22;
+    const vgMeasured = vgs.map(item => {
+      const v = item.data;
+      const members = v.members || [];
+      const memberAreaH = members.length > 0
+        ? members.length * (MEMBER_H + MEMBER_GAP) - MEMBER_GAP
+        : 10;
+      const h = VG_HDR + VG_INFO + VG_PAD + memberAreaH + VG_PAD;
+      return { data: v, members, h, isMulti };
+    });
+    // 1-column stacked VG layout: total height = sum of all VGs
+    const vgTotalH = vgMeasured.reduce((s, v, i) => s + v.h + (i > 0 ? 12 : 0), 0);
+    const volRows = Math.ceil(volNodes.length / Math.max(1, Math.floor((w + HGAP) / (NW + HGAP))));
+    const volH = volNodes.length > 0 ? volRows * (NH + 10) - 10 : 0;
+    const contentH = Math.max(vgTotalH, volNodes.length > 0 ? NH : 0) + (vgTotalH > 0 && volH > 0 ? 14 : 0) + (vgTotalH > 0 ? 0 : volH);
+    const zoneH = K.ZONE_HDR + K.ZONE_PY + contentH + K.ZONE_PY;
+    this.bgs.push(this._zoneBg(x, y, w, zoneH, clr, _i('ARMAZENAMENTO', 'STORAGE')));
+
+    let cy = y + K.ZONE_HDR + K.ZONE_PY;
+
+    // Render VG containers — one per row, wider, with full member names
+    if (vgMeasured.length > 0) {
+      // Wider than 2*NW so long boot-volume names fit
+      const vgW = Math.min(NW * 2 + HGAP + 80, w - 20);
+      const vgX = x + (w - vgW) / 2;
+
+      vgMeasured.forEach((vg, vi) => {
+        const h = vg.h;
+        const v = vg.data;
+        const compLabel = isMulti && v.compartment_name ? v.compartment_name : '';
+        const hasBackup = v.validation?.policy_name && v.validation.policy_name !== 'Nenhuma' && v.validation.policy_name !== 'N/A';
+
+        // Container background — card with tinted header strip and accent bar
+        this.els.push(
+          `<rect x="${vgX}" y="${cy}" width="${vgW}" height="${h}" rx="8" style="fill:var(--bg-card);stroke:${clr};stroke-width:1.3;stroke-opacity:0.55;"/>` +
+          `<rect x="${vgX}" y="${cy}" width="${vgW}" height="${VG_HDR}" rx="8" style="fill:${clr};fill-opacity:0.10;"/>` +
+          `<rect x="${vgX}" y="${cy+VG_HDR-8}" width="${vgW}" height="8" style="fill:${clr};fill-opacity:0.10;"/>` +
+          `<rect x="${vgX}" y="${cy+VG_HDR-1}" width="${vgW}" height="1" style="fill:${clr};fill-opacity:0.32;"/>` +
+          `<rect x="${vgX}" y="${cy}" width="4" height="${h}" rx="2" style="fill:${clr};opacity:0.8;"/>`
+        );
+
+        // Header: icon + VG name + member count
+        const icoS = 18;
+        this.els.push(
+          `<g transform="translate(${vgX+12},${cy+VG_HDR/2-icoS/2}) scale(${icoS/28})" style="color:${clr};">${SVG_ICONS.vg || SVG_ICONS.vol}</g>` +
+          `<text x="${vgX+36}" y="${cy+VG_HDR/2+5}" style="font:700 ${FN+1}px/1 'Inter',sans-serif;fill:var(--text-primary);">${this._esc(this._t(v.display_name, 32))}</text>` +
+          `<text x="${vgX+vgW-12}" y="${cy+VG_HDR/2+5}" text-anchor="end" style="font:700 ${FT}px/1 'Inter',sans-serif;fill:${clr};opacity:0.85;">${vg.members.length} vol${vg.members.length !== 1 ? 's' : ''}</text>`
+        );
+
+        // Info row: backup (prominent) + compartment
+        const infoY = cy + VG_HDR + 4;
+        let ix = vgX + 12;
+        if (hasBackup) {
+          const policy = this._t(v.validation.policy_name, 28);
+          const lbl = `${_i('Backup', 'Backup')}: ${policy}`;
+          const tw = Math.min(lbl.length * 5.3 + 20, vgW * 0.62);
+          // Shield icon + text
+          this.els.push(
+            `<rect x="${ix}" y="${infoY}" width="${tw}" height="14" rx="3" style="fill:#58a6ff;fill-opacity:0.16;stroke:#58a6ff;stroke-width:0.8;stroke-opacity:0.55;"/>` +
+            `<path d="M${ix+5},${infoY+3} L${ix+9},${infoY+3} L${ix+9},${infoY+8} Q${ix+9},${infoY+11} ${ix+7},${infoY+12} Q${ix+5},${infoY+11} ${ix+5},${infoY+8} Z" style="fill:#58a6ff;fill-opacity:0.85;"/>` +
+            `<text x="${ix+14}" y="${infoY+10}" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:#58a6ff;opacity:0.95;">${this._esc(lbl)}</text>`
+          );
+          ix += tw + 6;
+        } else {
+          const lbl = _i('Sem Backup', 'No Backup');
+          const tw = lbl.length * 5.3 + 18;
+          this.els.push(
+            `<rect x="${ix}" y="${infoY}" width="${tw}" height="14" rx="3" style="fill:#e3b341;fill-opacity:0.16;stroke:#e3b341;stroke-width:0.8;stroke-opacity:0.55;"/>` +
+            `<path d="M${ix+7},${infoY+3} L${ix+10},${infoY+9} L${ix+4},${infoY+9} Z" style="fill:#e3b341;fill-opacity:0.85;"/>` +
+            `<text x="${ix+14}" y="${infoY+10}" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:#e3b341;opacity:0.95;">${this._esc(lbl)}</text>`
+          );
+          ix += tw + 6;
+        }
+        if (compLabel) {
+          const lbl = this._t(compLabel, 22);
+          const tw = Math.min(lbl.length * 5.1 + 14, vgW - (ix - vgX) - 12);
+          this.els.push(
+            `<rect x="${ix}" y="${infoY}" width="${tw}" height="14" rx="3" style="fill:${clr};fill-opacity:0.14;stroke:${clr};stroke-width:0.7;stroke-opacity:0.5;"/>` +
+            `<text x="${ix+tw/2}" y="${infoY+10}" text-anchor="middle" style="font:500 ${FT}px/1 'Inter',sans-serif;fill:${clr};opacity:0.9;">${this._esc(lbl)}</text>`
+          );
+        }
+
+        // Member mini-cards — 1 column, full width, with parent-child tree lines
+        const mStartY = cy + VG_HDR + VG_INFO + VG_PAD;
+        const treeX = vgX + VG_PAD + 8;                    // trunk X
+        const cardX = treeX + 14;                          // member card X (after stub)
+        const cardW = vgW - VG_PAD - (cardX - vgX) - VG_PAD;
+
+        if (vg.members.length > 0) {
+          const lastCenterY = mStartY + (vg.members.length - 1) * (MEMBER_H + MEMBER_GAP) + MEMBER_H / 2;
+          // Tree trunk: vertical line from just below header down to last member
+          this.els.push(
+            `<line x1="${treeX}" y1="${cy+VG_HDR+VG_INFO+2}" x2="${treeX}" y2="${lastCenterY}" style="stroke:${clr};stroke-width:1.3;stroke-opacity:0.55;"/>`
+          );
+        }
+
+        vg.members.forEach((m, mi) => {
+          const mmy = mStartY + mi * (MEMBER_H + MEMBER_GAP);
+          const centerY = mmy + MEMBER_H / 2;
+          const maxChars = Math.floor((cardW - 36) / 5.6);
+          const mName = this._t(m, Math.max(10, maxChars));
+          // Horizontal stub from trunk to card + junction dot
+          this.els.push(
+            `<line x1="${treeX}" y1="${centerY}" x2="${cardX-2}" y2="${centerY}" style="stroke:${clr};stroke-width:1.3;stroke-opacity:0.55;"/>` +
+            `<circle cx="${treeX}" cy="${centerY}" r="2.2" style="fill:${clr};opacity:0.85;"/>`
+          );
+          // Full-width member card
+          this.els.push(
+            `<rect x="${cardX}" y="${mmy}" width="${cardW}" height="${MEMBER_H}" rx="5" style="fill:var(--bg-main);stroke:${clr};stroke-width:0.8;stroke-opacity:0.5;"/>` +
+            `<g transform="translate(${cardX+8},${centerY-7}) scale(${14/28})" style="color:${clr};opacity:0.8;">${SVG_ICONS.vol}</g>` +
+            `<text x="${cardX+28}" y="${centerY+4}" style="font:600 ${FT+1}px/1 'Inter',sans-serif;fill:var(--text-primary);opacity:0.92;">${this._esc(mName)}</text>`
+          );
+        });
+
+        this._pos[v.id] = { cx: vgX+vgW/2, cy: cy+h/2, x: vgX, y: cy, w: vgW, h };
+        cy += h + (vi < vgMeasured.length - 1 ? 12 : 0);
+      });
+      if (volNodes.length > 0) cy += 14;
+    }
+
+    // Render standalone volumes as normal cards
+    if (volNodes.length > 0) {
+      const pr = Math.max(1, Math.min(volNodes.length, Math.floor((w + HGAP) / (NW + HGAP))));
+      const rowW = pr * NW + (pr - 1) * HGAP;
+      const startX = x + (w - rowW) / 2;
+      volNodes.forEach((node, i) => {
+        const nx = startX + (i % pr) * (NW + HGAP);
+        const ny = cy + Math.floor(i / pr) * (NH + 10);
+        this.els.push(this._nodeCard(nx, ny, node));
+        this._pos[node.id] = { cx: nx + NW/2, cy: ny + NH/2, x: nx, y: ny, w: NW, h: NH };
+      });
+    }
+
+    return y + zoneH;
   }
 
 
@@ -1305,79 +1551,75 @@ class OciDiagram {
       });
     });
 
-    // DRG → IPSecs: L-shaped arrows, spread midX lanes + line-jump arcs at crossings
-    const ipsecsByDrg = {};
-    (D.ipsec_connections || []).forEach(ipsec => {
-      if (!ipsec.drg_id) return;
-      const ip = this._pos[ipsec.id];
-      const dp = this._pos[ipsec.drg_id];
-      if (!ip || !dp) return;
-      if (!ipsecsByDrg[ipsec.drg_id]) ipsecsByDrg[ipsec.drg_id] = { dp, items: [] };
-      ipsecsByDrg[ipsec.drg_id].items.push({ ip, ipsec });
-    });
-    Object.values(ipsecsByDrg).forEach(({ dp, items }) => {
-      if (!items.length) return;
-      items.sort((a, b) => a.ip.cy - b.ip.cy);
-      const n = items.length;
-      const gap = items[0].ip.x - dp.x - dp.w;
-      const SPREAD = 12, JR = 4;
-      // Base midX starts at 30% into the gap; each path gets its own lane
-      const baseMidX = Math.round(dp.x + dp.w + gap * 0.30);
-
-      // Pre-compute per-item midX and departure Y
-      const lanes = items.map(({ ip }, idx) => ({
-        ip,
-        departY: Math.round(dp.cy + (idx - (n - 1) / 2) * 9),
-        midX: baseMidX + idx * SPREAD
-      }));
-
-      // Build helper: horizontal segment with upward jump arcs over crossing vertical lanes
-      const hSeg = (x2, y, jumpXs) => {
-        if (!jumpXs.length) return ` L${x2},${y}`;
-        let s = '';
-        jumpXs.forEach(jx => {
-          s += ` L${jx - JR},${y} A${JR},${JR},0,0,0,${jx + JR},${y}`;
-        });
-        return s + ` L${x2},${y}`;
-      };
-
-      lanes.forEach((lane, idx) => {
-        const { ip, departY, midX } = lane;
-
-        // H1 crossings: does this H1 (drgRight→midX at departY) cross any other vertical?
-        const h1J = [];
-        lanes.forEach((other, j) => {
-          if (j === idx) return;
-          const vx = other.midX;
-          if (vx <= dp.x + dp.w || vx >= midX) return;
-          const vlo = Math.min(other.departY, other.ip.cy);
-          const vhi = Math.max(other.departY, other.ip.cy);
-          if (departY > vlo + 1 && departY < vhi - 1) h1J.push(vx);
-        });
-        h1J.sort((a, b) => a - b);
-
-        // H2 crossings: does this H2 (midX→ipsecLeft at ip.cy) cross any other vertical?
-        const h2J = [];
-        lanes.forEach((other, j) => {
-          if (j === idx) return;
-          const vx = other.midX;
-          if (vx <= midX || vx >= ip.x) return;
-          const vlo = Math.min(other.departY, other.ip.cy);
-          const vhi = Math.max(other.departY, other.ip.cy);
-          if (ip.cy > vlo + 1 && ip.cy < vhi - 1) h2J.push(vx);
-        });
-        h2J.sort((a, b) => a - b);
-
-        const d = `M${dp.x + dp.w},${departY}` +
-                  hSeg(midX,  departY, h1J) +
-                  ` L${midX},${ip.cy}` +
-                  hSeg(ip.x,  ip.cy,   h2J);
-
-        this.conn.push(
-          `<path d="${d}" style="fill:none;stroke:${C.drg};stroke-width:1.8;stroke-opacity:0.65;stroke-dasharray:6,3;" marker-end="url(#arch-arr-blue)"/>`
-        );
+    // DRG → IPSecs: global lane assignment across ALL DRGs so lanes never overlap
+    {
+      const allDrgIpsecLanes = [];
+      const ipsecsByDrg = {};
+      (D.ipsec_connections || []).forEach(ipsec => {
+        if (!ipsec.drg_id) return;
+        const ip = this._pos[ipsec.id];
+        const dp = this._pos[ipsec.drg_id];
+        if (!ip || !dp) return;
+        if (!ipsecsByDrg[ipsec.drg_id]) ipsecsByDrg[ipsec.drg_id] = { dp, items: [] };
+        ipsecsByDrg[ipsec.drg_id].items.push({ ip });
       });
-    });
+
+      if (Object.keys(ipsecsByDrg).length > 0) {
+        const SPREAD = 11, JR = 4;
+        // Shared midX base: right edge of all DRGs → left edge of all IPSec nodes
+        const drgRightEdge = Math.max(...Object.values(ipsecsByDrg).map(({ dp }) => dp.x + dp.w));
+        const ipsecLeftEdge = Math.min(...Object.values(ipsecsByDrg).flatMap(({ items }) => items.map(it => it.ip.x)));
+        const sharedGap = ipsecLeftEdge - drgRightEdge;
+        const baseMidX = Math.round(drgRightEdge + sharedGap * 0.15);
+
+        // Build flat lane list; stagger departures within each DRG, sort globally by IPSec Y
+        Object.values(ipsecsByDrg).forEach(({ dp, items }) => {
+          items.sort((a, b) => a.ip.cy - b.ip.cy);
+          const n = items.length;
+          items.forEach(({ ip }, idx) => {
+            allDrgIpsecLanes.push({
+              dp, ip,
+              departY: Math.round(dp.cy + (idx - (n - 1) / 2) * 8),
+            });
+          });
+        });
+        // Sort by target IPSec Y so lane indices follow visual top-to-bottom order
+        allDrgIpsecLanes.sort((a, b) => a.ip.cy - b.ip.cy);
+
+        // Cap spread so midX never overshoots ipsecLeftEdge (which would reverse arrow direction)
+        const nLanes = allDrgIpsecLanes.length;
+        const maxSpread = nLanes > 1 ? Math.floor((sharedGap * 0.70) / (nLanes - 1)) : SPREAD;
+        const actualSpread = Math.min(SPREAD, maxSpread);
+        allDrgIpsecLanes.forEach((lane, i) => {
+          lane.midX = Math.min(baseMidX + i * actualSpread, ipsecLeftEdge - 12);
+        });
+
+        const hSeg = (x2, y, jumpXs) => {
+          if (!jumpXs.length) return ` L${x2},${y}`;
+          let s = '';
+          jumpXs.forEach(jx => { s += ` L${jx-JR},${y} A${JR},${JR},0,0,0,${jx+JR},${y}`; });
+          return s + ` L${x2},${y}`;
+        };
+
+        // Use index-based loop to reliably skip self (indexOf on objects is unreliable)
+        allDrgIpsecLanes.forEach(({ dp, ip, departY, midX }, selfIdx) => {
+          const h1J = [], h2J = [];
+          allDrgIpsecLanes.forEach((other, j) => {
+            if (j === selfIdx) return;
+            const vx = other.midX;
+            const vlo = Math.min(other.departY, other.ip.cy), vhi = Math.max(other.departY, other.ip.cy);
+            if (vx > dp.x + dp.w && vx < midX && departY > vlo + 1 && departY < vhi - 1) h1J.push(vx);
+            if (vx > midX && vx < ip.x && ip.cy > vlo + 1 && ip.cy < vhi - 1) h2J.push(vx);
+          });
+          h1J.sort((a,b)=>a-b); h2J.sort((a,b)=>a-b);
+          const d = `M${dp.x+dp.w},${departY}` +
+                    hSeg(midX, departY, h1J) +
+                    ` L${midX},${ip.cy}` +
+                    hSeg(ip.x, ip.cy, h2J);
+          this.conn.push(`<path d="${d}" style="fill:none;stroke:${C.drg};stroke-width:1.8;stroke-opacity:0.65;stroke-dasharray:6,3;" marker-end="url(#arch-arr-blue)"/>`);
+        });
+      }
+    }
     // IPSec → CPE tunnel: drawn by _layOnPremCpes as horizontal line
 
     // OKE → VCN
@@ -1390,6 +1632,102 @@ class OciDiagram {
         if (op && vp) this.conn.push(this._orthoV(op.cx, op.y+op.h, vp.cx, vp.y, C.oke, 'arch-arr-cyan'));
       }
     });
+
+    // LPG → LPG peering connections (cross-compartment or intra-VCN)
+    {
+      const allLpgs = [];
+      (D.vcns || []).forEach(vcn => (vcn.lpgs || []).forEach(lpg => allLpgs.push(lpg)));
+      (D.vcn_topology || []).forEach(vt => ((vt.vcn && vt.vcn.lpgs) || []).forEach(lpg => allLpgs.push(lpg)));
+      const drawnPairs = new Set();
+      const seenIds = new Set();
+      // Deduplicate (vcn_topology + vcns may overlap)
+      const uniqLpgs = allLpgs.filter(l => { if (seenIds.has(l.id)) return false; seenIds.add(l.id); return true; });
+
+      uniqLpgs.forEach(lpg => {
+        if (!lpg.peer_id) return;
+        const pairKey = [lpg.id, lpg.peer_id].sort().join('|');
+        if (drawnPairs.has(pairKey)) return;
+        drawnPairs.add(pairKey);
+
+        const p1 = this._pos['lpg_' + lpg.id];
+        const p2 = this._pos['lpg_' + lpg.peer_id];
+
+        if (p1 && p2) {
+          // Both LPGs rendered — draw connection between them
+          const isPeered = lpg.peering_status === 'PEERED';
+          const clr = isPeered ? C.lpg : '#e3b341';
+          const dash = isPeered ? '' : 'stroke-dasharray:6,3;';
+          // Vertical orthogonal line from bottom of one LPG to top of the other
+          const [top, bot] = p1.cy < p2.cy ? [p1, p2] : [p2, p1];
+          const midY = Math.round((top.y + top.h + bot.y) / 2);
+          this.conn.push(
+            `<path d="M${top.cx},${top.y+top.h} L${top.cx},${midY} L${bot.cx},${midY} L${bot.cx},${bot.y}" ` +
+            `style="fill:none;stroke:${clr};stroke-width:2;stroke-opacity:0.7;${dash}" marker-end="url(#arch-arr-green)"/>` +
+            `<circle cx="${top.cx}" cy="${top.y+top.h}" r="3.5" style="fill:${clr};"/>` +
+            `<circle cx="${bot.cx}" cy="${bot.y}" r="3.5" style="fill:${clr};"/>`
+          );
+          // Label at midpoint
+          const lbl = isPeered ? 'PEERED' : lpg.peering_status || 'PENDING';
+          const tw = lbl.length * 5.5 + 12;
+          const mx = Math.round((top.cx + bot.cx) / 2);
+          this.conn.push(
+            `<rect x="${mx-tw/2}" y="${midY-8}" width="${tw}" height="14" rx="3" style="fill:var(--bg-main);stroke:${clr};stroke-width:0.8;stroke-opacity:0.6;"/>` +
+            `<text x="${mx}" y="${midY+3}" text-anchor="middle" style="font:700 ${K.FT}px/1 'Inter',sans-serif;fill:${clr};opacity:0.9;">LPG \u2194 ${this._esc(lbl)}</text>`
+          );
+        } else if (p1 && !p2) {
+          // Only this LPG rendered — show outbound indicator with best available info
+          const isXT     = !!lpg.is_cross_tenancy_peering;
+          const isPeered = lpg.peering_status === 'PEERED';
+          const clr      = isXT ? '#c397f6' : (isPeered ? C.lpg : '#e3b341');
+
+          // Resolve peer identifier: VCN name > short OCID suffix > generic
+          let peerLbl;
+          if (lpg.peer_vcn_name) {
+            peerLbl = this._t(lpg.peer_vcn_name, 16);
+          } else if (lpg.peer_id) {
+            const m = String(lpg.peer_id).match(/([a-z0-9]{6})$/i);
+            peerLbl = m ? `\u2026${m[1]}` : _i('Tenant Externo', 'External Tenant');
+          } else {
+            peerLbl = _i('VCN Externa', 'External VCN');
+          }
+          const txt = `\u2192 ${peerLbl}`;
+          const bx  = p1.x + p1.w + 6;
+          const bh  = 16;
+          const by  = p1.cy - bh / 2;
+          const iconW = isXT ? 16 : 0;
+          const tw = Math.min(txt.length * 5.6 + 14 + iconW, 220);
+
+          // Cross-tenancy visual indicator: small globe icon (circle + meridian + equator)
+          let icon = '';
+          if (isXT) {
+            const r  = 5.5;
+            const cx = bx + 4 + r;
+            const cy = by + bh / 2;
+            icon =
+              `<circle cx="${cx}" cy="${cy}" r="${r}" style="fill:${clr};fill-opacity:0.25;stroke:${clr};stroke-width:1.2;"/>` +
+              `<ellipse cx="${cx}" cy="${cy}" rx="${r*0.55}" ry="${r}" style="fill:none;stroke:${clr};stroke-width:1;stroke-opacity:0.9;"/>` +
+              `<line x1="${cx-r}" y1="${cy}" x2="${cx+r}" y2="${cy}" style="stroke:${clr};stroke-width:1;stroke-opacity:0.9;"/>` +
+              `<line x1="${cx}" y1="${cy-r}" x2="${cx}" y2="${cy+r}" style="stroke:${clr};stroke-width:1;stroke-opacity:0.9;"/>`;
+          }
+
+          const textX = isXT ? (bx + 18) : (bx + tw / 2);
+          const textAnchor = isXT ? 'start' : 'middle';
+
+          this.conn.push(
+            `<rect x="${bx}" y="${by}" width="${tw}" height="${bh}" rx="3" style="fill:${clr};fill-opacity:0.12;stroke:${clr};stroke-width:0.8;stroke-opacity:0.7;"/>` +
+            icon +
+            `<text x="${textX}" y="${by+bh-5}" text-anchor="${textAnchor}" style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${clr};opacity:0.95;">${this._esc(txt)}</text>`
+          );
+
+          if (isXT) {
+            // Tiny caption above badge to reinforce cross-tenant nature
+            this.conn.push(
+              `<text x="${bx}" y="${by-2}" style="font:700 8px/1 'Inter',sans-serif;fill:${clr};opacity:0.85;letter-spacing:0.08em;">CROSS-TENANT</text>`
+            );
+          }
+        }
+      });
+    }
 
     // Subnet → Gateway connections (horizontal arrows with CIDR labels)
     this._drawGwConnections();
@@ -1414,8 +1752,10 @@ class OciDiagram {
   _drawGwConnections() {
     // Merge subnet→gateway and subnet→DRG into one unified list
     const gwConns  = this._gwConns  || [];
+    // IMPORTANT: preserve vcnId so DRG connections from each VCN group separately.
+    // Without vcnId, all VCNs share key=sp.x causing cross-VCN subRightMax/gwLeft mismatch → backwards arrows.
     const drgConns = (this._drgConns || []).map(dc => ({
-      subnetId: dc.subnetId, gwKey: dc.drgId, type: 'DRG', destination: dc.destination
+      subnetId: dc.subnetId, gwKey: dc.drgId, type: 'DRG', destination: dc.destination, vcnId: dc.vcnId
     }));
     const allConns = [...gwConns, ...drgConns];
     if (!allConns.length) return;
@@ -1432,7 +1772,13 @@ class OciDiagram {
 
     if (!resolved.length) return;
 
-    const THRESHOLD = 3, SDEP = 22, SARR = 22, JR = 4, LBL_GAP = 10;
+    // LBL_GAP = gap between label and line ends on either side
+    // ARR_GAP  = extra clearance near the gateway arrow head (marker width + padding)
+    const THRESHOLD = 3, SDEP = 22, SARR = 22, JR = 4, LBL_GAP = 10, ARR_GAP = 20;
+
+    // Deferred label buffer — flushed AFTER all paths are drawn so labels mask
+    // the vertical segments of other arrows that cross them.
+    const deferredLabels = [];
 
     // Stagger Y at arrivals (by gateway, sort by subnet Y top→bottom)
     const byGw = {};
@@ -1459,14 +1805,17 @@ class OciDiagram {
       ...c, depY: depYOf[getKey(c)], arrY: arrYOf[getKey(c)]
     }));
 
-    // One fixed lane per GATEWAY TYPE per VCN (group by sp.x = same VCN start X)
+    // One fixed lane per GATEWAY TYPE per VCN — group by vcnId so compartments with
+    // the same subnet start-X don't bleed into each other's lane calculations
     const byVcn = {};
-    paths.forEach(p => { (byVcn[p.sp.x] = byVcn[p.sp.x] || []).push(p); });
+    paths.forEach(p => { const key = p.vcnId || p.sp.x; (byVcn[key] = byVcn[key] || []).push(p); });
 
     Object.values(byVcn).forEach(group => {
       const subRightMax = Math.max(...group.map(p => p.sp.x + p.sp.w));
-      const gwLeft = group[0].gp.x;
+      // Use minimum gateway X as reference so all lanes stay left of every gateway (gap always > 0)
+      const gwLeft = Math.min(...group.map(p => p.gp.x));
       const gap = gwLeft - subRightMax;
+      if (gap <= 0) { group.forEach(p => { p.midX = subRightMax + 20; p.subRightMax = subRightMax; }); return; }
       const gwKeys = [...new Set(group.map(p => p.gwKey))];
       gwKeys.sort((a, b) =>
         (group.find(p => p.gwKey === a)?.gp.y ?? 0) -
@@ -1489,11 +1838,17 @@ class OciDiagram {
       return s + ` L${x2},${y}`;
     };
 
+    // Rebuild byGw from PATHS (not resolved) so items have midX/subRightMax set by byVcn.
+    // byGw was initially built from resolved (for stagger-Y computation) but those objects
+    // are spread-cloned into paths — midX/subRightMax are added to paths items only.
+    const byGwPaths = {};
+    paths.forEach(p => { (byGwPaths[p.gwKey] = byGwPaths[p.gwKey] || []).push(p); });
+
     // Collapsed gateways → one summary arrow + count badge
     const collapsedGws = new Set(
-      Object.entries(byGw).filter(([,a]) => a.length > THRESHOLD).map(([k]) => k)
+      Object.entries(byGwPaths).filter(([,a]) => a.length > THRESHOLD).map(([k]) => k)
     );
-    Object.entries(byGw).forEach(([gwKey, arr]) => {
+    Object.entries(byGwPaths).forEach(([gwKey, arr]) => {
       if (!collapsedGws.has(gwKey)) return;
       const rep  = arr[0];
       const avgY = Math.round(arr.reduce((s, c) => s + c.sp.cy, 0) / arr.length);
@@ -1502,42 +1857,111 @@ class OciDiagram {
       const lbl  = `${arr.length} ${_i('rotas', 'routes')}`;
       const tw   = lbl.length * 5.5 + 14;
       const lx   = subRightMax + LBL_GAP + tw / 2;
+      // Path now; label deferred so it masks other arrows' vertical segments
       this.conn.push(
-        `<path d="${d}" style="fill:none;stroke:${color};stroke-width:1.8;stroke-opacity:0.72;" marker-end="url(#${marker})"/>` +
-        `<rect x="${lx-tw/2}" y="${avgY-8}" width="${tw}" height="14" rx="3" style="fill:var(--bg-main);stroke:${color};stroke-width:1;stroke-opacity:0.7;"/>` +
-        `<text x="${lx}" y="${avgY+3}" text-anchor="middle" style="font:700 ${K.FT}px/1 'Inter',sans-serif;fill:${color};opacity:0.9;">${this._esc(lbl)}</text>`
+        `<path d="${d}" style="fill:none;stroke:${color};stroke-width:1.8;stroke-opacity:0.72;" marker-end="url(#${marker})"/>`
+      );
+      deferredLabels.push(
+        `<rect x="${lx-tw/2}" y="${avgY-8}" width="${tw}" height="14" rx="3" style="fill:var(--bg-main);stroke:${color};stroke-width:1;stroke-opacity:0.85;"/>` +
+        `<text x="${lx}" y="${avgY+3}" text-anchor="middle" style="font:700 ${K.FT}px/1 'Inter',sans-serif;fill:${color};opacity:0.95;">${this._esc(lbl)}</text>`
       );
     });
 
-    // Individual arrows — CIDR label on H1 departure side at depY
+    // Individual arrows with smart label placement (no line-path extension — lines must
+    // never leave the gap zone to avoid overlapping VCN/subnet boxes):
+    //   1. Horizontal on departure segment — if label fits (cleanest, default)
+    //   2. Vertical on midX segment (−90°) — if horiz doesn't fit but vert segment is tall enough
+    //   3. Horizontal truncated           — last resort; text shortened to what fits
     const indiv = paths.filter(p => !collapsedGws.has(p.gwKey));
     indiv.forEach(pA => {
+      const spRight = pA.sp.x + pA.sp.w;
+      const dest    = pA.destination || '';
+      const fullTw  = dest ? dest.length * 5.5 + 12 : 0;
+      const vertLen = Math.abs(pA.arrY - pA.depY);
+      const midX    = pA.midX;  // never modified — gap zone boundary respected
+
+      // Line-jump detection uses original midX
       const h1J = [], h2J = [];
       indiv.forEach(pB => {
         if (pB === pA || pB.sp.x !== pA.sp.x) return;
         const vx = pB.midX, vlo = Math.min(pB.depY, pB.arrY), vhi = Math.max(pB.depY, pB.arrY);
-        if (vx > pA.subRightMax && vx < pA.midX && pA.depY > vlo+1 && pA.depY < vhi-1)
-          h1J.push(vx);
-        if (vx > pA.midX && vx < pA.gp.x && pA.arrY > vlo+1 && pA.arrY < vhi-1)
-          h2J.push(vx);
+        if (vx > pA.subRightMax && vx < midX && pA.depY > vlo+1 && pA.depY < vhi-1) h1J.push(vx);
+        if (vx > midX && vx < pA.gp.x    && pA.arrY > vlo+1 && pA.arrY < vhi-1)    h2J.push(vx);
       });
       h1J.sort((a,b)=>a-b); h2J.sort((a,b)=>a-b);
-      const d = `M${pA.sp.x+pA.sp.w},${pA.depY}` +
-                hSeg(pA.midX, pA.depY, h1J) +
-                ` L${pA.midX},${pA.arrY}` +
+      const d = `M${spRight},${pA.depY}` +
+                hSeg(midX, pA.depY, h1J) +
+                ` L${midX},${pA.arrY}` +
                 hSeg(pA.gp.x, pA.arrY, h2J);
       this.conn.push(
         `<path d="${d}" style="fill:none;stroke:${pA.color};stroke-width:1.8;stroke-opacity:0.72;" marker-end="url(#${pA.marker})"/>`
       );
-      if (pA.destination) {
-        const tw = Math.min(pA.destination.length * 5.5 + 12, 110);
-        const lx = Math.round(pA.sp.x + pA.sp.w + LBL_GAP + tw / 2);
-        this.conn.push(
-          `<rect x="${lx-tw/2}" y="${pA.depY-8}" width="${tw}" height="14" rx="3" style="fill:var(--bg-main);stroke:${pA.color};stroke-width:0.8;stroke-opacity:0.6;"/>` +
-          `<text x="${lx}" y="${pA.depY+3}" text-anchor="middle" style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${pA.color};opacity:0.9;">${this._esc(pA.destination)}</text>`
+
+      if (!dest) return;
+
+      // Available space on each segment of the L-shaped path.
+      // Arrival zone uses ARR_GAP (not LBL_GAP) on the gateway side so the
+      // label never overlaps the arrow-head marker.
+      const horizDep = midX - spRight - LBL_GAP * 2;          // departure  M→midX
+      const horizArr = pA.gp.x - midX - LBL_GAP - ARR_GAP;    // arrival    midX→gw
+      const vertSeg  = vertLen - 10;                           // vertical   midX bend
+
+      // Helper: render a horizontal label badge (deferred to render after paths)
+      const hBadge = (tw, lx, ly, text) =>
+        `<rect x="${lx - tw/2}" y="${ly - 8}" width="${tw}" height="14" rx="3" ` +
+        `style="fill:var(--bg-main);stroke:${pA.color};stroke-width:0.9;stroke-opacity:0.85;"/>` +
+        `<text x="${lx}" y="${ly + 3}" text-anchor="middle" ` +
+        `style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${pA.color};opacity:0.95;">${this._esc(text)}</text>`;
+
+      if (fullTw <= horizDep) {
+        // Case 1 — full text on departure segment (spRight → midX, at depY)
+        const lx = Math.round(spRight + LBL_GAP + fullTw / 2);
+        deferredLabels.push(hBadge(fullTw, lx, pA.depY, dest));
+
+      } else if (fullTw <= horizArr) {
+        // Case 2 — full text on arrival segment (midX → gw, at arrY).
+        // Position badge with ARR_GAP clearance from the gateway so the
+        // arrow-head marker remains fully visible on the right side.
+        const lx = Math.round(pA.gp.x - ARR_GAP - fullTw / 2);
+        deferredLabels.push(hBadge(fullTw, lx, pA.arrY, dest));
+
+      } else if (fullTw <= vertSeg) {
+        // Case 3 — full text vertical (rotated −90° on the midX segment)
+        const cx = midX;
+        const cy = Math.round((pA.depY + pA.arrY) / 2);
+        deferredLabels.push(
+          `<g transform="rotate(-90 ${cx} ${cy})">` +
+          `<rect x="${cx - fullTw/2}" y="${cy - 7}" width="${fullTw}" height="14" rx="3" ` +
+          `style="fill:var(--bg-main);stroke:${pA.color};stroke-width:0.9;stroke-opacity:0.85;"/>` +
+          `<text x="${cx}" y="${cy + 3}" text-anchor="middle" ` +
+          `style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${pA.color};opacity:0.95;">${this._esc(dest)}</text>` +
+          `</g>`
         );
+
+      } else {
+        // Case 4 — truncate on whichever segment is wider (arrival usually wins)
+        const bestAvail = Math.max(horizDep, horizArr);
+        if (bestAvail >= 24) {
+          const maxChars = Math.floor((bestAvail - 12) / 5.5);
+          const label = this._t(dest, Math.max(4, maxChars));
+          const tw    = label.length * 5.5 + 12;
+          if (horizArr >= horizDep) {
+            // arrival segment — place flush against gateway with ARR_GAP clearance
+            const lx = Math.round(pA.gp.x - ARR_GAP - tw / 2);
+            deferredLabels.push(hBadge(tw, lx, pA.arrY, label));
+          } else {
+            // departure segment
+            const lx = Math.round(spRight + LBL_GAP + tw / 2);
+            deferredLabels.push(hBadge(tw, lx, pA.depY, label));
+          }
+        }
+        // horizAvail < 24 on all segments: skip label, line still drawn
       }
     });
+
+    // Flush deferred labels — rendered after every path so backgrounds mask
+    // the vertical segments of other arrows that cross them.
+    deferredLabels.forEach(s => this.conn.push(s));
   }
 
   /** DRG route connections are merged into _drawGwConnections. */
@@ -1548,7 +1972,7 @@ class OciDiagram {
      SVG RENDERERS
   ══════════════════════════════════════════════════════════════════════════ */
 
-  // Instance card — redesigned layout with separate IP rows and NSG badge
+  // Instance card — structured layout: icon+name, shape pill, labeled IPs, NSG tags
   _instCard(x, y, item) {
     const { NW: W, NH: H, NR: R, ICO_SIZE, FT, FN, FS } = K;
     const clr = C.instance;
@@ -1558,60 +1982,154 @@ class OciDiagram {
 
     const hasNsg = item.nsgNames && item.nsgNames.length > 0;
     const hasPub = !!item.pubIp;
+    const nsgCount = hasNsg ? item.nsgNames.length : 0;
+    const totalH = H + this._nsgExtra(nsgCount);
 
-    // Adaptive vertical layout
-    const icoCy  = y + 24;
-    const sepY   = icoCy + ICO_SIZE / 2 + 4;   // thin divider below icon
-    const nameY  = sepY + 11;
-    const shapeY = nameY + 12;
-    const privY  = shapeY + 12;
-    const pubY   = hasPub ? privY + 11 : privY;
-    const kindY  = (hasPub ? pubY : privY) + 13;
+    // --- Vertical layout zones ---
+    const icoCy   = y + 20;
+    const icoR    = ICO_SIZE / 2;
+    const nameY   = icoCy + icoR + 12;               // bold hostname
 
-    // NSG pill badge with shield icon
+    // Shape pill (e.g. "E3.Flex") — centered, colored background
+    const shapeLbl = item.sub || '';
+    const shapeTw  = shapeLbl.length * 5.5 + 14;
+    const shapeY   = nameY + 6;
+
+    // Divider
+    const divY    = shapeY + 16;
+
+    // IP section — with "Priv:" / "Pub:" labels
+    const ipY     = divY + 10;
+    const privY   = ipY;
+    const pubY    = hasPub ? privY + 13 : privY;
+    const afterIp = hasPub ? pubY + 6 : privY + 6;
+
+    // NSG section — full-width left-aligned badges with shield icon
+    const nsgStartY = afterIp + 4;
     let nsgBadge = '';
     if (hasNsg) {
-      const nsgText = item.nsgNames.length <= 2
-        ? item.nsgNames.map(n => this._t(n, 12)).join(', ')
-        : `${item.nsgNames.length} NSGs`;
-      const lbl = `NSG: ${nsgText}`;
-      const tw  = Math.min(lbl.length * 4.8 + 12, W - 12);
-      const bx  = x + (W - tw) / 2;
-      const by  = kindY + 5;
-      // Small shield icon (8×10px) at left of badge
-      const sx  = bx + 4;
-      const sy  = by + 2;
-      nsgBadge =
-        `<rect x="${bx}" y="${by}" width="${tw}" height="14" rx="3" style="fill:${C.nsg};fill-opacity:0.15;stroke:${C.nsg};stroke-width:0.9;stroke-opacity:0.85;"/>` +
-        `<path d="M${sx+4},${sy} L${sx+8},${sy+2} L${sx+8},${sy+5.5} Q${sx+8},${sy+9} ${sx+4},${sy+10} Q${sx},${sy+9} ${sx},${sy+5.5} L${sx},${sy+2} Z" style="fill:${C.nsg};fill-opacity:0.8;"/>` +
-        `<text x="${bx+tw/2+4}" y="${by+10}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${C.nsg};">${this._esc(this._t(lbl, 28))}</text>`;
+      const badgeL = x + 8;          // left edge
+      const badgeR = x + W - 8;      // right edge
+      const badgeW = badgeR - badgeL; // available width
+      const textMaxW = badgeW - 16;   // 14px for shield+gap, 2px right pad
+      const maxChars = Math.floor(textMaxW / 5.2);
+      nsgBadge = item.nsgNames.map((name, ni) => {
+        const displayName = this._t(name, maxChars);
+        const by  = nsgStartY + ni * 14;
+        const sx  = badgeL + 4;       // shield x
+        const sy  = by + 2;           // shield y
+        return `<rect x="${badgeL}" y="${by}" width="${badgeW}" height="12" rx="3" style="fill:${C.nsg};fill-opacity:0.08;stroke:${C.nsg};stroke-width:0.6;stroke-opacity:0.4;"/>` +
+          `<path d="M${sx+3},${sy} L${sx+6},${sy+1.5} L${sx+6},${sy+4} Q${sx+6},${sy+7} ${sx+3},${sy+8} Q${sx},${sy+7} ${sx},${sy+4} L${sx},${sy+1.5} Z" style="fill:${C.nsg};fill-opacity:0.6;"/>` +
+          `<text x="${badgeL+15}" y="${by+9}" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${C.nsg};opacity:0.85;">${this._esc(displayName)}</text>`;
+      }).join('');
     }
 
     const tooltip = `Compute: ${item.label}${item.sub ? ' — ' + item.sub : ''}${item.status ? ' (' + item.status + ')' : ''}${item.privIp ? ' | Private: ' + item.privIp : ''}${item.pubIp ? ' | Public: ' + item.pubIp : ''}${hasNsg ? ' | NSG: ' + item.nsgNames.join(', ') : ''}`;
 
     return `<g>
   <title>${this._esc(tooltip)}</title>
-  <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="${R}" filter="url(#arch-shadow)" style="fill:var(--bg-card);stroke:var(--border);stroke-width:1;cursor:default;"/>
-  <circle cx="${cx}" cy="${icoCy}" r="${ICO_SIZE/2+4}" style="fill:${clr};fill-opacity:0.12;stroke:${clr};stroke-width:1;stroke-opacity:0.2;"/>
+  <rect x="${x}" y="${y}" width="${W}" height="${totalH}" rx="${R}" filter="url(#arch-shadow)" style="fill:var(--bg-card);stroke:var(--border);stroke-width:1;cursor:default;"/>
+  <rect x="${x}" y="${y}" width="3.5" height="${totalH}" rx="2" style="fill:${clr};opacity:0.85;"/>
+  <circle cx="${cx}" cy="${icoCy}" r="${icoR}" style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.8;stroke-opacity:0.3;"/>
   <g transform="translate(${cx-ICO_SIZE/2},${icoCy-ICO_SIZE/2}) scale(${ICO_SIZE/28})" style="color:${clr};">${SVG_ICONS.instance}</g>
-  <line x1="${x+8}" y1="${sepY}" x2="${x+W-8}" y2="${sepY}" style="stroke:var(--border);stroke-width:0.6;stroke-opacity:0.35;"/>
-  <defs><clipPath id="${uid}"><rect x="${x+4}" y="${y}" width="${W-8}" height="${H}"/></clipPath></defs>
+  <defs><clipPath id="${uid}"><rect x="${x+3}" y="${y}" width="${W-6}" height="${totalH}"/></clipPath></defs>
   <g clip-path="url(#${uid})">
     <text x="${cx}" y="${nameY}" text-anchor="middle" style="font:700 ${FN}px/1 'Inter',system-ui,sans-serif;fill:var(--text-primary);">${this._esc(item.label)}</text>
-    <text x="${cx}" y="${shapeY}" text-anchor="middle" style="font:400 ${FS-1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-secondary);">${this._esc(item.sub||'')}</text>
-    ${item.privIp ? `<circle cx="${x+9}" cy="${privY-3}" r="3" style="fill:${C.subnet_priv};fill-opacity:0.9;"/><text x="${x+16}" y="${privY}" style="font:400 ${FT+1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);">${this._esc(item.privIp)}</text>` : ''}
-    ${hasPub ? `<circle cx="${x+9}" cy="${pubY-3}" r="3" style="fill:${C.igw};fill-opacity:0.9;"/><text x="${x+16}" y="${pubY}" style="font:400 ${FT+1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);">${this._esc(item.pubIp)}</text>` : ''}
-    <text x="${cx}" y="${kindY}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);letter-spacing:.04em;text-transform:uppercase;">COMPUTE</text>
+    ${shapeLbl ? `<rect x="${cx-shapeTw/2}" y="${shapeY}" width="${shapeTw}" height="14" rx="4" style="fill:${clr};fill-opacity:0.12;stroke:${clr};stroke-width:0.6;stroke-opacity:0.35;"/>` +
+    `<text x="${cx}" y="${shapeY+10}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',system-ui,sans-serif;fill:${clr};">${this._esc(shapeLbl)}</text>` : ''}
+    <line x1="${x+10}" y1="${divY}" x2="${x+W-10}" y2="${divY}" style="stroke:var(--border);stroke-width:0.5;stroke-opacity:0.25;"/>
+    ${item.privIp ? `<text x="${x+10}" y="${privY}" style="font:600 ${FT-0.5}px/1 'Inter',sans-serif;fill:${C.subnet_priv};opacity:0.7;">Priv</text>` +
+    `<text x="${x+30}" y="${privY}" style="font:500 ${FT+0.5}px/1 'JetBrains Mono','Fira Code',monospace;fill:var(--text-secondary);">${this._esc(item.privIp)}</text>` : ''}
+    ${hasPub ? `<text x="${x+10}" y="${pubY}" style="font:600 ${FT-0.5}px/1 'Inter',sans-serif;fill:${C.igw};opacity:0.7;">Pub</text>` +
+    `<text x="${x+30}" y="${pubY}" style="font:500 ${FT+0.5}px/1 'JetBrains Mono','Fira Code',monospace;fill:var(--text-secondary);">${this._esc(item.pubIp)}</text>` : ''}
     ${nsgBadge}
   </g>
-  ${dot ? `<circle cx="${x+W-12}" cy="${y+12}" r="4.5" style="fill:${dot};"/>` : ''}
+  ${dot ? `<circle cx="${x+W-10}" cy="${y+10}" r="4" style="fill:${dot};stroke:var(--bg-card);stroke-width:1.5;"/>` : ''}
 </g>`;
   }
 
 
-  // Icon-centered node card
+  // Extra height for NSG badges in instance card
+  _nsgExtra(nsgCount) { return nsgCount > 0 ? nsgCount * 14 + 2 : 0; }
+
+
+  // Volume Group card — lists member volumes clearly
+  _vgCard(x, y, item) {
+    const { NW: W, NH: H, NR: R, ICO_SIZE, FT, FN, FS } = K;
+    const clr = C.vg;
+    const dot = this._stClr(item.status);
+    const uid = `cl${this._uid++}`;
+    const cx = x + W / 2;
+    const icoR = ICO_SIZE / 2;
+    const icoCy = y + 20;
+    const nameY = icoCy + icoR + 12;
+    const subY  = nameY + 11;
+    const divY  = subY + 6;
+
+    // List member volumes below the divider
+    const members = item.memberNames || [];
+    const maxShow = 3;  // max member lines in the card
+    const shown = members.slice(0, maxShow);
+    const extra = members.length - maxShow;
+    let memberSvg = '';
+    let my = divY + 10;
+    shown.forEach((m, i) => {
+      const name = this._t(m, 20);
+      memberSvg += `<circle cx="${x+12}" cy="${my-3}" r="2.5" style="fill:${clr};opacity:0.6;"/>` +
+        `<text x="${x+19}" y="${my}" style="font:400 ${FT}px/1 'Inter',sans-serif;fill:var(--text-secondary);">${this._esc(name)}</text>`;
+      my += 11;
+    });
+    if (extra > 0) {
+      memberSvg += `<text x="${x+19}" y="${my}" style="font:italic 400 ${FT-0.5}px/1 'Inter',sans-serif;fill:var(--text-muted);opacity:0.7;">+${extra} ${_i('mais', 'more')}</text>`;
+      my += 11;
+    }
+
+    // Compartment badge
+    let compBadge = '';
+    if (item.sub3) {
+      const lbl = this._t(item.sub3, 18);
+      const tw  = Math.min(lbl.length * 5 + 10, W - 16);
+      const bx  = x + (W - tw) / 2;
+      compBadge = `<rect x="${bx}" y="${my}" width="${tw}" height="12" rx="3" style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.6;stroke-opacity:0.4;"/>` +
+        `<text x="${cx}" y="${my+9}" text-anchor="middle" style="font:600 ${FT-0.5}px/1 'Inter',sans-serif;fill:${clr};opacity:0.8;">${this._esc(lbl)}</text>`;
+    }
+    // Backup badge
+    let backupBadge = '';
+    const hasBackup = item.backupPolicy && item.backupPolicy !== 'Nenhuma' && item.backupPolicy !== 'N/A';
+    if (hasBackup) {
+      const bkY = item.sub3 ? my + 14 : my;
+      const lbl = this._t(item.backupPolicy, 16);
+      const tw  = Math.min(lbl.length * 4.8 + 10, W - 16);
+      const bx  = x + (W - tw) / 2;
+      backupBadge = `<rect x="${bx}" y="${bkY}" width="${tw}" height="12" rx="3" style="fill:#58a6ff;fill-opacity:0.10;stroke:#58a6ff;stroke-width:0.6;stroke-opacity:0.4;"/>` +
+        `<text x="${cx}" y="${bkY+9}" text-anchor="middle" style="font:500 ${FT-0.5}px/1 'Inter',sans-serif;fill:#58a6ff;opacity:0.8;">${this._esc(lbl)}</text>`;
+    }
+
+    const tooltip = `Vol. Group: ${item.label} — ${members.length} volumes: ${members.join(', ')}${item.sub3 ? ' | ' + item.sub3 : ''}${hasBackup ? ' | Backup: ' + item.backupPolicy : ''}`;
+    return `<g>
+  <title>${this._esc(tooltip)}</title>
+  <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="${R}" filter="url(#arch-shadow)" style="fill:var(--bg-card);stroke:var(--border);stroke-width:1;cursor:default;"/>
+  <rect x="${x}" y="${y}" width="3.5" height="${H}" rx="2" style="fill:${clr};opacity:0.7;"/>
+  <circle cx="${cx}" cy="${icoCy}" r="${icoR}" style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.8;stroke-opacity:0.25;"/>
+  <g transform="translate(${cx-ICO_SIZE/2},${icoCy-ICO_SIZE/2}) scale(${ICO_SIZE/28})" style="color:${clr};">${SVG_ICONS.vg || SVG_ICONS.vol}</g>
+  <defs><clipPath id="${uid}"><rect x="${x+3}" y="${y}" width="${W-6}" height="${H}"/></clipPath></defs>
+  <g clip-path="url(#${uid})">
+    <text x="${cx}" y="${nameY}" text-anchor="middle" style="font:700 ${FN}px/1 'Inter',system-ui,sans-serif;fill:var(--text-primary);">${this._esc(item.label)}</text>
+    <text x="${cx}" y="${subY}" text-anchor="middle" style="font:500 ${FS-1}px/1 'Inter',system-ui,sans-serif;fill:${clr};opacity:0.85;">${this._esc(item.sub||'')}</text>
+    <line x1="${x+10}" y1="${divY}" x2="${x+W-10}" y2="${divY}" style="stroke:var(--border);stroke-width:0.5;stroke-opacity:0.25;"/>
+    ${memberSvg}
+    ${compBadge}${backupBadge}
+  </g>
+  ${dot ? `<circle cx="${x+W-10}" cy="${y+10}" r="4" style="fill:${dot};stroke:var(--bg-card);stroke-width:1.5;"/>` : ''}
+</g>`;
+  }
+
+
+  // Icon-centered node card — supports sub2 (extra detail), sub3 (compartment badge),
+  // backupPolicy, isReplicating for richer volume/VG/DB cards
   _nodeCard(x, y, item) {
     if (item.kind === 'instance') return this._instCard(x, y, item);
+    if (item.kind === 'vg' && item.memberNames) return this._vgCard(x, y, item);
 
     const { NW: W, NH: H, NR: R, ICO_SIZE, FT, FN, FS } = K;
     const clr = C[item.kind] || '#58a6ff';
@@ -1619,18 +2137,45 @@ class OciDiagram {
     const uid = `cl${this._uid++}`;
     const cx = x + W / 2;
 
-    // Vertical layout — adapts when sub2 / NSG badge present
     const hasNsg  = item.nsgNames && item.nsgNames.length > 0;
     const hasSub2 = !!item.sub2;
+    const hasSub3 = !!item.sub3;  // compartment label
+    const hasBackup = !!item.backupPolicy && item.backupPolicy !== 'Nenhuma' && item.backupPolicy !== 'N/A';
 
-    // Compress icon area slightly when content needs more room
-    const icoCy   = y + 26;
-    const labelY  = icoCy + ICO_SIZE / 2 + 12;   // ~64 without compression
-    const subY    = labelY + 13;
-    const sub2Y   = hasSub2 ? subY + 12 : subY;
-    const kindY   = sub2Y + (hasSub2 ? 13 : 11);
+    // Vertical layout
+    const icoR    = ICO_SIZE / 2 + 2;
+    const icoCy   = y + 24;
+    const labelY  = icoCy + icoR + 12;
+    const subY    = labelY + 12;
+    let curY      = subY;
+    if (hasSub2) curY += 11;
+    const kindY   = curY + 12;
+    // Extra tags below kind label
+    let tagY = kindY + 4;
 
-    // NSG pill badge — sits below kind label, 2px gap
+    // Compartment badge
+    let compBadge = '';
+    if (hasSub3) {
+      const lbl = this._t(item.sub3, 20);
+      const tw  = Math.min(lbl.length * 5 + 10, W - 16);
+      const bx  = x + (W - tw) / 2;
+      compBadge = `<rect x="${bx}" y="${tagY}" width="${tw}" height="12" rx="3" style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.6;stroke-opacity:0.4;"/>` +
+        `<text x="${cx}" y="${tagY+9}" text-anchor="middle" style="font:600 ${FT-0.5}px/1 'Inter',sans-serif;fill:${clr};opacity:0.8;">${this._esc(lbl)}</text>`;
+      tagY += 14;
+    }
+
+    // Backup policy badge
+    let backupBadge = '';
+    if (hasBackup) {
+      const lbl = this._t(item.backupPolicy, 18);
+      const tw  = Math.min(lbl.length * 4.8 + 10, W - 16);
+      const bx  = x + (W - tw) / 2;
+      backupBadge = `<rect x="${bx}" y="${tagY}" width="${tw}" height="12" rx="3" style="fill:#58a6ff;fill-opacity:0.10;stroke:#58a6ff;stroke-width:0.6;stroke-opacity:0.4;"/>` +
+        `<text x="${cx}" y="${tagY+9}" text-anchor="middle" style="font:500 ${FT-0.5}px/1 'Inter',sans-serif;fill:#58a6ff;opacity:0.8;">\u{1F5C4} ${this._esc(lbl)}</text>`;
+      tagY += 14;
+    }
+
+    // NSG pill badge
     let nsgBadge = '';
     if (hasNsg) {
       const nsgText = item.nsgNames.length <= 2
@@ -1639,26 +2184,26 @@ class OciDiagram {
       const lbl   = `NSG: ${nsgText}`;
       const tw    = Math.min(lbl.length * 4.8 + 10, W - 16);
       const bx    = x + (W - tw) / 2;
-      const by    = kindY + 4;
-      nsgBadge    = `<rect x="${bx}" y="${by}" width="${tw}" height="12" rx="3" style="fill:${C.nsg};fill-opacity:0.12;stroke:${C.nsg};stroke-width:0.7;stroke-opacity:0.5;"/>
-<text x="${cx}" y="${by+9}" text-anchor="middle" style="font:600 ${FT-1}px/1 'Inter',sans-serif;fill:${C.nsg};opacity:0.9;">${this._esc(this._t(lbl, 26))}</text>`;
+      nsgBadge    = `<rect x="${bx}" y="${tagY}" width="${tw}" height="12" rx="3" style="fill:${C.nsg};fill-opacity:0.12;stroke:${C.nsg};stroke-width:0.7;stroke-opacity:0.5;"/>` +
+        `<text x="${cx}" y="${tagY+9}" text-anchor="middle" style="font:600 ${FT-1}px/1 'Inter',sans-serif;fill:${C.nsg};opacity:0.9;">${this._esc(this._t(lbl, 26))}</text>`;
     }
 
-    const tooltip = `${this._kindLbl(item.kind)}: ${item.label}${item.sub ? ' — ' + item.sub : ''}${item.status ? ' (' + item.status + ')' : ''}${hasNsg ? ' | NSG: ' + item.nsgNames.join(', ') : ''}`;
+    const tooltip = `${this._kindLbl(item.kind)}: ${item.label}${item.sub ? ' — ' + item.sub : ''}${item.sub2 ? ' (' + item.sub2 + ')' : ''}${item.status ? ' [' + item.status + ']' : ''}${hasSub3 ? ' | ' + item.sub3 : ''}${hasBackup ? ' | Backup: ' + item.backupPolicy : ''}${hasNsg ? ' | NSG: ' + item.nsgNames.join(', ') : ''}`;
     return `<g>
   <title>${this._esc(tooltip)}</title>
   <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="${R}" filter="url(#arch-shadow)" style="fill:var(--bg-card);stroke:var(--border);stroke-width:1;cursor:default;"/>
-  <circle cx="${cx}" cy="${icoCy}" r="${ICO_SIZE/2+4}" style="fill:${clr};fill-opacity:0.12;stroke:${clr};stroke-width:1;stroke-opacity:0.2;"/>
+  <rect x="${x}" y="${y}" width="3.5" height="${H}" rx="2" style="fill:${clr};opacity:0.7;"/>
+  <circle cx="${cx}" cy="${icoCy}" r="${icoR}" style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.8;stroke-opacity:0.25;"/>
   <g transform="translate(${cx-ICO_SIZE/2},${icoCy-ICO_SIZE/2}) scale(${ICO_SIZE/28})" style="color:${clr};">${SVG_ICONS[item.kind]||SVG_ICONS.subnet}</g>
   <defs><clipPath id="${uid}"><rect x="${x+4}" y="${y}" width="${W-8}" height="${H}"/></clipPath></defs>
   <g clip-path="url(#${uid})">
     <text x="${cx}" y="${labelY}" text-anchor="middle" style="font:700 ${FN}px/1 'Inter',system-ui,sans-serif;fill:var(--text-primary);">${this._esc(item.label)}</text>
     <text x="${cx}" y="${subY}" text-anchor="middle" style="font:400 ${FS}px/1 'Inter',system-ui,sans-serif;fill:var(--text-secondary);">${this._esc(item.sub||'')}</text>
-    ${hasSub2 ? `<text x="${cx}" y="${sub2Y}" text-anchor="middle" style="font:400 ${FS-1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);">${this._esc(item.sub2)}</text>` : ''}
+    ${hasSub2 ? `<text x="${cx}" y="${subY+11}" text-anchor="middle" style="font:400 ${FS-1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);">${this._esc(this._t(item.sub2, 24))}</text>` : ''}
     <text x="${cx}" y="${kindY}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);letter-spacing:.04em;text-transform:uppercase;">${this._esc(this._kindLbl(item.kind))}</text>
-    ${nsgBadge}
+    ${compBadge}${backupBadge}${nsgBadge}
   </g>
-  ${dot ? `<circle cx="${x+W-12}" cy="${y+12}" r="4.5" style="fill:${dot};"/>` : ''}
+  ${dot ? `<circle cx="${x+W-11}" cy="${y+11}" r="4" style="fill:${dot};stroke:var(--bg-card);stroke-width:1.5;"/>` : ''}
 </g>`;
   }
 
@@ -1716,6 +2261,7 @@ class OciDiagram {
       { color: C.igw,         label: _i('Internet GW', 'Internet GW'),         icon: 'igw'      },
       { color: C.nat,         label: _i('NAT GW', 'NAT GW'),                   icon: 'nat'      },
       { color: C.sgw,         label: _i('Service GW', 'Service GW'),           icon: 'sgw'      },
+      { color: C.db,          label: _i('Banco de Dados', 'Database'),          icon: 'db'       },
       { color: C.oke,         label: 'OKE',                                    icon: 'oke'      },
       { color: C.waf,         label: 'WAF',                                    icon: 'waf'      },
       { color: C.ipsec,       label: 'IPSec VPN',                              icon: 'ipsec'    },
@@ -1784,11 +2330,34 @@ class OciDiagram {
   }
 
   _descDb(db) {
-    const sub = db.db_workload ? `${db.db_workload}${db.cpu_core_count ? ' · ' + db.cpu_core_count + ' OCPUs' : ''}` : (db.db_name || '');
+    // Line 1: edition + CPU info
+    const parts1 = [];
+    if (db.database_edition && db.database_edition !== 'N/A') {
+      const edShort = db.database_edition.replace(/ENTERPRISE_EDITION/i, 'EE').replace(/STANDARD_EDITION/i, 'SE').replace(/_/g, ' ');
+      parts1.push(edShort);
+    }
+    if (db.cpu_core_count) parts1.push(`${db.cpu_core_count} OCPUs`);
+    const sub = parts1.join(' · ') || db.db_workload || '';
+
+    // Line 2: storage + nodes + DB names
+    const parts2 = [];
+    if (db.data_storage_size_in_gbs) parts2.push(`${db.data_storage_size_in_gbs} GB`);
+    if (db.node_count && db.node_count > 1) parts2.push(`${db.node_count} nodes`);
+    // Extract DB names from db_homes
+    const dbNames = (db.db_homes || []).flatMap(h => (h.databases || []).map(d => d.db_name || d.name)).filter(Boolean);
+    if (dbNames.length > 0) parts2.push(dbNames.slice(0, 2).join(', ') + (dbNames.length > 2 ? '…' : ''));
+    const sub2 = parts2.join(' · ') || (db.shape && db.shape !== 'N/A' ? db.shape : '');
+
+    // Compartment
+    const isMulti = (this.d?.compartments || []).length > 1;
+    const compLabel = isMulti && db.compartment_name ? db.compartment_name : '';
+
     return {
       id: db.id || db.display_name, kind: 'db',
       label: this._t(db.display_name, 18),
       sub,
+      sub2: sub2 || undefined,
+      sub3: compLabel || undefined,
       status: db.lifecycle_state
     };
   }
@@ -1841,6 +2410,9 @@ class OciDiagram {
   _extractVcnGateways(vcn) {
     const seen = new Map();
     const order = { IGW: 0, NAT: 1, SGW: 2 };
+    // Include vcn.id in the key so same-named gateways in different VCNs never collide
+    // (e.g., two VCNs both with "Internet Gateway: IGW" would share the same _pos slot otherwise)
+    const vcnTag = '_vcn_' + (vcn.id || '').replace(/[^a-zA-Z0-9]/g, '_');
     (vcn.route_tables || []).forEach(rt => {
       (rt.rules || []).forEach(rule => {
         if (!rule.target || !this._isGwTarget(rule.target)) return;
@@ -1850,7 +2422,7 @@ class OciDiagram {
         const nameMatch = rule.target.match(/^(.+?)\s*\(.*\)$/);
         const displayName = nameMatch ? nameMatch[1].trim() : rule.target;
         seen.set(rule.target, {
-          key: 'gw_' + rule.target.replace(/[^a-zA-Z0-9]/g, '_'),
+          key: 'gw_' + rule.target.replace(/[^a-zA-Z0-9]/g, '_') + vcnTag,
           type, displayName,
           color: this._gwColor(type),
           fullTarget: rule.target,
@@ -1863,6 +2435,8 @@ class OciDiagram {
 
   _buildGwConnections(vcn, subnets) {
     const conns = [];
+    // Must match the vcnTag used in _extractVcnGateways so gwKey → _pos lookup resolves correctly
+    const vcnTag = '_vcn_' + (vcn.id || '').replace(/[^a-zA-Z0-9]/g, '_');
     subnets.forEach(s => {
       const rules = this._getGwRules(vcn, s.subnet);
       rules.forEach(rule => {
@@ -1870,9 +2444,10 @@ class OciDiagram {
         if (type === 'DRG' || type === 'LPG') return;
         conns.push({
           subnetId: s.subnet.id,
-          gwKey: 'gw_' + rule.target.replace(/[^a-zA-Z0-9]/g, '_'),
+          gwKey: 'gw_' + rule.target.replace(/[^a-zA-Z0-9]/g, '_') + vcnTag,
           destination: rule.destination,
           type,
+          vcnId: vcn.id,
         });
       });
     });
@@ -1888,6 +2463,7 @@ class OciDiagram {
       new_host: 'New Host',
       kubernetes: 'Kubernetes / OKE',
       waf_report: _i('Relatório WAF', 'WAF Report'),
+      database: _i('Database (DBaaS)', 'Database (DBaaS)'),
     }[this.dt] || this.dt;
   }
 

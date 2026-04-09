@@ -3,6 +3,14 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 
+# --- Compartment Reference ---
+
+class CompartmentRef(BaseModel):
+    """Reference to an OCI compartment (used for multi-compartment aggregation)."""
+    id: str
+    name: str
+
+
 # --- Network Rule Models ---
 
 class SecurityRule(BaseModel):
@@ -42,6 +50,7 @@ class StandaloneVolumeData(BaseModel):
     lifecycle_state: str
     backup_policy_name: str
     availability_domain: Optional[str] = None
+    compartment_name: Optional[str] = None
 
 
 class VolumeGroupValidation(BaseModel):
@@ -61,6 +70,7 @@ class VolumeGroupData(BaseModel):
     members: List[str]
     member_ids: List[str]
     validation: VolumeGroupValidation
+    compartment_name: Optional[str] = None
 
 
 # --- Virtual Network (VCN) Models ---
@@ -123,6 +133,8 @@ class VcnData(BaseModel):
     route_tables: List[RouteTable]
     network_security_groups: List[NetworkSecurityGroup]
     lpgs: List[LpgData]
+    compartment_id: Optional[str] = None
+    compartment_name: Optional[str] = None
 
 
 # --- Load Balancer Models ---
@@ -196,6 +208,7 @@ class LoadBalancerData(BaseModel):
     waf_firewall_name: Optional[str] = None
     waf_policy_id: Optional[str] = None
     waf_policy_name: Optional[str] = None
+    compartment_name: Optional[str] = None
 
 
 # --- External Connectivity Models (DRG / VPN IPSec) ---
@@ -226,6 +239,7 @@ class DrgData(BaseModel):
     display_name: str
     attachments: List[DrgAttachmentData]
     rpcs: List[RpcData]
+    compartment_name: Optional[str] = None
 
 
 class CpeData(BaseModel):
@@ -234,6 +248,7 @@ class CpeData(BaseModel):
     display_name: str
     ip_address: str
     vendor: Optional[str] = "N/A"
+    compartment_name: Optional[str] = None
 
 
 class PhaseOneDetails(BaseModel):
@@ -286,6 +301,7 @@ class IpsecData(BaseModel):
     drg_id: str
     static_routes: List[str]
     tunnels: List[TunnelData]
+    compartment_name: Optional[str] = None
 
 
 # --- Kubernetes (OKE) Models ---
@@ -315,6 +331,7 @@ class OkeClusterData(BaseModel):
     lb_subnet_name: str
     nodes_subnet_name: str
     node_pools: List[NodePoolData]
+    compartment_name: Optional[str] = None
 
 
 # --- WAF Models ---
@@ -398,6 +415,81 @@ class WafPolicyData(BaseModel):
     network_infrastructure: Optional[WafNetworkInfrastructure] = None
 
 
+# --- Database (DBaaS / DB System) Models ---
+
+class DbBackupConfigData(BaseModel):
+    """Backup configuration for a Database record."""
+    auto_backup_enabled: bool = False
+    auto_backup_window: Optional[str] = "N/A"
+    auto_full_backup_day: Optional[str] = "N/A"
+    auto_full_backup_window: Optional[str] = "N/A"
+    backup_deletion_policy: Optional[str] = "N/A"
+    backup_destination_type: Optional[str] = "N/A"
+    recovery_window_in_days: Optional[int] = None
+
+
+class DatabaseData(BaseModel):
+    """A single Database within a DB Home."""
+    id: str
+    db_name: str
+    db_unique_name: str
+    db_workload: Optional[str] = "N/A"
+    is_cdb: bool = False
+    pdb_name: Optional[str] = "N/A"
+    sid_prefix: Optional[str] = "N/A"
+    character_set: Optional[str] = "N/A"
+    ncharacter_set: Optional[str] = "N/A"
+    lifecycle_state: str
+    time_created: Optional[str] = "N/A"
+    connection_string_cdb_default: Optional[str] = "N/A"
+    connection_string_cdb_ip_default: Optional[str] = "N/A"
+    backup_config: Optional[DbBackupConfigData] = None
+    last_backup_timestamp: Optional[str] = "N/A"
+    last_failed_backup_timestamp: Optional[str] = "N/A"
+    last_backup_duration_in_seconds: Optional[int] = None
+    db_home_id: Optional[str] = None
+
+
+class DbHomeData(BaseModel):
+    """DB Home (software container) for a DB System."""
+    id: str
+    display_name: str
+    db_version: Optional[str] = "N/A"
+    db_home_location: Optional[str] = "N/A"
+    lifecycle_state: str
+    databases: List[DatabaseData] = []
+
+
+class DbNodeData(BaseModel):
+    """A single DB Node (compute host) within a DB System."""
+    id: str
+    display_name: str
+    lifecycle_state: str
+    db_system_id: str
+    private_ip: Optional[str] = None
+
+
+class DbSystemData(BaseModel):
+    """Aggregator for all data from a single OCI DB System (DB-as-a-Service)."""
+    id: str
+    display_name: str
+    shape: Optional[str] = "N/A"
+    cpu_core_count: Optional[int] = None
+    data_storage_size_in_gbs: Optional[int] = None
+    database_edition: Optional[str] = "N/A"
+    license_type: Optional[str] = "N/A"
+    node_count: Optional[int] = None
+    availability_domain: Optional[str] = "N/A"
+    lifecycle_state: str
+    time_created: Optional[str] = "N/A"
+    compartment_id: str
+    compartment_name: Optional[str] = None
+    subnet_id: Optional[str] = None
+    vcn_id: Optional[str] = None
+    db_nodes: List[DbNodeData] = []
+    db_homes: List[DbHomeData] = []
+
+
 # --- Infrastructure Aggregator ---
 
 class InstanceData(BaseModel):
@@ -427,6 +519,8 @@ class InfrastructureData(BaseModel):
     """
     Root aggregator for all infrastructure data collected from a compartment.
     Returned by Celery tasks and consumed by doc_generator.
+    When `compartments` has more than one entry, data spans multiple compartments
+    (multi-compartment mode). Empty list means single-compartment legacy mode.
     """
     instances: List[InstanceData]
     vcns: List[VcnData]
@@ -441,6 +535,10 @@ class InfrastructureData(BaseModel):
     # OCI certificate type (IMPORTED, MANAGED_INTERNALLY, ISSUED_BY_INTERNAL_CA).
     certificates: Optional[List[dict]] = []
     standalone_volumes: List[StandaloneVolumeData] = []
+    db_systems: List[DbSystemData] = []
+    # Ordered list of compartments that contributed to this dataset.
+    # Empty = single-compartment legacy mode (backwards compatible).
+    compartments: List[CompartmentRef] = []
 
 
 # --- API Schemas ---
