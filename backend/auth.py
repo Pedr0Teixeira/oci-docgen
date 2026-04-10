@@ -867,26 +867,36 @@ def update_tenancy_profile(
     fields: list = []
     values: list = []
     if name is not None:
-        fields.append("name = ?"); values.append(name.strip())
+        fields.append("name = ?")
+        values.append(name.strip())
     if auth_method is not None:
-        fields.append("auth_method = ?"); values.append(auth_method.upper())
+        fields.append("auth_method = ?")
+        values.append(auth_method.upper())
     if region is not None:
-        fields.append("region = ?"); values.append(region)
+        fields.append("region = ?")
+        values.append(region)
     if tenancy_name is not None:
-        fields.append("tenancy_name = ?"); values.append(tenancy_name)
+        fields.append("tenancy_name = ?")
+        values.append(tenancy_name)
     if is_public is not None:
-        fields.append("is_public = ?"); values.append(1 if is_public else 0)
+        fields.append("is_public = ?")
+        values.append(1 if is_public else 0)
     if is_active is not None:
-        fields.append("is_active = ?"); values.append(1 if is_active else 0)
+        fields.append("is_active = ?")
+        values.append(1 if is_active else 0)
     if visibility is not None:
         valid_vis = {"admin_only", "all_users", "by_group", "by_user"}
-        fields.append("visibility = ?"); values.append(visibility if visibility in valid_vis else "by_group")
+        fields.append("visibility = ?")
+        values.append(visibility if visibility in valid_vis else "by_group")
     if tenancy_ocid is not None:
-        fields.append("tenancy_ocid = ?"); values.append(tenancy_ocid)
+        fields.append("tenancy_ocid = ?")
+        values.append(tenancy_ocid)
     if user_ocid is not None:
-        fields.append("user_ocid = ?"); values.append(user_ocid)
+        fields.append("user_ocid = ?")
+        values.append(user_ocid)
     if fingerprint is not None:
-        fields.append("fingerprint = ?"); values.append(fingerprint)
+        fields.append("fingerprint = ?")
+        values.append(fingerprint)
     if private_key_pem is not None:
         fields.append("private_key_encrypted = ?")
         values.append(encrypt_value(private_key_pem))

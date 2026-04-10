@@ -181,7 +181,7 @@ def _auth_from_profile(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if profile.get("auth_method", "").upper() == "INSTANCE_PRINCIPAL":
         return get_auth_provider()  # always re-fetches instance principal signer
     try:
-        import tempfile, os as _os
+        import tempfile
         key_pem = profile.get("private_key_pem") or ""
         # Write private key to a temp file (OCI SDK requires a file path)
         tf = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
@@ -783,7 +783,8 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
             def _dk(d, *keys):
                 for k in keys:
                     v = d.get(k)
-                    if v: return v
+                    if v:
+                        return v
                 return "N/A"
             return {
                 "common_name":            _dk(subj_obj, "common_name",            "common-name"),
@@ -807,7 +808,8 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
             def _dk(d, *keys):
                 for k in keys:
                     v = d.get(k)
-                    if v is not None: return v
+                    if v is not None:
+                        return v
                 return None
             val_d = _dk(cvs_obj, "validity") or {}
             if isinstance(val_d, dict):
@@ -862,7 +864,8 @@ def _get_compartment_certificates(certs_mgmt_client, compartment_id: str) -> lis
             def _dk(d, *keys):
                 for k in keys:
                     v = d.get(k)
-                    if v: return v
+                    if v:
+                        return v
                 return "N/A"
             res_id = _dk(assoc_obj, "associated_resource_id", "associated-resource-id")
         else:
@@ -1373,14 +1376,14 @@ def get_infrastructure_details(
 
         lpgs = [
             LpgData(
-                id=l.id, display_name=l.display_name, lifecycle_state=l.lifecycle_state,
-                peering_status=l.peering_status, peering_status_details=l.peering_status_details,
-                peer_id=l.peer_id, route_table_id=l.route_table_id,
-                peer_advertised_cidr=l.peer_advertised_cidr,
-                is_cross_tenancy_peering=l.is_cross_tenancy_peering,
-                route_table_name=route_table_map.get(l.route_table_id, "N/A"),
+                id=lpg.id, display_name=lpg.display_name, lifecycle_state=lpg.lifecycle_state,
+                peering_status=lpg.peering_status, peering_status_details=lpg.peering_status_details,
+                peer_id=lpg.peer_id, route_table_id=lpg.route_table_id,
+                peer_advertised_cidr=lpg.peer_advertised_cidr,
+                is_cross_tenancy_peering=lpg.is_cross_tenancy_peering,
+                route_table_name=route_table_map.get(lpg.route_table_id, "N/A"),
             )
-            for l in oci.pagination.list_call_get_all_results(
+            for lpg in oci.pagination.list_call_get_all_results(
                 virtual_network_client.list_local_peering_gateways,
                 compartment_id=compartment_id, vcn_id=vcn_sdk.id, retry_strategy=retry_strategy,
             ).data
@@ -1434,21 +1437,21 @@ def get_infrastructure_details(
         hostnames = [HostnameData(name=h.name) for h in lb_details.hostnames.values()]
         listeners = [
             ListenerData(
-                name=l.name,
+                name=listener.name,
                 protocol=(
                     "HTTPS"
-                    if getattr(l, "ssl_configuration", None) is not None
-                    else l.protocol
+                    if getattr(listener, "ssl_configuration", None) is not None
+                    else listener.protocol
                 ),
-                port=l.port,
-                default_backend_set_name=l.default_backend_set_name,
-                hostname_names=l.hostname_names if l.hostname_names else [],
+                port=listener.port,
+                default_backend_set_name=listener.default_backend_set_name,
+                hostname_names=listener.hostname_names if listener.hostname_names else [],
                 ssl_certificate_ids=(
-                    list(getattr(l.ssl_configuration, "certificate_ids", None) or [])
-                    if getattr(l, "ssl_configuration", None) is not None else []
+                    list(getattr(listener.ssl_configuration, "certificate_ids", None) or [])
+                    if getattr(listener, "ssl_configuration", None) is not None else []
                 ),
             )
-            for l in lb_details.listeners.values()
+            for listener in lb_details.listeners.values()
         ]
         backend_sets = []
         for bs_sdk in lb_details.backend_sets.values():
@@ -1804,21 +1807,21 @@ def get_waf_report_details(
                         hostnames = [HostnameData(name=h.name) for h in lb_details.hostnames.values()]
                         listeners = [
                             ListenerData(
-                                name=l.name,
+                                name=listener.name,
                                 protocol=(
                                     "HTTPS"
-                                    if getattr(l, "ssl_configuration", None) is not None
-                                    else l.protocol
+                                    if getattr(listener, "ssl_configuration", None) is not None
+                                    else listener.protocol
                                 ),
-                                port=l.port,
-                                default_backend_set_name=l.default_backend_set_name,
-                                hostname_names=l.hostname_names if l.hostname_names else [],
+                                port=listener.port,
+                                default_backend_set_name=listener.default_backend_set_name,
+                                hostname_names=listener.hostname_names if listener.hostname_names else [],
                                 ssl_certificate_ids=(
-                                    list(getattr(l.ssl_configuration, "certificate_ids", None) or [])
-                                    if getattr(l, "ssl_configuration", None) is not None else []
+                                    list(getattr(listener.ssl_configuration, "certificate_ids", None) or [])
+                                    if getattr(listener, "ssl_configuration", None) is not None else []
                                 ),
                             )
-                            for l in lb_details.listeners.values()
+                            for listener in lb_details.listeners.values()
                         ]
                         backend_sets = []
                         for bs_sdk in lb_details.backend_sets.values():
