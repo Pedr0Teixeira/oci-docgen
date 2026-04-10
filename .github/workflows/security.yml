@@ -1,0 +1,129 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+
+jobs:
+  bandit:
+    name: Python SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit
+        run: |
+          bandit -r backend/ \
+            -x backend/tests/ \
+            -ll \
+            --format json \
+            --output bandit-report.json || true
+
+      - name: Check for high/critical issues
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+
+          with open("bandit-report.json") as f:
+              report = json.load(f)
+
+          results = report.get("results", [])
+          high = [r for r in results if r["issue_severity"] in ("HIGH", "CRITICAL")]
+
+          if high:
+              print(f"::error::Bandit found {len(high)} HIGH/CRITICAL issue(s):")
+              for r in high:
+                  print(f"  [{r['issue_severity']}] {r['issue_text']} — {r['filename']}:{r['line_number']}")
+              sys.exit(1)
+
+          print(f"Bandit: no HIGH/CRITICAL issues found ({len(results)} total warnings).")
+          EOF
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  pip-audit:
+    name: Dependency Vulnerabilities (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: |
+          pip-audit \
+            -r backend/requirements.txt \
+            --format json \
+            --output pip-audit-report.json \
+            --progress-spinner off || true
+
+      - name: Check for vulnerabilities
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+
+          with open("pip-audit-report.json") as f:
+              report = json.load(f)
+
+          vulns = [
+              dep
+              for dep in report.get("dependencies", [])
+              if dep.get("vulns")
+          ]
+
+          if vulns:
+              print(f"::error::pip-audit found vulnerabilities in {len(vulns)} package(s):")
+              for dep in vulns:
+                  for v in dep["vulns"]:
+                      print(f"  {dep['name']}=={dep['version']} → {v['id']}: {v['description'][:120]}")
+              sys.exit(1)
+
+          print("pip-audit: no known vulnerabilities found.")
+          EOF
+
+      - name: Upload pip-audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+
+  secret-scan:
+    name: Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

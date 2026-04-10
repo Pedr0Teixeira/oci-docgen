@@ -1,0 +1,5 @@
+# Code owners are automatically requested for review on every PR.
+# The owner must approve before the PR can be merged into main.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @Pedr0Teixeira
