@@ -18,7 +18,7 @@ from celery_worker import (
     collect_new_host_task,
     collect_waf_report_task,
 )
-from schemas import GenerateDocRequest, TaskCreationResponse, TaskStatusResponse, LetterheadMeta
+from schemas import GenerateDocRequest, TaskCreationResponse, TaskStatusResponse
 
 logging.basicConfig(level=logging.INFO)
 
@@ -684,11 +684,14 @@ async def create_document(
             footer_bytes: Optional[bytes] = None
             cover_bytes:  Optional[bytes] = None
             if lh_meta.enabled and lh_meta.header_file_count == 1 and cursor < len(all_bytes):
-                header_bytes = all_bytes[cursor]; cursor += 1
+                header_bytes = all_bytes[cursor]
+                cursor += 1
             if lh_meta.enabled and lh_meta.footer_file_count == 1 and cursor < len(all_bytes):
-                footer_bytes = all_bytes[cursor]; cursor += 1
+                footer_bytes = all_bytes[cursor]
+                cursor += 1
             if lh_meta.cover_image_file_count == 1 and cursor < len(all_bytes):
-                cover_bytes = all_bytes[cursor]; cursor += 1
+                cover_bytes = all_bytes[cursor]
+                cursor += 1
             resolved_letterhead = {
                 "enabled": lh_meta.enabled,
                 "header":  header_bytes,

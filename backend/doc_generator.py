@@ -4,7 +4,6 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
-import docx
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -257,7 +256,6 @@ DOC_STRINGS = {
         "doc.messages.no_routes_found": "Nenhuma rota configurada.",
         "doc.headers.vcn_name": "Nome da VCN",
         "doc.headers.vcn_cidr": "CIDR da VCN",
-        "doc.headers.subnet_name": "Nome da Subnet",
         "doc.headers.subnet_cidr": "CIDR da Subnet",
         "doc.headers.destination_cidr": "CIDR de Destino",
         "doc.headers.common_name": "COMMON NAME",
@@ -514,7 +512,6 @@ DOC_STRINGS = {
         "doc.messages.no_routes_found": "No routes configured.",
         "doc.headers.vcn_name": "VCN Name",
         "doc.headers.vcn_cidr": "VCN CIDR",
-        "doc.headers.subnet_name": "Subnet Name",
         "doc.headers.subnet_cidr": "Subnet CIDR",
         "doc.headers.destination_cidr": "Destination CIDR",
         "doc.headers.common_name": "COMMON NAME",
@@ -2061,13 +2058,16 @@ def generate_documentation(
         for data in infra_data.instances:
             for sl in data.security_lists:
                 entry = sl_map.setdefault(sl.name, {"rules": sl.rules, "hosts": []})
-                if data.host_name not in entry["hosts"]: entry["hosts"].append(data.host_name)
+                if data.host_name not in entry["hosts"]:
+                    entry["hosts"].append(data.host_name)
             for nsg in data.network_security_groups:
                 entry = nsg_map.setdefault(nsg.name, {"rules": nsg.rules, "hosts": []})
-                if data.host_name not in entry["hosts"]: entry["hosts"].append(data.host_name)
+                if data.host_name not in entry["hosts"]:
+                    entry["hosts"].append(data.host_name)
             if data.route_table:
                 entry = rt_map.setdefault(data.route_table.name, {"rules": data.route_table.rules, "hosts": []})
-                if data.host_name not in entry["hosts"]: entry["hosts"].append(data.host_name)
+                if data.host_name not in entry["hosts"]:
+                    entry["hosts"].append(data.host_name)
 
         _add_and_bookmark_heading(document, t("doc.headings.security_lists", lang), 3, headings_for_toc, numbering_counters)
         for name, info in sorted(sl_map.items()):
@@ -2355,8 +2355,8 @@ def _render_single_load_balancer(
         certs_list   = list(getattr(infra_data, "certificates", []) or [])
         cert_id_map  = {c.get("id"): c.get("name") for c in certs_list if isinstance(c, dict) and c.get("id")}
         has_ssl      = any(
-            (getattr(l, "ssl_certificate_ids", None) or [])
-            for l in lb.listeners
+            (getattr(listener, "ssl_certificate_ids", None) or [])
+            for listener in lb.listeners
         )
 
         headers = [

@@ -181,7 +181,8 @@ def _auth_from_profile(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if profile.get("auth_method", "").upper() == "INSTANCE_PRINCIPAL":
         return get_auth_provider()  # always re-fetches instance principal signer
     try:
-        import tempfile, os as _os
+        import tempfile
+        import os as _os
         key_pem = profile.get("private_key_pem") or ""
         # Write private key to a temp file (OCI SDK requires a file path)
         tf = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
