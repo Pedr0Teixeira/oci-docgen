@@ -1437,11 +1437,11 @@ def get_infrastructure_details(
         hostnames = [HostnameData(name=h.name) for h in lb_details.hostnames.values()]
         listeners = [
             ListenerData(
-                name=l.name,
+                name=listener.name,
                 protocol=(
                     "HTTPS"
-                    if getattr(l, "ssl_configuration", None) is not None
-                    else l.protocol
+                    if getattr(listener, "ssl_configuration", None) is not None
+                    else listener.protocol
                 ),
                 port=listener.port,
                 default_backend_set_name=listener.default_backend_set_name,
@@ -1807,11 +1807,11 @@ def get_waf_report_details(
                         hostnames = [HostnameData(name=h.name) for h in lb_details.hostnames.values()]
                         listeners = [
                             ListenerData(
-                                name=l.name,
+                                name=listener.name,
                                 protocol=(
                                     "HTTPS"
-                                    if getattr(l, "ssl_configuration", None) is not None
-                                    else l.protocol
+                                    if getattr(listener, "ssl_configuration", None) is not None
+                                    else listener.protocol
                                 ),
                                 port=listener.port,
                                 default_backend_set_name=listener.default_backend_set_name,
