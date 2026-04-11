@@ -940,7 +940,7 @@ def _create_titled_key_value_table(
     title_cell = table.cell(0, 0).merge(table.cell(0, 1))
     title_cell.text = ""
     p = title_cell.paragraphs[0]
-    run = p.add_run(title.upper())
+    run = p.add_run((title or "").upper())
     run.font.bold = True
     run.font.color.rgb = RGBColor.from_string("FFFFFF")
     _shade_cell(title_cell)
