@@ -4,7 +4,6 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
-import docx
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -257,7 +256,6 @@ DOC_STRINGS = {
         "doc.messages.no_routes_found": "Nenhuma rota configurada.",
         "doc.headers.vcn_name": "Nome da VCN",
         "doc.headers.vcn_cidr": "CIDR da VCN",
-        "doc.headers.subnet_name": "Nome da Subnet",
         "doc.headers.subnet_cidr": "CIDR da Subnet",
         "doc.headers.destination_cidr": "CIDR de Destino",
         "doc.headers.common_name": "COMMON NAME",
@@ -598,7 +596,6 @@ DOC_STRINGS = {
         "doc.messages.no_routes_found": "No routes configured.",
         "doc.headers.vcn_name": "VCN Name",
         "doc.headers.vcn_cidr": "VCN CIDR",
-        "doc.headers.subnet_name": "Subnet Name",
         "doc.headers.subnet_cidr": "Subnet CIDR",
         "doc.headers.destination_cidr": "Destination CIDR",
         "doc.headers.common_name": "COMMON NAME",
