@@ -14,6 +14,7 @@ import doc_generator
 import oci_connector
 from celery_worker import (
     celery_app,
+    collect_database_task,
     collect_full_infrastructure_task,
     collect_new_host_task,
     collect_waf_report_task,
@@ -251,7 +252,7 @@ async def get_my_permissions(request: Request):
     - Non-admin in no groups: all types allowed.
     - Anonymous (no token): only 'new_host' allowed.
     """
-    ALL_TYPES = ["full_infra", "new_host", "kubernetes", "waf_report"]
+    ALL_TYPES = ["full_infra", "new_host", "kubernetes", "waf_report", "database"]
     token = (request.headers.get("Authorization") or "").replace("Bearer ", "").strip()
     user = auth.get_session_user(token) if token else None
 
@@ -606,11 +607,20 @@ async def start_data_collection(request: Request, payload: dict = Body(...)):
                 raise HTTPException(403, "Tenancy Profile desativado. Ative-o antes de iniciar a coleta.")
 
         if collection_type == "full_infra":
+            # Multi-compartment: accept "compartments" list or legacy "compartment_id" string
+            compartments_raw = payload.get("compartments")
             compartment_id = payload.get("compartment_id")
-            if not compartment_id:
-                raise HTTPException(400, "Falta 'compartment_id' para full_infra.")
+            if compartments_raw:
+                compartments = [
+                    {"id": c["compartment_id"], "name": c.get("compartment_name", "N/A")}
+                    for c in compartments_raw
+                ]
+            elif compartment_id:
+                compartments = [{"id": compartment_id, "name": payload.get("compartment_name", "N/A")}]
+            else:
+                raise HTTPException(400, "Falta 'compartments' ou 'compartment_id' para full_infra.")
             include_standalone = payload.get("include_standalone", True)
-            task = collect_full_infrastructure_task.delay(region, compartment_id, doc_type, include_standalone, profile_id)
+            task = collect_full_infrastructure_task.delay(region, compartments, doc_type, include_standalone, profile_id)
 
         elif collection_type == "new_host":
             details = payload.get("details")
@@ -624,6 +634,13 @@ async def start_data_collection(request: Request, payload: dict = Body(...)):
             if not compartment_id:
                 raise HTTPException(400, "Falta 'compartment_id' para waf_report.")
             task = collect_waf_report_task.delay(region, compartment_id, compartment_name, profile_id)
+
+        elif collection_type == "database":
+            compartment_id   = payload.get("compartment_id")
+            compartment_name = payload.get("compartment_name", "N/A")
+            if not compartment_id:
+                raise HTTPException(400, "Falta 'compartment_id' para database.")
+            task = collect_database_task.delay(region, compartment_id, compartment_name, profile_id)
 
         else:
             raise HTTPException(400, f"Tipo inválido: {collection_type}")
