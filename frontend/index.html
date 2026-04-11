@@ -11,26 +11,60 @@
 </head>
 <body>
 
+  <!-- ── Page loader bar (regions / compartments fetch) ── -->
+  <div id="page-loader-bar" class="page-loader-bar hidden">
+    <div class="page-loader-fill"></div>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════════
        Loading Overlay
   ═══════════════════════════════════════════════════════════ -->
   <div id="loading-overlay" class="hidden">
     <div class="progress-container">
-      <div class="progress-icon-ring">
-        <div class="spinner" id="progress-spinner"></div>
-        <!-- Cloud icon (shows during loading) -->
-        <svg id="progress-cloud-icon" class="progress-inner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-        </svg>
-        <!-- Checkmark icon (shows when done) -->
-        <svg id="progress-check-icon" class="progress-inner-icon progress-check-hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-          <polyline points="22 4 12 14.01 9 11.01"/>
-        </svg>
+
+      <!-- ① Header: title · spinner · timer · pct -->
+      <div class="progress-head">
+        <p class="progress-title" data-i18n="progress.title">COLETANDO DADOS OCI</p>
+        <div class="progress-head-right">
+          <div class="progress-spin-sm">
+            <div class="spinner" id="progress-spinner"></div>
+            <svg id="progress-cloud-icon" class="progress-inner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+            </svg>
+            <svg id="progress-check-icon" class="progress-inner-icon progress-check-hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <span id="progress-timer" class="progress-timer">00:00</span>
+          <span id="progress-pct" class="progress-pct">0%</span>
+        </div>
       </div>
-      <span id="progress-timer" class="progress-timer">00:00</span>
-      <span id="progress-text" class="progress-text" data-i18n="progress_loading">Carregando...</span>
-      <div class="progress-bar-container"><div id="progress-bar"></div></div>
+
+      <!-- ② Stage pipeline (horizontal, scrollable) -->
+      <div class="progress-pipeline-wrap">
+        <div id="pipeline-comp-label" class="pipeline-comp-label"></div>
+        <div id="progress-pipeline" class="progress-pipeline"></div>
+      </div>
+
+      <!-- ③ Compartment execution list (multi-comp only) -->
+      <div id="progress-comp-section" class="progress-comp-section hidden">
+        <div class="progress-comp-heading" data-i18n="progress.compartments_label">EXECUÇÃO POR COMPARTIMENTO</div>
+        <div class="progress-comp-frame">
+          <div id="progress-comp-list" class="progress-comp-list"></div>
+        </div>
+      </div>
+
+      <!-- ④ Footer: progress bar · current step text -->
+      <div class="progress-footer">
+        <div class="progress-footer-bar">
+          <div class="progress-bar-container"><div id="progress-bar"></div></div>
+        </div>
+        <div class="progress-footer-text">
+          <span id="progress-text" data-i18n="progress_loading">Carregando...</span>
+        </div>
+      </div>
+
     </div>
   </div>
 

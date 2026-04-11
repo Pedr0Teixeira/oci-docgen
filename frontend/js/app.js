@@ -32,9 +32,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const toastContainer = document.getElementById('toast-container');
   const progressText = document.getElementById('progress-text');
   const progressBar = document.getElementById('progress-bar');
+  const progressPct = document.getElementById('progress-pct');
   const progressSpinner = loadingOverlay.querySelector('.spinner');
   const progressCloudIcon = document.getElementById('progress-cloud-icon');
   const progressCheckIcon = document.getElementById('progress-check-icon');
+  const progressPipeline      = document.getElementById('progress-pipeline');
+  const progressCompSection   = document.getElementById('progress-comp-section');
+  const progressCompList      = document.getElementById('progress-comp-list');
+  const pipelineCompLabel     = document.getElementById('pipeline-comp-label');
+  const pageLoaderBar         = document.getElementById('page-loader-bar');
   const successScreen = document.getElementById('success-screen');
   const newDocBtn = document.getElementById('new-doc-btn');
   const languageSelector = document.getElementById('language-selector'); // may be null (replaced by flags)
@@ -72,6 +78,48 @@ document.addEventListener('DOMContentLoaded', () => {
   const metricsTitle       = document.getElementById('metrics-title');
   const metricsGuestNotice = document.getElementById('metrics-guest-notice');
   const metricsLoginCta    = document.getElementById('metrics-login-cta');
+
+  // --- Progress Pipeline Stage Definitions ---
+  const PIPELINE_STAGES_ALL = [
+    { id: 'init',         labelKey: 'pipe.init',         stepKeys: ['progress.initializing_clients'] },
+    { id: 'compute',      labelKey: 'pipe.compute',      stepKeys: ['progress.listing_instances','progress.starting_new_host','progress.analyzing_vm','progress.analyzing_host_count'] },
+    { id: 'networking',   labelKey: 'pipe.networking',   stepKeys: ['progress.analyzing_vcns','progress.analyzing_cluster_network','progress.mapping_waf_network'] },
+    { id: 'storage',      labelKey: 'pipe.storage',      stepKeys: ['progress.mapping_storage'] },
+    { id: 'security',     labelKey: 'pipe.security',     stepKeys: ['progress.checking_network_connectivity','progress.collecting_certificates','progress.collecting_waf_infra','progress.listing_waf','progress.analyzing_waf_attachments'] },
+    { id: 'lbs',          labelKey: 'pipe.lbs',          stepKeys: ['progress.inspecting_lbs'] },
+    { id: 'connectivity', labelKey: 'pipe.connectivity', stepKeys: ['progress.collecting_connectivity','progress.collecting_vpn'] },
+    { id: 'oke',          labelKey: 'pipe.oke',          stepKeys: ['progress.checking_oke','progress.listing_oke','progress.analyzing_worker'] },
+    { id: 'database',     labelKey: 'pipe.database',     stepKeys: ['progress.listing_db_systems','progress.collecting_db_network'] },
+    { id: 'finish',       labelKey: 'pipe.finish',       stepKeys: ['progress.finishing','progress.merging_compartments','progress.assembling_report','progress.success'] },
+  ];
+  const PIPELINE_BY_TYPE = {
+    full_infra: ['init','compute','networking','storage','security','lbs','connectivity','oke','database','finish'],
+    new_host:   ['init','compute','networking','finish'],
+    kubernetes: ['init','networking','oke','finish'],
+    waf_report: ['init','security','networking','finish'],
+    database:   ['init','networking','database','finish'],
+  };
+  // Build reverse lookup: stepKey → stageId
+  const STEP_TO_STAGE = {};
+  PIPELINE_STAGES_ALL.forEach(s => s.stepKeys.forEach(k => { STEP_TO_STAGE[k] = s.id; }));
+
+  // SVG icons per pipeline stage (16×16 viewBox, currentColor)
+  const PIPELINE_STAGE_ICONS = {
+    init:         `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1z"/><path d="M8 4.5V8l2 1.5"/></svg>`,
+    compute:      `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M5 12.5v1.5M11 12.5v1.5M3.5 14h9M5.5 7h.5M10 7h.5"/><line x1="1.5" y1="7" x2="14.5" y2="7"/></svg>`,
+    networking:   `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2 2.5-2 9.5 0 12M8 2c2 2.5 2 9.5 0 12"/></svg>`,
+    storage:      `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="5" rx="5.5" ry="2"/><path d="M2.5 5v6c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V5"/><path d="M2.5 8.5c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/></svg>`,
+    security:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5L2 4.5v4c0 3 2.5 5.5 6 6 3.5-0.5 6-3 6-6v-4L8 1.5z"/></svg>`,
+    lbs:          `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="5.5" width="13" height="5" rx="1.5"/><path d="M8 5.5v-3M5 3h6M5 10.5v2.5M11 10.5v2.5M3 13h4M9 13h4"/></svg>`,
+    connectivity: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8h13M10.5 4.5l3 3.5-3 3.5M5.5 4.5L2.5 8l3 3.5"/></svg>`,
+    oke:          `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="8,1.5 14,5 14,11 8,14.5 2,11 2,5"/><circle cx="8" cy="8" r="2"/></svg>`,
+    database:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="4.5" rx="5.5" ry="2"/><path d="M2.5 4.5v7c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2v-7"/><path d="M2.5 8.5c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/></svg>`,
+    finish:       `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><polyline points="5,8.5 7,10.5 11,6"/></svg>`,
+  };
+
+  let _pipelineStageIds       = [];  // current doc type's stage order
+  let _pipelineActiveIdx      = 0;   // index of currently active stage
+  let _lastKnownCompIdx       = -1;  // last compartment index seen, to detect transitions
 
   // --- Inline SVG Icon Definitions ---
   const ICONS = {
@@ -112,6 +160,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedDocType = null;
   let selectedCompartmentId = null;
   let selectedCompartmentName = null;
+  let selectedCompartments = {};
+  const COMP_PALETTE = ['#7c3aed','#0d9488','#d97706','#16a34a','#e11d48'];
+  const getSelectedCompartmentId = () => Object.keys(selectedCompartments)[0] || null;
+  const getSelectedCompartmentName = () => Object.values(selectedCompartments).join(', ') || null;
   let selectedInstances = {};
   let allInfrastructureData = {};
   // imageSections: [{id, name, position, files:[File]}]
@@ -221,6 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
           new_host:   t('doc_type_new'),
           kubernetes: t('doc_type_k8s'),
           waf_report: t('doc_type_waf'),
+          database:   t('doc_type_database'),
         };
         const docTypeName = docTypeNameMap[selectedDocType] || selectedDocType;
         const selectedContent = docTypeContainer.querySelector('.selected-item-display');
@@ -229,25 +282,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const compPlaceholder = selectedRegion ? t('step3_placeholder') : t('instance_select_compartment_first');
+    const isMultiComp = selectedDocType === 'full_infra';
     createCustomSelect(
       compartmentContainer,
       allCompartmentsData,
       compPlaceholder,
-      (selectedValue, selectedName) => {
-        selectedCompartmentId = selectedValue;
-        selectedCompartmentName = selectedName;
+      (selectedValue, selectedName, isChecked) => {
+        if (isMultiComp) {
+          if (isChecked) {
+            selectedCompartments[selectedValue] = selectedName;
+          } else {
+            delete selectedCompartments[selectedValue];
+          }
+          updateCompartmentMultiSelectDisplay();
+        } else {
+          selectedCompartments = {};
+          selectedCompartments[selectedValue] = selectedName;
+        }
+        selectedCompartmentId = getSelectedCompartmentId();
+        selectedCompartmentName = getSelectedCompartmentName();
         resetAndFetchInstances();
         updateFetchButtonState();
       },
       allCompartmentsData.length > 0,
-      false
+      isMultiComp,
+      isMultiComp ? selectedCompartments : null
     );
 
-    if (selectedCompartmentId && selectedCompartmentName) {
+    if (isMultiComp) {
+      updateCompartmentMultiSelectDisplay();
+    } else if (selectedCompartmentId && selectedCompartmentName) {
         const selectedContent = compartmentContainer.querySelector('.selected-item-display');
         const level = allCompartmentsData.find(c => c.id === selectedCompartmentId)?.level || 0;
-        let iconHtml = level > 0 ? `<span class="item-tree-prefix"></span>` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>`;
-        selectedContent.innerHTML = `${iconHtml}<span class="item-text">${selectedCompartmentName}</span>`;
+        const folderIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon" style="color:var(--accent)"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>`;
+        const prefixHtml = level > 0 ? `<span class="item-tree-prefix"></span>` : '';
+        selectedContent.innerHTML = `${prefixHtml}${folderIconSvg}<span class="item-text">${selectedCompartmentName}</span>`;
         selectedContent.classList.remove('placeholder');
     }
 
@@ -517,28 +586,167 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const showProgress = () => {
     loadingOverlay.classList.remove('hidden');
-    progressSpinner.style.display = 'none';
-    progressTimer.style.display = 'block';
-    progressText.style.display = 'block';
-    progressBarContainer.style.display = 'block';
     progressBar.style.width = '0%';
     progressBar.style.background = '';
     progressText.textContent = t('progress.initializing_clients');
     progressTimer.textContent = '00:00';
-    // Reset icon state
+    if (progressPct) { progressPct.textContent = '0%'; progressPct.style.color = ''; }
+    // Reset spinner/icons
     if (progressCloudIcon) { progressCloudIcon.classList.remove('progress-icon-fade-out'); }
     if (progressCheckIcon) { progressCheckIcon.classList.add('progress-check-hidden'); progressCheckIcon.classList.remove('progress-icon-check-in'); }
     if (progressSpinner)   { progressSpinner.style.borderTopColor = ''; progressSpinner.style.animation = ''; }
+    // Build pipeline for current doc type
+    _lastKnownCompIdx = -1;
+    if (pipelineCompLabel) pipelineCompLabel.innerHTML = '';
+    _buildProgressPipeline();
+    // Init compartment section
+    if (progressCompSection) progressCompSection.classList.add('hidden');
+    if (progressCompList) {
+      progressCompList.innerHTML = '';
+      const compNames = Object.values(selectedCompartments);
+      if (compNames.length > 1) {
+        progressCompSection && progressCompSection.classList.remove('hidden');
+        compNames.forEach(name => progressCompList.appendChild(_makeCompRow('pending', name)));
+      }
+    }
   };
 
+  function _buildProgressPipeline() {
+    if (!progressPipeline) return;
+    progressPipeline.innerHTML = '';
+    _pipelineStageIds = (PIPELINE_BY_TYPE[selectedDocType] || PIPELINE_BY_TYPE['full_infra']).slice();
+    _pipelineActiveIdx = 0;
+    _pipelineStageIds.forEach((stageId, i) => {
+      const def = PIPELINE_STAGES_ALL.find(s => s.id === stageId);
+      if (!def) return;
+      if (i > 0) {
+        const arr = document.createElement('span');
+        arr.className = 'pipe-arrow';
+        arr.textContent = '→';
+        progressPipeline.appendChild(arr);
+      }
+      const iconHtml = PIPELINE_STAGE_ICONS[stageId] || '';
+      const stage = document.createElement('div');
+      stage.className = 'pipe-stage ' + (i === 0 ? 'active' : 'pending');
+      stage.dataset.stageId = stageId;
+      stage.dataset.iconHtml = iconHtml;
+      // First stage starts active with spinner ring; others show icon dimmed
+      const innerHtml = i === 0
+        ? `${iconHtml}<div class="pipe-stage-spinner"></div>`
+        : iconHtml;
+      stage.innerHTML = `<div class="pipe-stage-icon">${innerHtml}</div><div class="pipe-stage-label">${t(def.labelKey) || stageId}</div>`;
+      progressPipeline.appendChild(stage);
+    });
+  }
+
+  function _setPipelineActiveIdx(idx) {
+    if (!progressPipeline) return;
+    _pipelineActiveIdx = Math.max(0, Math.min(idx, _pipelineStageIds.length - 1));
+    const stages = progressPipeline.querySelectorAll('.pipe-stage');
+    const arrows = progressPipeline.querySelectorAll('.pipe-arrow');
+    stages.forEach((el, i) => {
+      const iconEl = el.querySelector('.pipe-stage-icon');
+      const iconHtml = el.dataset.iconHtml || '';
+      if (i < _pipelineActiveIdx) {
+        el.className = 'pipe-stage done';
+        iconEl.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,8.5 6.5,12 13,5"/></svg>`;
+      } else if (i === _pipelineActiveIdx) {
+        el.className = 'pipe-stage active';
+        iconEl.innerHTML = `${iconHtml}<div class="pipe-stage-spinner"></div>`;
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      } else {
+        el.className = 'pipe-stage pending';
+        iconEl.innerHTML = iconHtml;
+      }
+    });
+    arrows.forEach((el, i) => { el.className = 'pipe-arrow' + (i < _pipelineActiveIdx ? ' done' : ''); });
+  }
+
+  function _advancePipelineByStepKey(stepKey, compIdx) {
+    // When a new compartment starts, reset the pipeline back to stage 0
+    if (compIdx !== undefined && compIdx !== _lastKnownCompIdx && compIdx >= 0) {
+      _lastKnownCompIdx = compIdx;
+      _pipelineActiveIdx = 0;
+      _setPipelineActiveIdx(0);
+    }
+    const stageId = STEP_TO_STAGE[stepKey];
+    if (!stageId) return;
+    const idx = _pipelineStageIds.indexOf(stageId);
+    if (idx >= 0 && idx > _pipelineActiveIdx) _setPipelineActiveIdx(idx);
+  }
+
+  function _updatePipelineCompLabel(compIdx, allDone) {
+    if (!pipelineCompLabel) return;
+    const n = progressCompList ? progressCompList.children.length : 0;
+    if (n <= 1) { pipelineCompLabel.innerHTML = ''; return; }
+    if (allDone) {
+      pipelineCompLabel.innerHTML = `${t('pipe.all_done') || 'Todos os compartimentos concluídos'}`;
+      return;
+    }
+    const names = Object.values(selectedCompartments);
+    const name = names[compIdx] || '';
+    pipelineCompLabel.innerHTML = `${t('pipe.comp_analyzing') || 'Analisando'}: <span>${name}</span> &nbsp;(${compIdx + 1}/${n})`;
+  }
+
+  function _makeCompRow(state, name) {
+    const row = document.createElement('div');
+    row.className = 'comp-row ' + state;
+    const iconHtml = state === 'done'
+      ? `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3,8.5 6.5,12 13,5"/></svg>`
+      : state === 'active' ? '<div class="comp-row-spinner"></div>' : '';
+    const badgeHtml = state === 'active' ? `<span class="comp-row-badge">${t('progress.compartment_active') || 'atual'}</span>` : '';
+    row.innerHTML = `<span class="comp-row-icon">${iconHtml}</span><span class="comp-row-name">${name}</span>${badgeHtml}`;
+    return row;
+  }
+
+  // Update comp rows in-place without replacing DOM nodes (avoids NodeList stale-ref bugs)
+  function _updateCompRows(currentIdx, allDone) {
+    if (!progressCompList) return;
+    const rows = Array.from(progressCompList.querySelectorAll('.comp-row'));
+    rows.forEach((row, i) => {
+      const newState = allDone || i < currentIdx ? 'done' : i === currentIdx ? 'active' : 'pending';
+      if (row.classList.contains(newState)) return; // already correct
+      row.className = 'comp-row ' + newState;
+      // Update icon
+      const iconEl = row.querySelector('.comp-row-icon');
+      if (iconEl) {
+        if (newState === 'done') {
+          iconEl.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3,8.5 6.5,12 13,5"/></svg>`;
+        } else if (newState === 'active') {
+          iconEl.innerHTML = '<div class="comp-row-spinner"></div>';
+        } else {
+          iconEl.innerHTML = '';
+        }
+      }
+      // Badge: add for active, remove otherwise
+      let badge = row.querySelector('.comp-row-badge');
+      if (newState === 'active') {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'comp-row-badge';
+          badge.textContent = t('progress.compartment_active') || 'atual';
+          row.appendChild(badge);
+        }
+      } else if (badge) {
+        badge.remove();
+      }
+    });
+    // Scroll active into view
+    const activeRow = progressCompList.querySelector('.comp-row.active');
+    if (activeRow) activeRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   const updateProgress = (percentage, text) => {
-    progressBar.style.width = `${percentage}%`;
+    const pct = Math.round(percentage);
+    progressBar.style.width = `${pct}%`;
     progressText.textContent = text;
+    if (progressPct) progressPct.textContent = `${pct}%`;
     if (percentage >= 100) {
       // Cloud → checkmark transition
       progressSpinner.style.borderTopColor = '#3fb950';
       progressSpinner.style.animation = 'spin 0.4s linear 2, progressFadeRing 0.5s ease 0.8s forwards';
       progressCloudIcon && progressCloudIcon.classList.add('progress-icon-fade-out');
+      if (progressPct) progressPct.style.color = '#3fb950';
       setTimeout(() => {
         progressCheckIcon && progressCheckIcon.classList.remove('progress-check-hidden');
         progressCheckIcon && progressCheckIcon.classList.add('progress-icon-check-in');
@@ -554,16 +762,12 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const toggleLoading = (show) => {
+    if (!pageLoaderBar) return;
     if (show) {
-      if (progressSpinner) progressSpinner.style.display = 'block';
-      progressText.style.display = 'block';
-      progressText.textContent = t('progress_loading');
-
-      progressTimer.style.display = 'none';
-      progressBarContainer.style.display = 'none';
-      loadingOverlay.classList.remove('hidden');
+      pageLoaderBar.classList.remove('hidden', 'done');
     } else {
-      loadingOverlay.classList.add('hidden');
+      pageLoaderBar.classList.add('done');
+      setTimeout(() => pageLoaderBar.classList.add('hidden'), 320);
     }
   };
 
@@ -584,6 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedDocType = null;
     selectedCompartmentId = null;
     selectedCompartmentName = null;
+    selectedCompartments = {};
     selectedInstances = {};
     allInfrastructureData = {};
     imageSections = [];
@@ -609,6 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storageOptRow) storageOptRow.classList.toggle('hidden', selectedDocType !== 'full_infra');
     const isKubernetes = selectedDocType === 'kubernetes';
     const isWaf = selectedDocType === 'waf_report';
+    const isDatabase = selectedDocType === 'database';
     instanceStep.classList.toggle('hidden', !isNewHost);
 
     let i18nKey = 'fetch_btn_full';
@@ -618,6 +824,8 @@ document.addEventListener('DOMContentLoaded', () => {
       i18nKey = 'fetch_btn_k8s';
     } else if (isWaf) {
       i18nKey = 'fetch_btn_waf';
+    } else if (isDatabase) {
+      i18nKey = 'fetch_btn_database';
     }
 
     const fetchBtnSpan = fetchBtn.querySelector('span');
@@ -625,6 +833,43 @@ document.addEventListener('DOMContentLoaded', () => {
       fetchBtnSpan.setAttribute('data-i18n', i18nKey);
       fetchBtnSpan.textContent = t(i18nKey);
     }
+
+    // Clear compartment selection and rebuild with correct multi-select mode
+    selectedCompartments = {};
+    selectedCompartmentId = null;
+    selectedCompartmentName = null;
+    if (allCompartmentsData.length > 0) {
+      const isMultiComp = selectedDocType === 'full_infra';
+      createCustomSelect(
+        compartmentContainer,
+        allCompartmentsData,
+        t('step3_placeholder'),
+        (selectedValue, selectedName, isChecked) => {
+          if (isMultiComp) {
+            if (isChecked) {
+              selectedCompartments[selectedValue] = selectedName;
+            } else {
+              delete selectedCompartments[selectedValue];
+            }
+            updateCompartmentMultiSelectDisplay();
+          } else {
+            selectedCompartments = {};
+            selectedCompartments[selectedValue] = selectedName;
+          }
+          selectedCompartmentId = getSelectedCompartmentId();
+          selectedCompartmentName = getSelectedCompartmentName();
+          resetAndFetchInstances();
+          updateFetchButtonState();
+        },
+        true,
+        isMultiComp,
+        isMultiComp ? selectedCompartments : null
+      );
+      if (isMultiComp) {
+        updateCompartmentMultiSelectDisplay();
+      }
+    }
+
 
     updateFetchButtonState();
   }
@@ -634,11 +879,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isNewHost) {
       fetchBtn.disabled = Object.keys(selectedInstances).length === 0;
     } else {
-      fetchBtn.disabled = !selectedCompartmentId;
+      fetchBtn.disabled = Object.keys(selectedCompartments).length === 0;
     }
   }
 
-  function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false) {
+  function createCustomSelect(container, options, placeholder, onSelectCallback, isEnabled = true, isMultiSelect = false, checkedStateObj = null) {
     container.innerHTML = '';
     const selected = document.createElement('div');
     selected.classList.add('select-selected');
@@ -700,7 +945,23 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       searchContainer.appendChild(searchBox);
       items.appendChild(searchContainer);
+
+      // Compartment selector: show selection-mode note at top of panel
+      if (container === compartmentContainer && selectedDocType) {
+        const isMulti = selectedDocType === 'full_infra';
+        const note = document.createElement('div');
+        note.className = 'select-panel-note ' + (isMulti ? 'note-multi' : 'note-single');
+        const icon = isMulti
+          ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
+          : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+        note.innerHTML = `${icon}<span>${isMulti ? t('step3_hint_multi') : t('step3_hint_single')}</span>`;
+        items.appendChild(note);
+      }
     }
+
+    // Choose which state object the multi-select uses for "checked" lookups.
+    // Defaults to selectedInstances for backwards compatibility (instance picker).
+    const stateObj = checkedStateObj || selectedInstances;
 
     options.forEach(option => {
       const item = document.createElement('div');
@@ -714,22 +975,45 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (isMultiSelect) {
         item.classList.add('select-item');
-        if (selectedInstances[optionValue]) {
+        const isChecked = !!stateObj[optionValue];
+        if (isChecked) {
           item.classList.add('checked');
         }
-        iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`;
-        const status = option.status || '';
-        const statusClass = status.toLowerCase();
-        const isChecked = !!selectedInstances[optionValue];
-        item.innerHTML = `
-          <input type="checkbox" value="${optionValue}" data-name="${optionName}" ${isChecked ? 'checked' : ''}>
-          <span class="custom-checkbox${isChecked ? ' checked' : ''}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-          <div class="instance-info">
-             ${iconSvg}
-             <span class="instance-status status-${statusClass}"></span>
-             <span class="item-text">${optionName}</span>
-             <span class="status-text">(${status})</span>
-          </div>`;
+        // Compartment hierarchical multi-select (option.level present)
+        if (option.level !== undefined) {
+          item.style.paddingLeft = `${12 + option.level * 22}px`;
+          const treePrefix = option.level > 0 ? `<span class="item-tree-prefix"></span>` : '';
+          const folderIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>`;
+          item.innerHTML = `
+            <input type="checkbox" value="${optionValue}" data-name="${optionName}" ${isChecked ? 'checked' : ''}>
+            <span class="custom-checkbox${isChecked ? ' checked' : ''}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+            <div class="comp-item-info">
+               ${treePrefix}${folderIcon}
+               <span class="item-text">${optionName}</span>
+            </div>`;
+        } else {
+          // Multi-select instance items
+          const status = option.status || '';
+          const statusClass = getStateCssClass(status);
+          const statusLabel = getStateLabel(status);
+          const isTerminated = statusClass === 'terminated';
+          iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" x2="6" y1="6" y2="6"></line><line x1="6" x2="6" y1="18" y2="18"></line></svg>`;
+          if (isTerminated) {
+            item.classList.add('select-item-locked');
+          }
+          item.innerHTML = `
+            <input type="checkbox" value="${optionValue}" data-name="${optionName}" ${isChecked ? 'checked' : ''} ${isTerminated ? 'disabled' : ''}>
+            <span class="custom-checkbox${isChecked ? ' checked' : ''}${isTerminated ? ' disabled' : ''}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+            <div class="instance-info">
+               ${iconSvg}
+               <span class="item-text">${optionName}</span>
+               <span class="status-badge status-${statusClass}">${statusLabel}</span>
+            </div>`;
+          // Prevent selection of TERMINATED
+          if (isTerminated) {
+            item.addEventListener('click', e => e.stopPropagation(), true);
+          }
+        }
       } else {
         item.classList.add('select-item-parent');
         if (container === profileContainer) {
@@ -746,10 +1030,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (container === docTypeContainer) {
           iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
         } else if (option.level !== undefined) {
+          // Single-select compartment: same folder-icon style as multi-select
           item.classList.remove('select-item-parent');
           item.classList.add(option.level > 0 ? 'select-item' : 'select-item-parent');
-          item.style.paddingLeft = `${option.level * 25}px`;
-          item.innerHTML = option.level > 0 ? `<span class="item-tree-prefix"></span><span class="item-text">${optionName}</span>` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg><span class="item-text">${optionName}</span>`;
+          item.style.paddingLeft = `${12 + option.level * 22}px`;
+          const treePrefix = option.level > 0 ? `<span class="item-tree-prefix"></span>` : '';
+          const folderIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>`;
+          item.innerHTML = `<div class="comp-item-info">${treePrefix}${folderIcon}<span class="item-text">${optionName}</span></div>`;
         }
         const lockSvg = option.lockSvg || null;
         const isLocked = option.locked || false;
@@ -787,7 +1074,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           }
           const selectedContent = selected.querySelector('.selected-item-display');
-          selectedContent.innerHTML = item.innerHTML;
+          // For compartment items, build a clean display (avoid copying .comp-item-info wrapper)
+          if (option.level !== undefined) {
+            const folderIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="item-icon" style="color:var(--accent)"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>`;
+            const prefix = option.level > 0 ? `<span class="item-tree-prefix"></span>` : '';
+            selectedContent.innerHTML = `${prefix}${folderIcon}<span class="item-text">${optionName}</span>`;
+          } else {
+            selectedContent.innerHTML = item.innerHTML;
+          }
           selectedContent.classList.remove('placeholder');
           onSelectCallback(optionValue, optionName, false, option);
           closeAllSelects();
@@ -832,6 +1126,55 @@ document.addEventListener('DOMContentLoaded', () => {
         container.appendChild(tag);
       });
     }
+  }
+
+  /**
+   * Updates the display of the compartment multi-select to show selected items as
+   * coloured chips. Each chip uses a colour from COMP_PALETTE so the user can
+   * cross-reference compartment colours in the diagram.
+   */
+  function updateCompartmentMultiSelectDisplay() {
+    const container = compartmentContainer.querySelector('.selected-items-container');
+    if (!container) return;
+    container.innerHTML = '';
+    const selectedIds = Object.keys(selectedCompartments);
+    if (selectedIds.length === 0) {
+      const placeholderKey = selectedRegion ? 'step3_placeholder' : 'instance_select_compartment_first';
+      container.innerHTML = `<span class="placeholder">${t(placeholderKey)}</span>`;
+      return;
+    }
+    selectedIds.forEach((id, idx) => {
+      const name = selectedCompartments[id];
+      const color = COMP_PALETTE[idx % COMP_PALETTE.length];
+      const chip = document.createElement('span');
+      chip.className = 'comp-chip';
+      chip.style.setProperty('--comp-color', color);
+      chip.innerHTML = `
+        <span class="comp-chip-dot"></span>
+        <span class="comp-chip-text">${name}</span>
+        <button type="button" class="comp-chip-x" aria-label="remove" data-id="${id}">×</button>
+      `;
+      const removeBtn = chip.querySelector('.comp-chip-x');
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        delete selectedCompartments[id];
+        selectedCompartmentId = getSelectedCompartmentId();
+        selectedCompartmentName = getSelectedCompartmentName();
+        // Sync the visible checkbox in the dropdown
+        const cbItem = compartmentContainer.querySelector(`.select-item[data-value="${id}"]`);
+        if (cbItem) {
+          const cb = cbItem.querySelector('input[type="checkbox"]');
+          if (cb) cb.checked = false;
+          cbItem.classList.remove('checked');
+          const ccb = cbItem.querySelector('.custom-checkbox');
+          if (ccb) ccb.classList.remove('checked');
+        }
+        updateCompartmentMultiSelectDisplay();
+        resetAndFetchInstances();
+        updateFetchButtonState();
+      });
+      container.appendChild(chip);
+    });
   }
 
   /**
@@ -925,6 +1268,7 @@ document.addEventListener('DOMContentLoaded', () => {
       { id: 'full_infra', name: t('doc_type_full') },
       { id: 'kubernetes', name: t('doc_type_k8s') },
       { id: 'waf_report', name: t('doc_type_waf') },
+      { id: 'database',   name: t('doc_type_database') },
     ];
 
     // Determine which types are allowed for the current user
@@ -980,19 +1324,36 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const compartments = await response.json();
       allCompartmentsData = compartments;
+      const isMultiComp = selectedDocType === 'full_infra';
       createCustomSelect(
         compartmentContainer,
         allCompartmentsData,
         t('step3_placeholder'),
-        (selectedValue, selectedName) => {
-          selectedCompartmentId = selectedValue;
-          selectedCompartmentName = selectedName;
+        (selectedValue, selectedName, isChecked) => {
+          if (isMultiComp) {
+            if (isChecked) {
+              selectedCompartments[selectedValue] = selectedName;
+            } else {
+              delete selectedCompartments[selectedValue];
+            }
+            updateCompartmentMultiSelectDisplay();
+          } else {
+            selectedCompartments = {};
+            selectedCompartments[selectedValue] = selectedName;
+          }
+          selectedCompartmentId = getSelectedCompartmentId();
+          selectedCompartmentName = getSelectedCompartmentName();
           resetAndFetchInstances();
           updateFetchButtonState();
         },
         true,
-        false
+        isMultiComp,
+        isMultiComp ? selectedCompartments : null
       );
+      if (isMultiComp) {
+        updateCompartmentMultiSelectDisplay();
+      }
+  
     } catch (error) {
       showToast(error.message, 'error');
     } finally {
@@ -1043,6 +1404,8 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   const resetAndFetchCompartments = () => {
     selectedCompartmentId = null;
+    selectedCompartmentName = null;
+    selectedCompartments = {};
     selectedInstances = {};
     updateFetchButtonState();
     detailsContainer.classList.add('hidden');
@@ -1089,6 +1452,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let taskType = 'full_infra';
     if (selectedDocType === 'new_host') taskType = 'new_host';
     else if (selectedDocType === 'waf_report') taskType = 'waf_report';
+    else if (selectedDocType === 'database') taskType = 'database';
 
     const payload = {
       type: taskType,
@@ -1106,8 +1470,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (taskType === 'waf_report') {
       payload.compartment_id = selectedCompartmentId;
       payload.compartment_name = selectedCompartmentName;
+    } else if (taskType === 'database') {
+      payload.type = 'database';
+      payload.compartment_id = getSelectedCompartmentId();
+      payload.compartment_name = getSelectedCompartmentName();
     } else {
+      // full_infra (and kubernetes)
       payload.compartment_id = selectedCompartmentId;
+      payload.compartments = Object.entries(selectedCompartments).map(([id, name]) => ({compartment_id: id, compartment_name: name}));
       // Only include standalone (unattached) volumes if the user opted in
       payload.include_standalone = includeStandaloneChk ? includeStandaloneChk.checked : true;
     }
@@ -1181,6 +1551,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const percentage = progressInfo.total > 0 ? (progressInfo.current / progressInfo.total) * 100 : 5;
             let progressMessage = progressInfo.step_key ? t(progressInfo.step_key, progressInfo.context) : (progressInfo.step || t('progress_loading'));
             updateProgress(percentage, progressMessage);
+
+            // Determine active compartment index (used for both comp-list and pipeline reset)
+            let activeCompIdx = undefined;
+            if (progressCompList && progressCompList.children.length > 1) {
+              const n = progressCompList.children.length;
+              if (progressInfo.step_key === 'progress.collecting_compartment' && progressInfo.context) {
+                activeCompIdx = (progressInfo.context.current || 1) - 1;
+              } else if (progressInfo.step_key === 'progress.merging_compartments') {
+                activeCompIdx = n; // signals all-done
+              } else {
+                // Infer from percentage: backend spreads 0–90% evenly across compartments
+                activeCompIdx = Math.min(Math.floor(percentage / 90 * n), n - 1);
+              }
+              _updateCompRows(activeCompIdx, activeCompIdx >= n);
+              _updatePipelineCompLabel(activeCompIdx, activeCompIdx >= n);
+            }
+
+            // Advance pipeline stage (resets to stage 0 when compartment transitions)
+            if (progressInfo.step_key) _advancePipelineByStepKey(progressInfo.step_key, activeCompIdx);
           }
         } else if (data.status === 'SUCCESS') {
           clearInterval(pollingIntervalId);
@@ -1200,6 +1589,10 @@ document.addEventListener('DOMContentLoaded', () => {
           showToast(t('toast.summary_generated_in', { duration: durationString }));
 
           updateProgress(100, t('progress.success'));
+          // Mark all pipeline stages done + clear comp label
+          _setPipelineActiveIdx(_pipelineStageIds.length - 1);
+          _updateCompRows(0, true);
+          _updatePipelineCompLabel(0, true);
           allInfrastructureData = data.result;
           // Wrapped so rendering errors never block hideProgress
           try {
@@ -1308,10 +1701,416 @@ document.addEventListener('DOMContentLoaded', () => {
     return html || '<p class="no-data-message">' + t('summary.no_waf_found') + '</p>';
   }
 
+  // ── DB System rich card renderer (DBaaS Web Summary) ─────────────────────────
+  function renderDbSystemCard(db, opts) {
+    opts = opts || {};
+    const compBadgeFn = opts.compBadge || function() { return ''; };
+    const statusClass = getStateCssClass(db.lifecycle_state);
+
+    const _val = (v) => (v === null || v === undefined || v === '') ? '—' : v;
+    const _bool = (v) => v ? (t('summary.yes') || 'Sim') : (t('summary.no') || 'Não');
+    const _date = (v) => {
+      if (!v) return '—';
+      try {
+        const d = new Date(v);
+        if (isNaN(d.getTime())) return v;
+        return d.toLocaleString(currentLanguage === 'pt' ? 'pt-BR' : 'en-US');
+      } catch (e) { return v; }
+    };
+
+    const editionAbbr = (() => {
+      const e = (db.database_edition || '').toUpperCase();
+      if (e.includes('EXTREME')) return 'EE-XP';
+      if (e.includes('HIGH_PERFORMANCE')) return 'EE-HP';
+      if (e.includes('ENTERPRISE')) return 'EE';
+      if (e.includes('STANDARD')) return 'SE2';
+      return db.database_edition || '';
+    })();
+    const licenseAbbr = (() => {
+      const l = (db.license_model || '').toUpperCase();
+      if (l === 'BRING_YOUR_OWN_LICENSE') return 'BYOL';
+      if (l === 'LICENSE_INCLUDED') return 'License Included';
+      return _val(db.license_model);
+    })();
+
+    const DB_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>`;
+    const COMPUTE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`;
+    const NETWORK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><rect x="2" y="9" width="4" height="4" rx="1"/><rect x="18" y="9" width="4" height="4" rx="1"/><rect x="10" y="2" width="4" height="4" rx="1"/><rect x="10" y="18" width="4" height="4" rx="1"/><line x1="6" y1="11" x2="10" y2="11"/><line x1="14" y1="11" x2="18" y2="11"/><line x1="12" y1="6" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="18"/></svg>`;
+    const HA_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+    const NODE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>`;
+    const EXPAND_ARROW = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+
+    // ── 1. General info ──
+    const generalFieldset = `
+      <fieldset>
+        <legend>${DB_ICON}${t('summary.db.general_info') || 'Informações Gerais'}</legend>
+        <div class="grid-container">
+          <div class="info-group">
+            <label>${t('summary.db.edition') || 'Edition'}</label>
+            <div class="info-value">${editionAbbr ? `<span class="db-edition-badge">${editionAbbr}</span> ` : ''}<span style="color:var(--text-secondary);font-size:11px">${_val(db.database_edition)}</span></div>
+          </div>
+          <div class="info-group">
+            <label>${t('summary.db.license') || 'License'}</label>
+            <div class="info-value"><span class="db-license-badge">${licenseAbbr}</span></div>
+          </div>
+          <div class="info-group"><label>${t('summary.db.version') || 'Version'}</label><div class="info-value">${_val(db.version)}</div></div>
+          <div class="info-group"><label>${t('summary.db.os_version') || 'OS Version'}</label><div class="info-value">${_val(db.os_version)}</div></div>
+          <div class="info-group"><label>${t('summary.db.time_zone') || 'Time Zone'}</label><div class="info-value">${_val(db.time_zone)}</div></div>
+          <div class="info-group"><label>${t('summary.db.created') || 'Created'}</label><div class="info-value">${_date(db.time_created)}</div></div>
+          ${db.cluster_name ? `<div class="info-group full-width"><label>${t('summary.db.cluster_name') || 'Cluster Name'}</label><div class="info-value text-highlight">${db.cluster_name}</div></div>` : ''}
+        </div>
+      </fieldset>`;
+
+    // ── 2. Compute & Storage ──
+    const computeFieldset = `
+      <fieldset>
+        <legend>${COMPUTE_ICON}${t('summary.db.compute_storage') || 'Compute & Storage'}</legend>
+        <div class="db-metrics-row">
+          <div class="db-metric-chip">
+            <span class="db-metric-value">${_val(db.cpu_core_count)}</span>
+            <span class="db-metric-label">vCPUs</span>
+          </div>
+          <div class="db-metric-chip">
+            <span class="db-metric-value">${_val(db.memory_size_in_gbs)}</span>
+            <span class="db-metric-label">GB RAM</span>
+          </div>
+          <div class="db-metric-chip">
+            <span class="db-metric-value">${_val(db.data_storage_size_in_gbs)}</span>
+            <span class="db-metric-label">GB Data</span>
+          </div>
+          ${(db.node_count || 0) > 1 ? `<div class="db-metric-chip"><span class="db-metric-value">${db.node_count}</span><span class="db-metric-label">Nodes</span></div>` : ''}
+        </div>
+        <div class="grid-container">
+          <div class="info-group"><label>${t('summary.db.shape') || 'Shape'}</label><div class="info-value">${_val(db.shape)}</div></div>
+          <div class="info-group"><label>${t('summary.db.reco_storage_gb') || 'Reco Storage (GB)'}</label><div class="info-value">${_val(db.reco_storage_size_in_gb)}</div></div>
+          <div class="info-group"><label>${t('summary.db.data_storage_pct') || 'Data %'}</label><div class="info-value">${_val(db.data_storage_percentage)}${db.data_storage_percentage ? '%' : ''}</div></div>
+          <div class="info-group"><label>${t('summary.db.disk_redundancy') || 'Disk Redundancy'}</label><div class="info-value">${_val(db.disk_redundancy)}</div></div>
+          <div class="info-group"><label>${t('summary.db.storage_perf') || 'Storage Perf'}</label><div class="info-value">${_val(db.storage_volume_performance_mode)}</div></div>
+          <div class="info-group"><label>${t('summary.db.storage_management') || 'Storage Mgmt'}</label><div class="info-value">${_val(db.storage_management)}</div></div>
+        </div>
+      </fieldset>`;
+
+    // ── 3. Network ──
+    const networkFieldset = `
+      <fieldset>
+        <legend>${NETWORK_ICON}${t('summary.db.network') || 'Rede'}</legend>
+        <div class="grid-container">
+          <div class="info-group"><label>${t('summary.db.hostname') || 'Hostname'}</label><div class="info-value text-highlight">${_val(db.hostname)}</div></div>
+          <div class="info-group"><label>${t('summary.db.domain') || 'Domain'}</label><div class="info-value">${_val(db.domain)}</div></div>
+          <div class="info-group"><label>${t('summary.db.listener_port') || 'Listener Port'}</label><div class="info-value">${_val(db.listener_port)}</div></div>
+          <div class="info-group"><label>${t('summary.db.scan_dns') || 'SCAN DNS'}</label><div class="info-value"><span class="code-text">${_val(db.scan_dns_name)}</span></div></div>
+          <div class="info-group"><label>VCN</label><div class="info-value">${_val(db.vcn_name)}</div></div>
+          <div class="info-group"><label>Subnet</label><div class="info-value">${_val(db.subnet_name)}</div></div>
+          ${db.backup_subnet_name ? `<div class="info-group"><label>${t('summary.db.backup_subnet') || 'Backup Subnet'}</label><div class="info-value">${db.backup_subnet_name}</div></div>` : ''}
+          ${(db.scan_ip_ids || []).length > 0 ? `<div class="info-group"><label>${t('summary.db.scan_ips') || 'SCAN IPs'}</label><div class="info-value">${db.scan_ip_ids.length}</div></div>` : ''}
+          ${(db.nsg_ids || []).length > 0 ? `<div class="info-group"><label>NSGs</label><div class="info-value">${db.nsg_ids.length}</div></div>` : ''}
+        </div>
+      </fieldset>`;
+
+    // ── 4. High Availability ──
+    const fdHtml = (db.fault_domains || []).length > 0
+      ? db.fault_domains.map(f => `<span class="comp-badge" style="--badge-bg:rgba(13,148,136,0.18);--badge-border:rgba(13,148,136,0.5);--badge-dot:#0d9488">${f}</span>`).join(' ')
+      : '—';
+    const haFieldset = `
+      <fieldset>
+        <legend>${HA_ICON}${t('summary.db.high_availability') || 'Alta Disponibilidade'}</legend>
+        <div class="grid-container">
+          <div class="info-group full-width"><label>${t('summary.db.availability_domain') || 'Availability Domain'}</label><div class="info-value">${_val(db.availability_domain)}</div></div>
+          <div class="info-group full-width"><label>${t('summary.db.fault_domains') || 'Fault Domains'}</label><div class="info-value">${fdHtml}</div></div>
+          <div class="info-group"><label>${t('summary.db.ssh_keys') || 'SSH Public Keys'}</label><div class="info-value">${_val(db.ssh_public_keys_count)}</div></div>
+        </div>
+      </fieldset>`;
+
+    // ── 5. DB Nodes ──
+    const nodesRows = (db.db_nodes || []).map(n => [
+      `<span class="text-highlight">${_val(n.hostname)}</span>`,
+      `<span class="status-badge status-${getStateCssClass(n.lifecycle_state)}">${getStateLabel(n.lifecycle_state)}</span>`,
+      _val(n.private_ip),
+      _val(n.fault_domain),
+      n.software_storage_size_in_gb ? n.software_storage_size_in_gb + ' GB' : '—',
+    ]);
+    const nodesContent = nodesRows.length > 0
+      ? `<div class="table-container"><table class="resource-table">
+          <thead><tr>
+            <th>${t('summary.db.hostname') || 'Hostname'}</th>
+            <th>${t('summary.status') || 'Status'}</th>
+            <th>${t('summary.db.private_ip') || 'Private IP'}</th>
+            <th>${t('summary.db.fault_domain') || 'Fault Domain'}</th>
+            <th>${t('summary.db.sw_storage') || 'Software Storage'}</th>
+          </tr></thead>
+          <tbody>${nodesRows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('')}</tbody>
+        </table></div>`
+      : `<p class="no-data-message">${t('summary.no_resource_found') || 'Nenhum encontrado.'}</p>`;
+    const nodesFieldset = `
+      <fieldset>
+        <legend>${NODE_ICON}${t('summary.db.db_nodes') || 'DB Nodes'}</legend>
+        ${nodesContent}
+      </fieldset>`;
+
+    // ── 6. DB Homes as nested collapsible cards ──
+    const homesSection = (() => {
+      const homes = db.db_homes || [];
+      if (homes.length === 0) return '';
+
+      const homeCards = homes.map(home => {
+        const databaseCards = (home.databases || []).map(database => {
+          // Connection strings
+          let connHtml = '';
+          if (database.connection_strings) {
+            const cs = database.connection_strings;
+            const allCS = cs.all_connection_strings || {};
+            const csRows = [];
+            if (cs.cdb_default) csRows.push(['CDB Default', cs.cdb_default]);
+            if (cs.cdb_ip_default) csRows.push(['CDB IP Default', cs.cdb_ip_default]);
+            Object.keys(allCS).forEach(k => csRows.push([k, allCS[k]]));
+            if (csRows.length > 0) {
+              connHtml = `
+                <fieldset>
+                  <legend>${t('summary.db.connection_strings') || 'Connection Strings'}</legend>
+                  <div class="table-container"><table class="resource-table">
+                    <thead><tr><th>${t('summary.name') || 'Nome'}</th><th>${t('summary.db.connection') || 'Connection'}</th></tr></thead>
+                    <tbody>${csRows.map(r => `<tr><td><strong>${r[0]}</strong></td><td><span class="code-text">${r[1]}</span></td></tr>`).join('')}</tbody>
+                  </table></div>
+                </fieldset>`;
+            }
+          }
+
+          // Backup config — always render, even when null (so user knows it's not configured)
+          const bcHtml = (() => {
+            const bc = database.backup_config;
+
+            // Human-friendly destination type labels
+            const destTypeLabel = (type) => {
+              const map = {
+                'OBJECT_STORE':       'Object Storage',
+                'LOCAL':              'Local (ASM)',
+                'NFS':                'NFS',
+                'RECOVERY_APPLIANCE': 'Recovery Appliance (ZDLRA)',
+                'DBRS':               'Database Backup Service (DBRS)',
+              };
+              return map[(type || '').toUpperCase()] || (type || '—');
+            };
+
+            if (!bc || (!bc.auto_backup_enabled && (!bc.backup_destination || bc.backup_destination === 'N/A') && (bc.backup_destination_details || []).length === 0)) {
+              return `
+                <fieldset>
+                  <legend>${t('summary.db.backup_config') || 'Backup Configuration'}</legend>
+                  <p class="no-data-message" style="color:var(--s-stopped)">✗ ${t('summary.db.backup_not_configured') || 'Backup não configurado'}</p>
+                </fieldset>`;
+            }
+
+            const autoBackupOk = bc.auto_backup_enabled;
+
+            // Destination details
+            const destDetails = bc.backup_destination_details || [];
+            let destHtml = '';
+            let inferredNote = '';
+            if (destDetails.length > 0) {
+              // Check if inferred from backup history (no explicit backup_config in API)
+              const isInferred = destDetails.some(d => d.inferred_from_history);
+              if (isInferred) {
+                inferredNote = `<div class="info-group full-width" style="grid-column:1/-1"><div class="info-value" style="font-size:11px;color:var(--text-muted);font-style:italic">${currentLanguage === 'pt' ? '* Configuração inferida do histórico de backups (API não retornou db_backup_config)' : '* Configuration inferred from backup history (API did not return db_backup_config)'}</div></div>`;
+              }
+              destHtml = destDetails.map((d, i) => {
+                const typeLabel = destTypeLabel(d.type);
+                const rows = [`<div class="info-group"><label>${t('summary.db.backup_destination') || 'Destino'}${destDetails.length > 1 ? ' ' + (i + 1) : ''}</label><div class="info-value"><strong style="color:var(--accent)">${typeLabel}</strong></div></div>`];
+                if (d.id && d.type !== 'OBJECT_STORE') rows.push(`<div class="info-group"><label>Destination ID</label><div class="info-value"><span class="code-text" title="${d.id}">${d.id.split('.').pop().slice(0, 24)}…</span></div></div>`);
+                if (d.vpc_user)       rows.push(`<div class="info-group"><label>VPC User</label><div class="info-value">${d.vpc_user}</div></div>`);
+                if (d.internet_proxy) rows.push(`<div class="info-group"><label>Internet Proxy</label><div class="info-value">${d.internet_proxy}</div></div>`);
+                if (d.dbrs_policy_id) rows.push(`<div class="info-group"><label>DBRS Policy</label><div class="info-value"><span class="code-text">${d.dbrs_policy_id}</span></div></div>`);
+                return rows.join('');
+              }).join('');
+            } else if (bc.backup_destination && bc.backup_destination !== 'N/A') {
+              destHtml = `<div class="info-group"><label>${t('summary.db.backup_destination') || 'Destino'}</label><div class="info-value"><strong style="color:var(--accent)">${destTypeLabel(bc.backup_destination)}</strong></div></div>`;
+            }
+
+            // Last backup info from the database object itself (most direct evidence)
+            const lastBkTs   = database.last_backup_timestamp;
+            const lastBkDur  = database.last_backup_duration_in_seconds;
+            const lastBkFail = database.last_failed_backup_timestamp;
+            const lastBkHtml = lastBkTs
+              ? `<div class="info-group"><label>${t('summary.db.last_backup') || 'Último Backup'}</label><div class="info-value" style="color:var(--s-running)">✓ ${_date(lastBkTs)}${lastBkDur ? ` <span style="color:var(--text-secondary);font-size:11px">(${Math.ceil(lastBkDur / 60)} min)</span>` : ''}</div></div>`
+              : '';
+            const lastFailHtml = lastBkFail
+              ? `<div class="info-group"><label>${t('summary.db.last_failed_backup') || 'Último Falhou'}</label><div class="info-value" style="color:var(--s-stopped)">✗ ${_date(lastBkFail)}</div></div>`
+              : '';
+
+            return `
+              <fieldset>
+                <legend>${t('summary.db.backup_config') || 'Backup Configuration'}</legend>
+                <div class="grid-container">
+                  <div class="info-group">
+                    <label>${t('summary.db.auto_backup') || 'Auto Backup'}</label>
+                    <div class="info-value">
+                      ${autoBackupOk
+                        ? `<span class="validation-ok" style="font-size:12px">✓ ${t('summary.enabled') || 'Ativado'}</span>`
+                        : `<span class="validation-fail" style="font-size:12px">✗ ${t('summary.disabled') || 'Desativado'}</span>`}
+                    </div>
+                  </div>
+                  ${destHtml}
+                  ${lastBkHtml}
+                  ${lastFailHtml}
+                  ${inferredNote}
+                  ${bc.recovery_window_in_days ? `<div class="info-group"><label>${t('summary.db.recovery_window') || 'Recovery Window'}</label><div class="info-value">${bc.recovery_window_in_days} ${t('summary.days') || 'dias'}</div></div>` : ''}
+                  ${bc.auto_backup_window ? `<div class="info-group"><label>${t('summary.db.backup_window') || 'Backup Window'}</label><div class="info-value">${bc.auto_backup_window}</div></div>` : ''}
+                  ${bc.auto_full_backup_window ? `<div class="info-group"><label>${t('summary.db.full_backup_window') || 'Full Backup Window'}</label><div class="info-value">${bc.auto_full_backup_window}</div></div>` : ''}
+                  ${bc.backup_deletion_policy ? `<div class="info-group"><label>${t('summary.db.deletion_policy') || 'Deletion Policy'}</label><div class="info-value">${bc.backup_deletion_policy}</div></div>` : ''}
+                </div>
+              </fieldset>`;
+          })();
+
+          // RMAN backups
+          const bkDestLabel = (type) => {
+            const map = { OBJECT_STORE: 'Object Storage', LOCAL: 'Local', NFS: 'NFS', RECOVERY_APPLIANCE: 'ZDLRA', DBRS: 'DBRS' };
+            return map[(type || '').toUpperCase()] || (type || '—');
+          };
+          const allBackups = database.backups || [];
+          const backupsRows = allBackups.map(bk => {
+            const stClass = (bk.lifecycle_state || '').toUpperCase();
+            const stBadge = `<span class="status-badge status-${getStateCssClass(bk.lifecycle_state)}">${getStateLabel(bk.lifecycle_state)}</span>`;
+            const nameCell = stClass === 'FAILED' && bk.lifecycle_details
+              ? `<span title="${bk.lifecycle_details}">${_val(bk.display_name)} <span style="color:var(--s-stopped);font-size:10px">⚠ detalhes</span></span>`
+              : _val(bk.display_name);
+            return [
+              nameCell,
+              stBadge,
+              _val(bk.type),
+              bk.backup_destination_type ? `<span class="svol-type-tag boot" style="font-size:10px">${bkDestLabel(bk.backup_destination_type)}</span>` : '—',
+              _date(bk.time_started),
+              _date(bk.time_ended),
+              bk.database_size_in_gbs ? bk.database_size_in_gbs.toFixed(2) + ' GB' : '—',
+            ];
+          });
+          const backupsHtml = `
+            <fieldset>
+              <legend>${t('summary.db.backups_history') || 'Histórico de Backups'}${backupsRows.length > 0 ? ` (${backupsRows.length})` : ''}</legend>
+              ${backupsRows.length > 0
+                ? `<div class="table-container"><table class="resource-table">
+                    <thead><tr>
+                      <th>${t('summary.name') || 'Nome'}</th>
+                      <th>${t('summary.status') || 'Status'}</th>
+                      <th>${t('summary.db.backup_type') || 'Tipo'}</th>
+                      <th>${t('summary.db.backup_destination') || 'Destino'}</th>
+                      <th>${t('summary.db.start') || 'Início'}</th>
+                      <th>${t('summary.db.end') || 'Fim'}</th>
+                      <th>${t('summary.db.size') || 'Tamanho'}</th>
+                    </tr></thead>
+                    <tbody>${backupsRows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('')}</tbody>
+                  </table></div>`
+                : `<p class="no-data-message">${t('summary.db.no_backups') || 'Nenhum backup registrado.'}</p>`}
+            </fieldset>`;
+
+          // Data Guard
+          const dgRows = (database.data_guard_associations || []).map(dg => [
+            _val(dg.role), _val(dg.peer_role), _val(dg.protection_mode),
+            _val(dg.transport_type), _val(dg.apply_lag),
+            `<span class="status-badge status-${getStateCssClass(dg.lifecycle_state)}">${getStateLabel(dg.lifecycle_state)}</span>`,
+          ]);
+          const dgHtml = dgRows.length > 0
+            ? `<fieldset>
+                <legend>${t('summary.db.data_guard') || 'Data Guard'}</legend>
+                <div class="table-container"><table class="resource-table">
+                  <thead><tr>
+                    <th>${t('summary.db.role') || 'Role'}</th><th>${t('summary.db.peer_role') || 'Peer Role'}</th>
+                    <th>${t('summary.db.protection_mode') || 'Protection Mode'}</th><th>${t('summary.db.transport') || 'Transport'}</th>
+                    <th>${t('summary.db.apply_lag') || 'Apply Lag'}</th><th>${t('summary.status') || 'Status'}</th>
+                  </tr></thead>
+                  <tbody>${dgRows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('')}</tbody>
+                </table></div>
+              </fieldset>`
+            : '';
+
+          // DB identity
+          const dbIdFieldset = `
+            <fieldset>
+              <legend>${t('summary.db.database') || 'Database'}</legend>
+              <div class="grid-container">
+                <div class="info-group full-width"><label>db_unique_name</label><div class="info-value text-highlight">${_val(database.db_unique_name)}</div></div>
+                <div class="info-group"><label>${t('summary.db.is_cdb') || 'Is CDB'}</label><div class="info-value">${database.is_cdb !== null && database.is_cdb !== undefined ? _bool(database.is_cdb) : '—'}</div></div>
+                <div class="info-group"><label>${t('summary.db.workload') || 'Workload'}</label><div class="info-value">${_val(database.db_workload)}</div></div>
+                <div class="info-group"><label>${t('summary.db.character_set') || 'Character Set'}</label><div class="info-value">${_val(database.character_set)}</div></div>
+                <div class="info-group"><label>${t('summary.db.ncharacter_set') || 'N Character Set'}</label><div class="info-value">${_val(database.ncharacter_set)}</div></div>
+                <div class="info-group"><label>${t('summary.db.sid_prefix') || 'SID Prefix'}</label><div class="info-value">${_val(database.sid_prefix)}</div></div>
+                ${database.kms_key_id ? `<div class="info-group"><label>${t('summary.db.kms_key') || 'KMS Key'}</label><div class="info-value"><span class="code-text">${database.kms_key_id.split('.').pop().slice(0, 18)}…</span></div></div>` : ''}
+              </div>
+            </fieldset>`;
+
+          return `
+            <div class="instance-summary-card collapsible db-database-card">
+              <div class="instance-card-header">
+                <h4 class="card-header-title">${database.db_name}</h4>
+                <div class="card-status-indicator">
+                  ${database.db_workload ? `<span class="vcn-card-header-cidr">${database.db_workload}</span>` : ''}
+                  ${database.lifecycle_state ? `<span class="status-badge status-${getStateCssClass(database.lifecycle_state)}">${getStateLabel(database.lifecycle_state)}</span>` : ''}
+                </div>
+                ${EXPAND_ARROW}
+              </div>
+              <div class="instance-card-body">
+                ${dbIdFieldset}
+                ${connHtml}
+                ${bcHtml}
+                ${backupsHtml}
+                ${dgHtml}
+              </div>
+            </div>`;
+        }).join('') || `<p class="no-data-message">${t('summary.db.no_databases') || 'Nenhum database neste DB Home.'}</p>`;
+
+        return `
+          <div class="instance-summary-card collapsible db-home-card">
+            <div class="instance-card-header">
+              <h4 class="card-header-title">${home.display_name}</h4>
+              <div class="card-status-indicator">
+                ${home.db_version ? `<span class="vcn-card-header-cidr">${home.db_version}</span>` : ''}
+                <span class="status-badge status-${getStateCssClass(home.lifecycle_state)}">${getStateLabel(home.lifecycle_state)}</span>
+              </div>
+              ${EXPAND_ARROW}
+            </div>
+            <div class="instance-card-body">
+              ${home.db_home_location ? `<p style="font-size:11.5px;color:var(--text-secondary);margin-bottom:10px"><strong>Location:</strong> <span class="code-text">${home.db_home_location}</span></p>` : ''}
+              ${databaseCards}
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <h5 class="subheader" style="margin-top:14px">DB Homes (${homes.length})</h5>
+        <div class="db-home-container">${homeCards}</div>`;
+    })();
+
+    const cardContent = `
+      ${generalFieldset}
+      <hr class="fieldset-divider">
+      ${computeFieldset}
+      <hr class="fieldset-divider">
+      ${networkFieldset}
+      <hr class="fieldset-divider">
+      ${haFieldset}
+      <hr class="fieldset-divider">
+      ${nodesFieldset}
+      ${homesSection}
+    `;
+
+    return `
+      <div class="instance-summary-card collapsible">
+        <div class="instance-card-header">
+          <h4 class="card-header-title">${db.display_name}${compBadgeFn(db.compartment_name || '')}</h4>
+          <div class="card-status-indicator">
+            ${editionAbbr ? `<span class="db-edition-badge">${editionAbbr}</span>` : ''}
+            ${db.cpu_core_count ? `<span class="db-metric-pill">${db.cpu_core_count} vCPUs</span>` : ''}
+            ${db.memory_size_in_gbs ? `<span class="db-metric-pill">${db.memory_size_in_gbs} GB</span>` : ''}
+            <span class="status-badge status-${statusClass}">${getStateLabel(db.lifecycle_state)}</span>
+          </div>
+          ${EXPAND_ARROW}
+        </div>
+        <div class="instance-card-body">${cardContent}</div>
+      </div>`;
+  }
+
   function generateInfrastructureSummary(data) {
     const isNewHostFlow = selectedDocType === 'new_host';
     const isKubernetesFlow = selectedDocType === 'kubernetes';
     const isWafFlow = selectedDocType === 'waf_report';
+    const isDatabaseFlow = selectedDocType === 'database';
 
     const {
         instances,
@@ -1324,7 +2123,21 @@ document.addEventListener('DOMContentLoaded', () => {
         kubernetes_clusters,
         waf_policies,
         certificates,
+        db_systems,
       } = data;
+
+    // ── Compartment badge helper (shown when multi-compartment data) ──
+    function compBadge(compName) {
+      if (!compName) return '';
+      if (!allInfrastructureData.compartments || allInfrastructureData.compartments.length <= 1) return '';
+      const idx = (allInfrastructureData.compartments || []).findIndex(c => c.name === compName);
+      const color = COMP_PALETTE[Math.max(0, idx) % COMP_PALETTE.length];
+      const style =
+        `--badge-bg:color-mix(in srgb, ${color} 18%, transparent);` +
+        `--badge-border:color-mix(in srgb, ${color} 55%, transparent);` +
+        `--badge-dot:${color};`;
+      return `<span class="comp-badge" style="${style}">${compName}</span>`;
+    }
 
       if (isWafFlow && waf_policies?.length > 0) {
         // Filter out DELETED policies before any processing
@@ -1357,50 +2170,72 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const instancesHtml = instances?.length > 0 ?
-      instances.map(instance => generateInstanceSummaryCard(instance, true)).join('') :
+      instances.map(instance => generateInstanceSummaryCard(instance, true, { compBadge })).join('') :
       `<p class="no-data-message">${t('summary.no_instances_found')}</p>`;
 
     const volumeGroupsHtml = volume_groups?.length > 0 ?
       volume_groups.map(vg => {
         const { validation, lifecycle_state, display_name, availability_domain, members } = vg;
         const statusClass = getStateCssClass(lifecycle_state);
-        
-        const backupHtml = validation.has_backup_policy ?
-          `<span class="validation-ok"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> ${validation.policy_name}</span>` :
-          `<span class="validation-fail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> ${t('summary.none')}</span>`;
-        
-        const crossRegionHtml = validation.is_cross_region_replication_enabled ?
-          `<span class="validation-ok"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> ${t('summary.enabled')}</span>` :
-          `<span class="validation-fail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> ${t('summary.disabled')}</span>`;
-        
-        const membersListHtml = members && members.length > 0 ?
-          `<ul class="member-list">${members.map(m => `<li>${m}</li>`).join('')}</ul>` :
-          `<p class="no-data-message">${t('summary.no_members_found')}</p>`;
-        
+
+        // ── inline SVG icons ──
+        const svgCheck =`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+        const svgX     = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+        const svgDisk  = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>`;
+        const svgShield= `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="legend-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+
+        // ── member volume chips ──
+        const memberChipsHtml = members && members.length > 0
+          ? `<div class="vg-member-chips">${members.map(m => `
+              <div class="vg-member-chip">
+                <span class="vg-member-chip-icon">${svgDisk}</span>
+                <span class="vg-member-chip-name" title="${m}">${m}</span>
+              </div>`).join('')}</div>`
+          : `<p class="no-data-message">${t('summary.no_members_found')}</p>`;
+
+        // ── protection status ──
+        const backupStatusCls   = validation.has_backup_policy ? 'vg-protection--ok' : 'vg-protection--fail';
+        const replicStatusCls   = validation.is_cross_region_replication_enabled ? 'vg-protection--ok' : 'vg-protection--fail';
+        const backupIconHtml    = validation.has_backup_policy ? svgCheck : svgX;
+        const replicIconHtml    = validation.is_cross_region_replication_enabled ? svgCheck : svgX;
+        const backupLabel       = validation.has_backup_policy ? validation.policy_name : t('summary.none');
+        const replicLabel       = validation.is_cross_region_replication_enabled ? t('summary.enabled') : t('summary.disabled');
+
         const cardContent = `
-          <div class="content-block">
-            <h5 class="subheader">${t('summary.vg.members')}</h5>
-            ${membersListHtml}
-          </div>
-          <div class="content-block">
-            <h5 class="subheader">${t('summary.vg.protection_validation')}</h5>
-            <div class="validation-grid">
-              <div class="validation-item">
-                <label>${t('summary.vg.backup_policy')}</label>
-                <div class="validation-value">${backupHtml}</div>
+          <fieldset>
+            <legend>${svgDisk}${t('summary.vg.members')} <span class="vg-member-count">(${members?.length || 0})</span></legend>
+            ${memberChipsHtml}
+          </fieldset>
+          <hr class="fieldset-divider">
+          <fieldset>
+            <legend>${svgShield}${t('summary.vg.protection_validation')}</legend>
+            <div class="vg-protection-grid">
+              <div class="vg-protection-item ${backupStatusCls}">
+                <div class="vg-protection-icon">${backupIconHtml}</div>
+                <div class="vg-protection-info">
+                  <span class="vg-protection-label">${t('summary.vg.backup_policy')}</span>
+                  <span class="vg-protection-value">${backupLabel}</span>
+                </div>
               </div>
-              <div class="validation-item">
-                <label>${t('summary.vg.cross_region_replication')}</label>
-                <div class="validation-value">${crossRegionHtml}</div>
+              <div class="vg-protection-item ${replicStatusCls}">
+                <div class="vg-protection-icon">${replicIconHtml}</div>
+                <div class="vg-protection-info">
+                  <span class="vg-protection-label">${t('summary.vg.cross_region_replication')}</span>
+                  <span class="vg-protection-value">${replicLabel}</span>
+                </div>
               </div>
-              <div class="validation-item">
-                <label>${t('summary.vg.replication_target')}</label>
-                <div class="validation-value">${validation.cross_region_target}</div>
-              </div>
+              ${validation.is_cross_region_replication_enabled && validation.cross_region_target && validation.cross_region_target !== 'Desabilitada' ? `
+              <div class="vg-protection-item vg-protection--info" style="grid-column:1/-1">
+                <div class="vg-protection-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></div>
+                <div class="vg-protection-info">
+                  <span class="vg-protection-label">${t('summary.vg.replication_target')}</span>
+                  <span class="vg-protection-value">${validation.cross_region_target}</span>
+                </div>
+              </div>` : ''}
             </div>
-          </div>`;
-        
-        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${availability_domain}</span><span class="status-badge status-${statusClass}">${getStateLabel(lifecycle_state)}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
+          </fieldset>`;
+
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${display_name}${compBadge(vg.compartment_name || '')}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${availability_domain}</span><span class="status-badge status-${statusClass}">${getStateLabel(lifecycle_state)}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
       }).join('') :
       (isNewHostFlow ? '' : `<p class="no-data-message">${t('summary.no_vgs_found')}</p>`);
 
@@ -1459,7 +2294,7 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>`;
             }).join('')}</div>`
           : `<p class="no-data-message">${t('summary.no_resource_found')}</p>`;
-        return `<div class="vcn-summary-card collapsible"><div class="vcn-card-header"><h4 class="card-header-title">${vcn.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${vcn.cidr_block}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="vcn-card-body"><h5 class="subheader">Subnets</h5>${subnetsTable}<h5 class="subheader">Security Lists</h5>${slTable}<h5 class="subheader">Route Tables</h5>${rtTable}<h5 class="subheader">Network Security Groups (NSGs)</h5>${nsgTable}<h5 class="subheader">Local Peering Gateways (LPGs)</h5>${lpgHtml}</div></div>`;
+        return `<div class="vcn-summary-card collapsible"><div class="vcn-card-header"><h4 class="card-header-title">${vcn.display_name}${compBadge(vcn.compartment_name || '')}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${vcn.cidr_block}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="vcn-card-body"><h5 class="subheader">Subnets</h5>${subnetsTable}<h5 class="subheader">Security Lists</h5>${slTable}<h5 class="subheader">Route Tables</h5>${rtTable}<h5 class="subheader">Network Security Groups (NSGs)</h5>${nsgTable}<h5 class="subheader">Local Peering Gateways (LPGs)</h5>${lpgHtml}</div></div>`;
       }).join('') :
       '';
 
@@ -1510,7 +2345,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${(lb.backend_sets && lb.backend_sets.length > 0) ? lb.backend_sets.map(bs => `<div class="backend-set-details"><h6 class="tunnel-subheader">Backend Set: <span class="text-highlight">${bs.name}</span> (${t('summary.lb.policy')}: ${bs.policy})</h6><ul class="tunnel-basic-info"><li><strong>Health Check:</strong> ${bs.health_checker.protocol}:${bs.health_checker.port}</li><li><strong>URL Path:</strong> ${bs.health_checker.url_path || 'N/A'}</li></ul>${createTable([t('summary.name'), 'IP', t('summary.port'), t('summary.weight')], bs.backends?.map(b => [`<span class="text-highlight">${b.name}</span>`, b.ip_address, b.port, b.weight]))}</div>`).join('') : `<p class="no-data-message">${t('summary.no_backend_sets_found')}</p>`}
           </div>`;
 
-        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${getStateLabel(lb.lifecycle_state)}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${lb.display_name}${compBadge(lb.compartment_name || '')}</h4><div class="card-status-indicator"><span class="vcn-card-header-cidr">${lb.shape_name}</span><span class="status-badge status-${statusClass}">${getStateLabel(lb.lifecycle_state)}</span></div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body">${cardContent}</div></div>`;
       }).join('') :
       '';
 
@@ -1577,7 +2412,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }).join('')}</div>`
           : `<p class="no-data-message">${t('summary.no_resource_found')}</p>`;
 
-        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${drg.display_name}</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body"><h5 class="subheader">${t('summary.drg.attachments')}</h5>${attachCardsHtml}<h5 class="subheader">${t('summary.drg.rpcs')}</h5>${rpcCardsHtml}</div></div>`;
+        return `<div class="instance-summary-card collapsible"><div class="instance-card-header"><h4 class="card-header-title">${drg.display_name}${compBadge(drg.compartment_name || '')}</h4><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg></div><div class="instance-card-body"><h5 class="subheader">${t('summary.drg.attachments')}</h5>${attachCardsHtml}<h5 class="subheader">${t('summary.drg.rpcs')}</h5>${rpcCardsHtml}</div></div>`;
       }).join('') :
       '';
 
@@ -1590,6 +2425,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="svol-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
                 <span class="svol-card-name" title="${cpe.display_name}">${cpe.display_name}</span>
               </div>
+              <div class="svol-card-badges">${compBadge(cpe.compartment_name || '')}</div>
             </div>
             <div class="svol-card-body">
               <div class="svol-row">
@@ -1727,7 +2563,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // ── ipsec connection card (collapsible) ───────────────────────────────
         return `<div class="ipsec-summary-card collapsible">
           <div class="ipsec-card-header">
-            <h4 class="card-header-title">${ipsec.display_name}</h4>
+            <h4 class="card-header-title">${ipsec.display_name}${compBadge(ipsec.compartment_name || '')}</h4>
             <div class="card-status-indicator">
               <span class="status-badge status-${connStatusRaw.toLowerCase()}">${ipsec.status}</span>
             </div>
@@ -1781,7 +2617,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return `
           <div class="instance-summary-card collapsible">
             <div class="oke-card-header">
-              <h4 class="card-header-title">${cluster.name}</h4>
+              <h4 class="card-header-title">${cluster.name}${compBadge(cluster.compartment_name || '')}</h4>
               <div class="card-status-indicator"><span class="oke-version-badge">${cluster.kubernetes_version}</span></div>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="expand-arrow"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div>
@@ -1867,6 +2703,8 @@ document.addEventListener('DOMContentLoaded', () => {
       titleKey = 'summary.title.k8s';
     } else if (isWafFlow) {
       titleKey = 'summary.title.waf';
+    } else if (isDatabaseFlow) {
+      titleKey = 'summary.title.database';
     }
     let title = t(titleKey, { name: selectedCompartmentName });
     
@@ -2124,6 +2962,14 @@ document.addEventListener('DOMContentLoaded', () => {
         <hr class="fieldset-divider">
         <fieldset><legend>${ICONS.VCNS}${t('summary.vcns')}</legend><div class="vcn-container">${vcnsHtml || `<p class="no-data-message">${t('doc.messages.no_network_found')}</p>`}</div></fieldset>
       `;
+    } else if (isDatabaseFlow) {
+      // Database Systems summary cards (rich)
+      const dbSystemsHtml = db_systems && db_systems.length > 0
+        ? db_systems.map(db => renderDbSystemCard(db, { compBadge: compBadge })).join('')
+        : `<p class="no-data-message">${t('summary.no_db_systems_found') || 'No DB Systems found.'}</p>`;
+
+      mainContentHtml = `
+        <fieldset><legend>${ICONS.BLOCK_VOLUMES}${t('summary.db_systems') || 'DB Systems'}</legend><div class="instances-container">${dbSystemsHtml}</div></fieldset>`;
     } else { // Full Infra
       const activeWafPolicies = (waf_policies || []).filter(p =>
           p.lifecycle_state?.toUpperCase() !== 'DELETED'
@@ -2137,8 +2983,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const wafInfraSection  = hasWaf  ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.WAF + t('summary.waf_policies') + '</legend><div class="instances-container">' + wafHtml + '</div></fieldset>' : '';
       const certInfraSection = hasCerts ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.CERTIFICATES + (t('summary.section.certificates') || 'Certificados TLS/SSL') + '</legend><div class="instances-container">' + renderCertificates(certificates) + '</div></fieldset>' : '';
 
+      // DB Systems section for full infra (if present) — rich card
+      const dbInfraHtml = db_systems && db_systems.length > 0
+        ? db_systems.map(db => renderDbSystemCard(db, { compBadge: compBadge })).join('')
+        : '';
+      const dbInfraSection = dbInfraHtml ? '<hr class="fieldset-divider"><fieldset><legend>' + ICONS.BLOCK_VOLUMES + (t('summary.db_systems') || 'DB Systems') + '</legend><div class="instances-container">' + dbInfraHtml + '</div></fieldset>' : '';
+
       // Build dedicated storage section HTML
-      const storageSectionHtml = generateStorageSectionHtml(data);
+      const storageSectionHtml = generateStorageSectionHtml(data, compBadge);
 
       mainContentHtml = `
         <fieldset><legend>${ICONS.INSTANCES}${t('summary.compute_instances')}</legend><div class="instances-container">${instancesHtml}</div></fieldset>
@@ -2149,6 +3001,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.LB}${t('summary.lbs')}</legend><div class="lb-container">${loadBalancersHtml || `<p class="no-data-message">${t('summary.no_lbs_found')}</p>`}</div></fieldset>
         ${wafInfraSection}
         ${certInfraSection}
+        ${dbInfraSection}
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.ROUTING}${t('summary.routing_connectivity')}</legend><div class="drg-container">${drgsHtml || `<p class="no-data-message">${t('summary.no_drgs_found')}</p>`}</div></fieldset>
         <hr class="fieldset-divider"><fieldset><legend>${ICONS.VPN}${t('summary.vpn_connectivity')}</legend><h4 class="subheader">${t('summary.vpn.cpes')}</h4>${cpesHtml}<h4 class="subheader">${t('summary.vpn.ipsec_connections')}</h4><div class="ipsec-container">${ipsecHtml || `<p class="no-data-message">${t('summary.no_ipsec_found')}</p>`}</div></fieldset>`;
     }
@@ -2158,7 +3011,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Storage Section — unified Boot + Block Volume panel with in-use indicator ---
-  function generateStorageSectionHtml(data) {
+  function generateStorageSectionHtml(data, compBadge = () => '') {
     const instances        = data.instances || [];
     const standaloneVols   = data.standalone_volumes || [];
 
@@ -2185,8 +3038,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function volCard(opts) {
-      // opts: { name, sizeGb, backupPolicy, state, vmName, isBootVol, attached }
-      const { name, sizeGb, backupPolicy, state, vmName, isBootVol, attached } = opts;
+      // opts: { name, sizeGb, backupPolicy, state, vmName, isBootVol, attached, compartmentBadge }
+      const { name, sizeGb, backupPolicy, state, vmName, isBootVol, attached, compartmentBadge = '' } = opts;
       const noPolicy = !backupPolicy ||
         backupPolicy === 'Nenhuma política associada' ||
         backupPolicy === 'No backup policy assigned' ||
@@ -2224,6 +3077,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="svol-card-badges">
               ${typeLabel}
               ${inUseBadge(attached)}
+              ${compartmentBadge}
             </div>
           </div>
           <div class="svol-card-body">
@@ -2247,39 +3101,42 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── build card lists ──────────────────────────────────────────────────────
     const bootCards = instances.map(inst =>
       volCard({
-        name:         `${inst.host_name} — Boot`,
-        sizeGb:       inst.boot_volume_gb,
-        backupPolicy: inst.backup_policy_name,
-        state:        inst.lifecycle_state,
-        vmName:       inst.host_name,
-        isBootVol:    true,
-        attached:     true,
+        name:             `${inst.host_name} — Boot`,
+        sizeGb:           inst.boot_volume_gb,
+        backupPolicy:     inst.backup_policy_name,
+        state:            inst.lifecycle_state,
+        vmName:           inst.host_name,
+        isBootVol:        true,
+        attached:         true,
+        compartmentBadge: compBadge(inst.compartment_name || ''),
       })
     );
 
     const blockAttachedCards = instances.flatMap(inst =>
       (inst.block_volumes || []).map(vol =>
         volCard({
-          name:         vol.display_name,
-          sizeGb:       vol.size_in_gbs,
-          backupPolicy: vol.backup_policy_name,
-          state:        inst.lifecycle_state,
-          vmName:       inst.host_name,
-          isBootVol:    false,
-          attached:     true,
+          name:             vol.display_name,
+          sizeGb:           vol.size_in_gbs,
+          backupPolicy:     vol.backup_policy_name,
+          state:            inst.lifecycle_state,
+          vmName:           inst.host_name,
+          isBootVol:        false,
+          attached:         true,
+          compartmentBadge: compBadge(inst.compartment_name || ''),
         })
       )
     );
 
     const standaloneCards = standaloneVols.map(vol =>
       volCard({
-        name:         vol.display_name,
-        sizeGb:       vol.size_in_gbs,
-        backupPolicy: vol.backup_policy_name,
-        state:        vol.lifecycle_state,
-        vmName:       null,
-        isBootVol:    false,
-        attached:     false,
+        name:             vol.display_name,
+        sizeGb:           vol.size_in_gbs,
+        backupPolicy:     vol.backup_policy_name,
+        state:            vol.lifecycle_state,
+        vmName:           null,
+        isBootVol:        false,
+        attached:         false,
+        compartmentBadge: compBadge(vol.compartment_name || ''),
       })
     );
 
@@ -2314,7 +3171,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 
-  function generateInstanceSummaryCard(data, isCollapsible = false) {
+  function generateInstanceSummaryCard(data, isCollapsible = false, opts) {
     const cardContent = `
       <fieldset><legend>${ICONS.INSTANCE_DATA}${t('summary.instance.data')}</legend>
         <div class="grid-container">
@@ -2400,6 +3257,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       </fieldset>`;
 
+    const _compBadgeFn = (opts && opts.compBadge) || function() { return ''; };
     if (isCollapsible) {
       const rawState = (data.lifecycle_state || '').toUpperCase();
       const statusClass = rawState === 'RUNNING' ? 'running'
@@ -2408,7 +3266,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return `
         <div class="instance-summary-card collapsible">
           <div class="instance-card-header">
-            <h4 class="card-header-title">${data.host_name}</h4>
+            <h4 class="card-header-title">${data.host_name}${_compBadgeFn(data.compartment_name || '')}</h4>
             <div class="card-status-indicator">
               <span class="status-dot ${statusClass}"></span>
               <span class="status-label ${statusClass}">${rawState === 'TERMINATED' ? (currentLanguage === 'pt' ? 'Excluído' : 'Terminated') : data.lifecycle_state}</span>
@@ -3503,6 +4361,7 @@ document.addEventListener('DOMContentLoaded', () => {
       selectedDocType = null;
       selectedCompartmentId = null;
       selectedCompartmentName = null;
+      selectedCompartments = {};
 
       // Check if the selected profile is active before enabling downstream steps
       const _chosenProfile = availableProfiles.find(p => p.id === selectedProfileId);
@@ -3761,6 +4620,7 @@ document.addEventListener('DOMContentLoaded', () => {
     new_host:    { pt: 'Novo Host',      en: 'New Host' },
     kubernetes:  { pt: 'Kubernetes',     en: 'Kubernetes' },
     waf_report:  { pt: 'Relatório WAF',  en: 'WAF Report' },
+    database:    { pt: 'Database',       en: 'Database' },
   };
 
   function docTypeLabel(raw) {
@@ -4560,7 +5420,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Admin Panel ---
 
-  const DOC_TYPES_ALL = ['new_host', 'full_infra', 'kubernetes', 'waf_report'];
+  const DOC_TYPES_ALL = ['new_host', 'full_infra', 'kubernetes', 'waf_report', 'database'];
 
   async function loadAdminUsers() {
     const wrap = document.getElementById('admin-users-table-wrap');
@@ -5965,7 +6825,7 @@ document.addEventListener('DOMContentLoaded', () => {
       highlightMissingField('doc-type-step', t('step2_label') || 'Tipo de Documentação');
       hasError = true;
     }
-    if (!selectedCompartmentId) {
+    if (Object.keys(selectedCompartments).length === 0) {
       highlightMissingField('compartment-step', t('step3_label') || 'Compartimento');
       hasError = true;
     }
@@ -5974,7 +6834,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!selectedProfileId) missing.push('Tenancy Profile');
       if (!selectedRegion) missing.push(t('step1_label') || 'Região');
       if (!selectedDocType) missing.push(t('step2_label') || 'Tipo');
-      if (!selectedCompartmentId) missing.push(t('step3_label') || 'Compartimento');
+      if (Object.keys(selectedCompartments).length === 0) missing.push(t('step3_label') || 'Compartimento');
       showToast(`${t('toast.required_fields') || 'Campos obrigatórios'}: ${missing.join(', ')}`, 'error');
       return;
     }

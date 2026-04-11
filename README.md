@@ -67,18 +67,19 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 
 ## Features
 
-- **Four document modes** — New Host, Full Infrastructure, Kubernetes (OKE), and WAF Report, each scoped to a specific set of OCI resources.
+- **Five document modes** — New Host, Full Infrastructure, Kubernetes (OKE), WAF Report, and Database (DBaaS), each scoped to a specific set of OCI resources.
 - **Tenancy Profiles** — Admins register OCI credentials (API Key or Instance Principal) as named profiles, encrypted at rest with Fernet (AES-128-CBC). Users never handle raw keys.
 - **Profile active/inactive state** — Profiles can be deactivated without deletion. Inactive profiles appear as locked items in the generator selector and are blocked from use at both the UI and API layers.
 - **4-tier visibility model** — Each profile can be scoped to `admin_only`, `all_users`, specific groups (`by_group`), or individually assigned users (`by_user`).
 - **Wizard step dependency enforcement** — Generator steps for region, document type, and compartment are locked until an active profile is selected. Selecting an inactive profile clears downstream state immediately.
 - **Asynchronous collection** — Celery and Redis execute OCI API calls in the background, with real-time progress feedback via polling. No page refresh needed.
-- **Interactive summary** — Before generating, the collected dataset is rendered in a collapsible panel for review and validation.
+- **Interactive summary** — Before generating, the collected dataset is rendered in a collapsible panel for review and validation. Each resource card shows a colored compartment badge when data spans multiple compartments; the badge is hidden automatically in single-compartment views.
 - **Network topology diagram** — After collection, a live SVG architecture diagram is rendered directly in the browser. It displays VCNs, subnets, instances, gateways, and VPN connectivity in a horizontal flow layout (Cloud on the left, On-Premises on the right). The diagram can be exported as a 4K PNG or added to the document as a "Network Topology" section with a single click.
 - **Visual state indicators** — Lifecycle states (`TERMINATED`, `STOPPED`, `PENDING_DELETION`) are highlighted with color in both the interface and the generated document.
 - **VPN tunnel status** — `DOWN` tunnels flagged in amber; `UP` tunnels in soft green.
 - **Full DRG and VPN coverage** — Dynamic Routing Gateways with VCN name resolution on attachments, RPCs, CPEs, and IPSec tunnels with Phase 1/2, IKE, BGP, and Oracle compliance validation.
 - **WAF and Certificates** — Full WAF policies: actions, access control, rate limiting, protection rules, firewall bindings, and complete TLS certificate lifecycle (SANs, validity, stages, associations).
+- **DB System rich summary** — DB Systems are rendered in the Web Summary as collapsible cards with metric chips (OCPUs, storage, nodes), edition/license badges, and nested DB Home → Database cards. Backup configuration is always shown, including Object Storage destinations that the OCI SDK does not expose directly — the application infers them from the backup history.
 - **Bilingual (PT-BR / EN)** — Interface, progress messages, and generated document are fully bilingual with instant switching.
 - **Image attachments** — Upload diagrams or screenshots to embed in the document before or after the infrastructure section.
 - **Role-based access control** — Admins manage users, groups, and profiles. Regular users only see what they are permitted to see and generate.
@@ -98,6 +99,9 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 | **Full Infrastructure** | `full_infra` | Complete report: instances, volumes, VCN, load balancers, certificates, WAF, DRG, VPN, OKE.      |
 | **Kubernetes (OKE)**    | `kubernetes` | OKE clusters, node pools, networking, and API endpoints.                                         |
 | **WAF Report**          | `waf_report` | WAF policies, firewalls, LB binding, certificates (full lifecycle), and associated VCN topology. |
+| **Database (DBaaS)**    | `database`   | Oracle DB Systems including DB Nodes, DB Homes, Databases, connection strings, and backup configuration. Backup destination (Object Storage, NFS, Recovery Appliance) is inferred from backup history when the SDK does not populate it directly. |
+
+> **Multi-compartment support (Full Infrastructure):** The `full_infra` mode supports selecting multiple compartments in a single run. Resources are aggregated and deduplicated across compartments, and the generated document includes a multi-compartment summary followed by per-compartment sections.
 
 ---
 
@@ -106,9 +110,10 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 | Category           | Resource          | Collected Details                                              |
 | :----------------- | :---------------- | :------------------------------------------------------------- |
 | **Compute**        | Instances         | Shape, OCPUs, memory, OS, lifecycle state, private/public IPs  |
-| **Storage**        | Boot Volumes      | Size, backup policy                                            |
-|                    | Block Volumes     | Size, backup policy, attachment status                         |
-|                    | Volume Groups     | Members, policy validation, replication target                 |
+| **Storage**        | Boot Volumes      | Size, backup policy, compartment                               |
+|                    | Block Volumes     | Size, backup policy, attachment status, compartment            |
+|                    | Standalone Volumes| Size, backup policy, lifecycle state, compartment              |
+|                    | Volume Groups     | Members (chip list), backup policy validation, cross-region replication target |
 | **Networking**     | VCNs              | CIDR, subnets, security lists, route tables, NSGs, LPGs        |
 |                    | Security Lists    | Ingress/egress rules with protocol, ports, source/destination  |
 |                    | NSGs              | Rules with name resolution                                     |
@@ -119,10 +124,16 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 |                    | Web App Firewalls | Instance, LB binding, enforcement point                        |
 |                    | OCI Certificates  | Common name, SANs, algorithms, validity, stages, associations  |
 | **Connectivity**   | DRGs              | Attachments (with resolved VCN name), route tables, RPCs       |
-|                    | CPEs              | IP address, vendor                                             |
-|                    | IPSec VPN         | Tunnels, Phase 1/2, IKE, BGP, Oracle compliance validation     |
+|                    | CPEs              | IP address, vendor, compartment                                |
+|                    | IPSec VPN         | Tunnels, Phase 1/2, IKE, BGP, Oracle compliance validation, compartment |
 | **Containers**     | OKE Clusters      | Kubernetes version, VCN, endpoint visibility, LB subnet        |
 |                    | Node Pools        | Shape, OCPU/memory, OS, node count, boot volume, subnet        |
+| **Database**       | DB Systems        | Shape, edition, storage, license model, lifecycle state, compartment |
+|                    | DB Nodes          | Hostname, lifecycle state, fault domain                         |
+|                    | DB Homes          | Database version, patch level                                   |
+|                    | Databases (CDB/PDB) | Name, connection strings, character set, backup configuration |
+|                    | Backup Config     | Auto-backup, destination type (Object Storage / NFS / Recovery Appliance), retention period, recovery window. Destination inferred from backup history when not reported by the SDK. |
+|                    | Backup History    | Per-database RMAN backup list with state, type, destination, timestamps, and size |
 
 ---
 
@@ -1544,6 +1555,7 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 - **Certificates as `dict`:** Structure varies by certificate type (`IMPORTED`, `MANAGED_INTERNALLY`, `ISSUED_BY_INTERNAL_CA`). Stored as raw dicts to avoid a rigid Pydantic schema.
 - **Certificate version attribute naming:** `list_certificates` exposes `.current_version_summary`; `get_certificate` exposes `.current_version` — different names for the same concept. Handled in `_get_compartment_certificates`.
 - **WAF backward compatibility:** `WafPolicyData.integration` holds the first firewall integration; `WafPolicyData.integrations` holds the full list. Both fields are maintained to avoid breaking existing flows.
+- **DB backup config inference:** The OCI SDK does not populate `backup_destination_details` when the database uses the default Oracle-managed Object Storage destination. The connector detects this case (`auto_backup_enabled=True` + empty details list) and sets `OBJECT_STORE` explicitly. When `db_backup_config` is `None` entirely (IAM restriction on the Database object), the connector falls back to `list_backups` — each backup entry always carries `backup_destination_type` regardless of IAM — and reconstructs the config from the first entry found.
 
 **Document generation**
 
@@ -1565,6 +1577,7 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 
 - **Network topology diagram:** `diagram.js` renders a self-contained SVG architecture diagram from the collected `InfrastructureData`. The layout is horizontal — Cloud zone (VCNs, subnets, gateways) on the left, On-Premises zone (CPEs) on the right, with IPSec tunnels drawn as horizontal connectors between them. After rendering, the user can export a 4K PNG (canvas scale factor 4×) or click "Add to document" to insert the diagram as an image section named "Network Topology" at the start of the document. The section is injected via `window._diagramApi.addImageSection()`, which feeds directly into the existing image sections pipeline consumed by `/api/generate-document`.
 - **Wizard step dependency model:** The `setDownstreamStepsState(enabled)` function controls the `disabled` CSS class on the region, doc-type, and compartment select containers. It is called whenever the profile selection changes and on page load. Disabled selects are visually distinct and non-interactive via the existing `.disabled` class contract in `createCustomSelect`.
+- **Compartment badges in the Web Summary:** When multiple compartments are selected, every resource card (Compute, Volumes, Volume Groups, VCN, LB, DRG, OKE, CPE, IPSec, DB Systems) renders a colored compartment badge next to its title. Badges are generated by `compBadge(name)` and use a fixed `COMP_PALETTE` of five colors that match the compartment chips shown in the selector. The function returns an empty string when only one compartment is loaded, so badges never appear in single-compartment views.
 - **Tooltip direction for topbar buttons:** `applyTooltips()` detects whether a button is inside `#app-topbar` and assigns `data-tooltip-pos="bottom"` automatically, so tooltips open downward and are never clipped by the top edge of the viewport.
 - **Admin table hover effects:** `transform: scale()` on action icon buttons was replaced with `filter: brightness() + box-shadow` because `scale` causes Chromium to include the transformed paint bounds in the overflow scroll calculation of the parent container, triggering a spurious horizontal scrollbar. `box-shadow` does not affect layout bounds.
 - **CSS tooltip overflow in tables:** The `::after` tooltip pseudo-element on action buttons is anchored to `right: 0` so it opens leftward from the button's right edge. This prevents the tooltip from extending beyond the right boundary of the table wrapper and triggering horizontal scroll.
@@ -1574,9 +1587,30 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 ## Contributing
 
 1. Fork the repository
-2. Create a branch: `git checkout -b feature/feature-name`
-3. Commit: `git commit -m 'feat: description'`
-4. Push and open a Pull Request
+2. Create a branch following the naming convention below
+3. Commit using [Conventional Commits](https://www.conventionalcommits.org/) prefixes
+4. Push and open a Pull Request targeting `develop`
+
+### Branch naming
+
+| Type      | Pattern                    | When to use                                      |
+| :-------- | :------------------------- | :----------------------------------------------- |
+| Feature   | `feature/short-description` | New functionality                                |
+| Fix       | `fix/short-description`     | Bug fix that goes through the normal PR flow     |
+| Hotfix    | `hotfix/short-description`  | Urgent fix applied directly to `main` and synced to `develop` |
+| Refactor  | `refactor/short-description`| Code cleanup with no functional change           |
+
+### Commit prefixes
+
+```
+feat:     new feature
+fix:      bug fix
+hotfix:   urgent production fix
+refactor: restructuring without functional change
+docs:     documentation only
+style:    formatting, no logic change
+chore:    tooling, deps, CI
+```
 
 ---
 

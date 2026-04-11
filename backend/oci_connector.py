@@ -13,8 +13,16 @@ from schemas import (
     BackendSetData,
     BgpSessionInfo,
     BlockVolume,
+    CompartmentRef,
     StandaloneVolumeData,
     CpeData,
+    DataGuardAssociationData,
+    DatabaseData,
+    DbBackupConfigData,
+    DbBackupData,
+    DbHomeData,
+    DbNodeData,
+    DbSystemData,
     DrgAttachmentData,
     DrgData,
     HealthCheckerData,
@@ -92,6 +100,7 @@ _IAM_POLICY_MAP = {
     "drg":          "allow dynamic-group '<seu-grupo>' to read virtual-network-family in tenancy",
     "cpe":          "allow dynamic-group '<seu-grupo>' to read virtual-network-family in tenancy",
     "ipsec":        "allow dynamic-group '<seu-grupo>' to read virtual-network-family in tenancy",
+    "database":     "allow dynamic-group '<seu-grupo>' to read database-family in tenancy",
 }
 
 # Kept for backward compatibility with existing call sites.
@@ -1453,9 +1462,24 @@ def get_infrastructure_details(
     }
     kubernetes_clusters = _get_oke_clusters(ce_client, compute_client, compartment_id, vcn_map_for_oke)
 
+    # Collect DB Systems (DBaaS) — included in full infra so web summary shows databases
     task.update_state(
         state="PROGRESS",
-        meta={"current": 90, "total": 100, "step_key": "progress.inspecting_lbs", "context": {}},
+        meta={"current": 88, "total": 100, "step_key": "progress.listing_db_systems", "context": {}},
+    )
+    db_systems = []
+    if not is_k8s_flow:
+        try:
+            db_client_full = get_client(oci.database.DatabaseClient, region, profile)
+            db_systems = _get_db_systems(db_client_full, virtual_network_client, compartment_id)
+        except PermissionError:
+            raise
+        except Exception as e:
+            logging.warning("DB Systems collection skipped (unexpected error): %s", e)
+
+    task.update_state(
+        state="PROGRESS",
+        meta={"current": 91, "total": 100, "step_key": "progress.inspecting_lbs", "context": {}},
     )
 
     try:
@@ -1633,6 +1657,7 @@ def get_infrastructure_details(
         waf_policies=waf_policies,
         certificates=all_certificates,
         standalone_volumes=standalone_volumes,
+        db_systems=db_systems,
     )
 
 def get_new_host_details(
@@ -1935,4 +1960,484 @@ def get_waf_report_details(
         kubernetes_clusters=[],
         waf_policies=waf_policies,
         certificates=all_certificates,
+    )
+
+
+# --- Database (DBaaS) Collection ---
+
+def _get_db_systems(
+    db_client,
+    virtual_network_client,
+    compartment_id: str,
+) -> List[DbSystemData]:
+    """Collects all DB Systems in a compartment with their nodes, homes, databases,
+    backups and Data Guard associations. Each DB System is fetched individually
+    via ``get_db_system`` to obtain the rich attributes (memory, storage, SCAN,
+    fault domains, NSGs, etc.) that are not exposed by ``list_db_systems``.
+    """
+    try:
+        all_db_systems_sdk = oci.pagination.list_call_get_all_results(
+            db_client.list_db_systems,
+            compartment_id=compartment_id,
+            retry_strategy=retry_strategy,
+        ).data
+    except oci.exceptions.ServiceError as e:
+        _check_iam(e, "database")
+        return []
+
+    db_systems: List[DbSystemData] = []
+
+    for dbs_summary in all_db_systems_sdk:
+        # Fetch full DB System detail (richer than the list summary)
+        dbs = _safe_api_call(db_client.get_db_system, dbs_summary.id) or dbs_summary
+
+        # Resolve VCN and Subnet names
+        vcn_name = "N/A"
+        subnet_name = "N/A"
+        vcn_id_resolved: Optional[str] = None
+        backup_subnet_name: Optional[str] = None
+        if getattr(dbs, "subnet_id", None):
+            subnet = _safe_api_call(virtual_network_client.get_subnet, dbs.subnet_id)
+            if subnet:
+                subnet_name = subnet.display_name
+                vcn_id_resolved = subnet.vcn_id
+                vcn = _safe_api_call(virtual_network_client.get_vcn, subnet.vcn_id)
+                if vcn:
+                    vcn_name = vcn.display_name
+        if getattr(dbs, "backup_subnet_id", None):
+            bsubnet = _safe_api_call(virtual_network_client.get_subnet, dbs.backup_subnet_id)
+            if bsubnet:
+                backup_subnet_name = bsubnet.display_name
+
+        # Collect DB Nodes
+        db_nodes = []
+        try:
+            nodes_sdk = oci.pagination.list_call_get_all_results(
+                db_client.list_db_nodes,
+                compartment_id=compartment_id,
+                db_system_id=dbs.id,
+                retry_strategy=retry_strategy,
+            ).data
+            for node in nodes_sdk:
+                private_ip = "N/A"
+                if node.vnic_id:
+                    vnic = _safe_api_call(virtual_network_client.get_vnic, node.vnic_id)
+                    if vnic:
+                        private_ip = vnic.private_ip or "N/A"
+                db_nodes.append(DbNodeData(
+                    id=node.id,
+                    hostname=getattr(node, "hostname", "N/A") or "N/A",
+                    lifecycle_state=node.lifecycle_state,
+                    private_ip=private_ip,
+                    fault_domain=getattr(node, "fault_domain", "N/A") or "N/A",
+                    vnic_id=getattr(node, "vnic_id", None),
+                    software_storage_size_in_gb=getattr(node, "software_storage_size_in_gb", None),
+                    time_created=str(getattr(node, "time_created", "")) or None,
+                ))
+        except Exception as e:
+            logging.warning("Failed to list DB nodes for %s: %s", dbs.id, e)
+
+        # Collect DB Homes and their Databases
+        db_homes = []
+        try:
+            homes_sdk = oci.pagination.list_call_get_all_results(
+                db_client.list_db_homes,
+                compartment_id=compartment_id,
+                db_system_id=dbs.id,
+                retry_strategy=retry_strategy,
+            ).data
+            for home in homes_sdk:
+                databases = []
+                try:
+                    dbs_in_home = oci.pagination.list_call_get_all_results(
+                        db_client.list_databases,
+                        compartment_id=compartment_id,
+                        db_home_id=home.id,
+                        retry_strategy=retry_strategy,
+                    ).data
+                    logging.debug("[DB] home=%s found %d database(s)", home.display_name, len(dbs_in_home))
+                    for db in dbs_in_home:
+                        # Connection strings (CDB-level)
+                        conn_strings = None
+                        if getattr(db, "connection_strings", None):
+                            cs = db.connection_strings
+                            conn_strings = {
+                                "cdb_default": getattr(cs, "cdb_default", None),
+                                "cdb_ip_default": getattr(cs, "cdb_ip_default", None),
+                                "all_connection_strings": getattr(cs, "all_connection_strings", None) or {},
+                            }
+
+                        # RMAN backup config — sdk can return None for this field
+                        bc = getattr(db, "db_backup_config", None)
+                        logging.debug("[DB] db=%s db_backup_config=%s", getattr(db, "db_name", "?"), bc)
+                        if bc:
+                            dest = "N/A"
+                            dest_details_raw = []
+                            bdd = getattr(bc, "backup_destination_details", None) or []
+                            if not isinstance(bdd, list):
+                                bdd = [bdd]
+                            for entry in bdd:
+                                if entry is None:
+                                    continue
+                                if isinstance(entry, dict):
+                                    dest_details_raw.append(entry)
+                                else:
+                                    d = {}
+                                    for attr in ("type", "id", "vpc_user", "internet_proxy", "dbrs_policy_id"):
+                                        v = getattr(entry, attr, None)
+                                        if v is not None:
+                                            d[attr] = v
+                                    dest_details_raw.append(d)
+                            # Primary destination type
+                            if dest_details_raw:
+                                dest = dest_details_raw[0].get("type", "N/A") or "N/A"
+                            elif getattr(bc, "auto_backup_enabled", False):
+                                # empty details + auto enabled = Oracle-managed Object Storage
+                                dest = "OBJECT_STORE"
+                                dest_details_raw = [{"type": "OBJECT_STORE"}]
+                            backup_config = DbBackupConfigData(
+                                auto_backup_enabled=getattr(bc, "auto_backup_enabled", False) or False,
+                                auto_backup_window=getattr(bc, "auto_backup_window", None),
+                                auto_full_backup_window=getattr(bc, "auto_full_backup_window", None),
+                                auto_full_backup_day=getattr(bc, "auto_full_backup_day", None),
+                                recovery_window_in_days=getattr(bc, "recovery_window_in_days", None),
+                                backup_destination=dest,
+                                backup_destination_details=dest_details_raw,
+                                backup_deletion_policy=getattr(bc, "backup_deletion_policy", None),
+                                run_immediate_full_backup=getattr(bc, "run_immediate_full_backup", None),
+                            )
+                        else:
+                            # no config from the SDK — try to infer from backup history below
+                            backup_config = DbBackupConfigData(auto_backup_enabled=False)
+
+                        # RMAN backups for this database
+                        backups: List[DbBackupData] = []
+                        try:
+                            backups_sdk = oci.pagination.list_call_get_all_results(
+                                db_client.list_backups,
+                                database_id=db.id,
+                                retry_strategy=retry_strategy,
+                            ).data
+                            logging.debug("[DB] db=%s found %d backup(s)", getattr(db, "db_name", "?"), len(backups_sdk))
+                            for bk in backups_sdk:
+                                backups.append(DbBackupData(
+                                    id=bk.id,
+                                    display_name=getattr(bk, "display_name", None) or "N/A",
+                                    type=getattr(bk, "type", None) or "N/A",
+                                    lifecycle_state=getattr(bk, "lifecycle_state", None) or "N/A",
+                                    lifecycle_details=getattr(bk, "lifecycle_details", None),
+                                    backup_destination_type=getattr(bk, "backup_destination_type", None),
+                                    time_started=str(getattr(bk, "time_started", "")) or None,
+                                    time_ended=str(getattr(bk, "time_ended", "")) or None,
+                                    database_size_in_gbs=getattr(bk, "database_size_in_gbs", None),
+                                    shape=getattr(bk, "shape", None),
+                                    database_edition=getattr(bk, "database_edition", None),
+                                ))
+                        except Exception as e:
+                            logging.warning("[DB] Failed to list backups for db %s: %s", db.id, e)
+
+                        # no backup_config on the db object — derive from backup history
+                        if not bc and backups:
+                            # first entry with a known dest type wins; fallback to OBJECT_STORE
+                            inferred_dest = next(
+                                (bk.backup_destination_type for bk in backups if bk.backup_destination_type),
+                                "OBJECT_STORE"
+                            )
+                            # most recent successful backup
+                            successful = [bk for bk in backups if (bk.lifecycle_state or "").upper() == "ACTIVE" and bk.time_ended]
+                            last_ts = successful[0].time_ended if successful else None
+                            backup_config = DbBackupConfigData(
+                                auto_backup_enabled=True,
+                                backup_destination=inferred_dest,
+                                backup_destination_details=[{"type": inferred_dest, "inferred_from_history": True}],
+                            )
+
+                        # Data Guard associations
+                        dg_assocs: List[DataGuardAssociationData] = []
+                        try:
+                            dg_sdk = oci.pagination.list_call_get_all_results(
+                                db_client.list_data_guard_associations,
+                                database_id=db.id,
+                                retry_strategy=retry_strategy,
+                            ).data
+                            for dg in dg_sdk:
+                                dg_assocs.append(DataGuardAssociationData(
+                                    id=dg.id,
+                                    role=getattr(dg, "role", None),
+                                    peer_role=getattr(dg, "peer_role", None),
+                                    peer_database_id=getattr(dg, "peer_database_id", None),
+                                    peer_db_system_id=getattr(dg, "peer_db_system_id", None),
+                                    protection_mode=getattr(dg, "protection_mode", None),
+                                    transport_type=getattr(dg, "transport_type", None),
+                                    apply_lag=getattr(dg, "apply_lag", None),
+                                    apply_rate=getattr(dg, "apply_rate", None),
+                                    lifecycle_state=getattr(dg, "lifecycle_state", None),
+                                ))
+                        except Exception as e:
+                            logging.debug("Failed to list Data Guard for db %s: %s", db.id, e)
+
+                        databases.append(DatabaseData(
+                            id=db.id,
+                            db_name=db.db_name,
+                            db_unique_name=db.db_unique_name,
+                            pdb_name=getattr(db, "pdb_name", None),
+                            sid_prefix=getattr(db, "sid_prefix", None),
+                            is_cdb=getattr(db, "is_cdb", None),
+                            lifecycle_state=db.lifecycle_state,
+                            character_set=getattr(db, "character_set", "N/A") or "N/A",
+                            ncharacter_set=getattr(db, "ncharacter_set", "N/A") or "N/A",
+                            db_workload=getattr(db, "db_workload", "N/A") or "N/A",
+                            connection_strings=conn_strings,
+                            backup_config=backup_config,
+                            kms_key_id=getattr(db, "kms_key_id", None),
+                            vault_id=getattr(db, "vault_id", None),
+                            last_backup_timestamp=str(getattr(db, "last_backup_timestamp", "")) or None,
+                            last_backup_duration_in_seconds=getattr(db, "last_backup_duration_in_seconds", None),
+                            last_failed_backup_timestamp=str(getattr(db, "last_failed_backup_timestamp", "")) or None,
+                            time_created=str(getattr(db, "time_created", "")) or None,
+                            backups=backups,
+                            data_guard_associations=dg_assocs,
+                        ))
+                except Exception as e:
+                    logging.warning("Failed to list databases in home %s: %s", home.id, e)
+
+                db_homes.append(DbHomeData(
+                    id=home.id,
+                    display_name=home.display_name,
+                    db_version=home.db_version,
+                    lifecycle_state=home.lifecycle_state,
+                    db_home_location=getattr(home, "db_home_location", None),
+                    time_created=str(getattr(home, "time_created", "")) or None,
+                    databases=databases,
+                ))
+        except Exception as e:
+            logging.warning("Failed to list DB homes for %s: %s", dbs.id, e)
+
+        db_systems.append(DbSystemData(
+            id=dbs.id,
+            display_name=dbs.display_name,
+            lifecycle_state=dbs.lifecycle_state,
+            shape=dbs.shape,
+            cpu_core_count=dbs.cpu_core_count,
+            memory_size_in_gbs=getattr(dbs, "memory_size_in_gbs", None),
+            data_storage_size_in_gbs=getattr(dbs, "data_storage_size_in_gbs", None),
+            reco_storage_size_in_gb=getattr(dbs, "reco_storage_size_in_gb", None),
+            data_storage_percentage=getattr(dbs, "data_storage_percentage", None),
+            storage_volume_performance_mode=getattr(dbs, "storage_volume_performance_mode", None),
+            storage_management=(
+                getattr(getattr(dbs, "db_system_options", None), "storage_management", None)
+                if getattr(dbs, "db_system_options", None) else None
+            ),
+            disk_redundancy=getattr(dbs, "disk_redundancy", None),
+            node_count=getattr(dbs, "node_count", 1) or 1,
+            database_edition=getattr(dbs, "database_edition", "N/A") or "N/A",
+            license_model=getattr(dbs, "license_model", "N/A") or "N/A",
+            version=getattr(dbs, "version", "N/A") or "N/A",
+            os_version=getattr(dbs, "os_version", None),
+            hostname=getattr(dbs, "hostname", "N/A") or "N/A",
+            domain=getattr(dbs, "domain", None),
+            cluster_name=getattr(dbs, "cluster_name", None),
+            availability_domain=dbs.availability_domain,
+            fault_domains=list(getattr(dbs, "fault_domains", []) or []),
+            listener_port=getattr(dbs, "listener_port", None),
+            scan_dns_name=getattr(dbs, "scan_dns_name", None),
+            scan_ip_ids=list(getattr(dbs, "scan_ip_ids", []) or []),
+            vip_ids=list(getattr(dbs, "vip_ids", []) or []),
+            time_zone=getattr(dbs, "time_zone", None),
+            time_created=str(getattr(dbs, "time_created", "")) or None,
+            nsg_ids=list(getattr(dbs, "nsg_ids", []) or []),
+            ssh_public_keys_count=len(getattr(dbs, "ssh_public_keys", []) or []),
+            vcn_id=vcn_id_resolved,
+            vcn_name=vcn_name,
+            subnet_id=getattr(dbs, "subnet_id", None),
+            subnet_name=subnet_name,
+            backup_subnet_id=getattr(dbs, "backup_subnet_id", None),
+            backup_subnet_name=backup_subnet_name,
+            db_nodes=db_nodes,
+            db_homes=db_homes,
+        ))
+
+    return db_systems
+
+
+def get_database_details(
+    task,
+    region: str,
+    compartment_id: str,
+    compartment_name: str = "N/A",
+    profile: Optional[Dict[str, Any]] = None,
+) -> InfrastructureData:
+    """Data collection orchestrator for the Database (DBaaS) doc type."""
+    task.update_state(
+        state="PROGRESS",
+        meta={"current": 0, "total": 100, "step_key": "progress.initializing_clients", "context": {}},
+    )
+
+    db_client = get_client(oci.database.DatabaseClient, region, profile)
+    virtual_network_client = get_client(oci.core.VirtualNetworkClient, region, profile)
+
+    task.update_state(
+        state="PROGRESS",
+        meta={"current": 10, "total": 100, "step_key": "progress.listing_db_systems", "context": {}},
+    )
+
+    db_systems = _get_db_systems(db_client, virtual_network_client, compartment_id)
+
+    task.update_state(
+        state="PROGRESS",
+        meta={"current": 80, "total": 100, "step_key": "progress.collecting_db_network", "context": {}},
+    )
+
+    all_vcns = _get_vcn_details(virtual_network_client, compartment_id)
+
+    task.update_state(
+        state="PROGRESS",
+        meta={"current": 99, "total": 100, "step_key": "progress.assembling_report", "context": {}},
+    )
+
+    return InfrastructureData(
+        instances=[],
+        vcns=all_vcns,
+        drgs=[],
+        cpes=[],
+        ipsec_connections=[],
+        load_balancers=[],
+        volume_groups=[],
+        kubernetes_clusters=[],
+        db_systems=db_systems,
+    )
+
+
+# --- Multi-Compartment Helpers ---
+
+def tag_compartment(
+    data: InfrastructureData,
+    compartment_id: str,
+    compartment_name: str,
+) -> InfrastructureData:
+    """Stamps compartment context onto all resource models and registers
+    the compartment in data.compartments."""
+    tagged = data.copy(deep=True)
+    tagged.compartments = [CompartmentRef(id=compartment_id, name=compartment_name)]
+    for inst in tagged.instances:
+        if not inst.compartment_name or inst.compartment_name == "N/A":
+            inst.compartment_name = compartment_name
+    for vcn in tagged.vcns:
+        vcn.compartment_id = compartment_id
+        vcn.compartment_name = compartment_name
+    for drg in tagged.drgs:
+        drg.compartment_id = compartment_id
+        drg.compartment_name = compartment_name
+    for cpe in tagged.cpes:
+        cpe.compartment_id = compartment_id
+        cpe.compartment_name = compartment_name
+    for ipsec in tagged.ipsec_connections:
+        ipsec.compartment_id = compartment_id
+        ipsec.compartment_name = compartment_name
+    for lb in tagged.load_balancers:
+        lb.compartment_id = compartment_id
+        lb.compartment_name = compartment_name
+    for vg in tagged.volume_groups:
+        vg.compartment_name = compartment_name
+    for sv in tagged.standalone_volumes:
+        sv.compartment_name = compartment_name
+    for oke in tagged.kubernetes_clusters:
+        oke.compartment_id = compartment_id
+        oke.compartment_name = compartment_name
+    for dbs in tagged.db_systems:
+        dbs.compartment_id = compartment_id
+        dbs.compartment_name = compartment_name
+    return tagged
+
+
+def merge_infrastructure_data(
+    compartment_results: List[Tuple[dict, InfrastructureData]],
+) -> InfrastructureData:
+    """Merges infrastructure data from multiple compartments into a single
+    InfrastructureData, deduplicating by OCID (instances by host_name+compartment)."""
+    merged_compartments: List[CompartmentRef] = []
+    instances, vcns, drgs, cpes, ipsec_connections = [], [], [], [], []
+    load_balancers, volume_groups, kubernetes_clusters = [], [], []
+    waf_policies, certificates, standalone_volumes, db_systems = [], [], [], []
+    seen_vcn_ids: set = set()
+    seen_drg_ids: set = set()
+    seen_cpe_ids: set = set()
+    seen_ipsec_ids: set = set()
+    seen_lb_ids: set = set()
+    seen_vg_ids: set = set()
+    seen_oke_ids: set = set()
+    seen_waf_ids: set = set()
+    seen_cert_ids: set = set()
+    seen_vol_ids: set = set()
+    seen_db_ids: set = set()
+    seen_inst_keys: set = set()
+
+    for comp, data in compartment_results:
+        merged_compartments.append(CompartmentRef(id=comp["id"], name=comp["name"]))
+        for inst in data.instances:
+            key = (inst.host_name, comp["id"])
+            if key not in seen_inst_keys:
+                seen_inst_keys.add(key)
+                instances.append(inst)
+        for vcn in data.vcns:
+            if vcn.id not in seen_vcn_ids:
+                seen_vcn_ids.add(vcn.id)
+                vcns.append(vcn)
+        for drg in data.drgs:
+            if drg.id not in seen_drg_ids:
+                seen_drg_ids.add(drg.id)
+                drgs.append(drg)
+        for cpe in data.cpes:
+            if cpe.id not in seen_cpe_ids:
+                seen_cpe_ids.add(cpe.id)
+                cpes.append(cpe)
+        for ipsec in data.ipsec_connections:
+            if ipsec.id not in seen_ipsec_ids:
+                seen_ipsec_ids.add(ipsec.id)
+                ipsec_connections.append(ipsec)
+        for lb in data.load_balancers:
+            lb_key = lb.id or lb.display_name
+            if lb_key not in seen_lb_ids:
+                seen_lb_ids.add(lb_key)
+                load_balancers.append(lb)
+        for vg in data.volume_groups:
+            if vg.id not in seen_vg_ids:
+                seen_vg_ids.add(vg.id)
+                volume_groups.append(vg)
+        for oke in data.kubernetes_clusters:
+            if oke.id not in seen_oke_ids:
+                seen_oke_ids.add(oke.id)
+                kubernetes_clusters.append(oke)
+        for wp in data.waf_policies:
+            if wp.id not in seen_waf_ids:
+                seen_waf_ids.add(wp.id)
+                waf_policies.append(wp)
+        for cert in (data.certificates or []):
+            cert_id = cert.get("id") if isinstance(cert, dict) else getattr(cert, "id", None)
+            if cert_id and cert_id not in seen_cert_ids:
+                seen_cert_ids.add(cert_id)
+                certificates.append(cert)
+        for sv in data.standalone_volumes:
+            if sv.id not in seen_vol_ids:
+                seen_vol_ids.add(sv.id)
+                standalone_volumes.append(sv)
+        for dbs in data.db_systems:
+            if dbs.id not in seen_db_ids:
+                seen_db_ids.add(dbs.id)
+                db_systems.append(dbs)
+
+    return InfrastructureData(
+        compartments=merged_compartments,
+        instances=instances,
+        vcns=vcns,
+        drgs=drgs,
+        cpes=cpes,
+        ipsec_connections=ipsec_connections,
+        load_balancers=load_balancers,
+        volume_groups=volume_groups,
+        kubernetes_clusters=kubernetes_clusters,
+        waf_policies=waf_policies,
+        certificates=certificates,
+        standalone_volumes=standalone_volumes,
+        db_systems=db_systems,
     )
