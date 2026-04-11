@@ -1,0 +1,26 @@
+[tool.ruff]
+# Target Python version matching the Docker image
+target-version = "py311"
+
+# Only check the backend Python code
+src = ["backend"]
+
+[tool.ruff.lint]
+# Rules enabled: pycodestyle errors/warnings (E/W) + pyflakes (F)
+select = ["E", "W", "F"]
+
+ignore = [
+    # ── Style choices in existing code ────────────────────────────────────────
+    "E501",   # line too long — OCI SDK calls and docx styles frequently exceed 88 chars
+    "E702",   # multiple statements on one line (semicolon) — used in auth.py field builders
+    "E701",   # multiple statements on one line (colon) — used in compact conditionals
+    "E741",   # ambiguous variable name — 'l' used as a loop variable in some list builders
+
+    # ── Formatting noise ──────────────────────────────────────────────────────
+    "W291",   # trailing whitespace
+    "W293",   # whitespace before comment
+]
+
+[tool.ruff.lint.per-file-ignores]
+# auth.py has intentional multi-statement patterns for DB field builders
+"backend/auth.py" = ["E702", "E701"]
