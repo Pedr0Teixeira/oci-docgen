@@ -205,7 +205,7 @@ def _auth_from_profile(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if profile.get("auth_method", "").upper() == "INSTANCE_PRINCIPAL":
         return get_auth_provider()  # always re-fetches instance principal signer
     try:
-        import tempfile, os as _os
+        import tempfile
         key_pem = profile.get("private_key_pem") or ""
         # Write private key to a temp file (OCI SDK requires a file path)
         tf = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)
@@ -2143,9 +2143,6 @@ def _get_db_systems(
                                 (bk.backup_destination_type for bk in backups if bk.backup_destination_type),
                                 "OBJECT_STORE"
                             )
-                            # most recent successful backup
-                            successful = [bk for bk in backups if (bk.lifecycle_state or "").upper() == "ACTIVE" and bk.time_ended]
-                            last_ts = successful[0].time_ended if successful else None
                             backup_config = DbBackupConfigData(
                                 auto_backup_enabled=True,
                                 backup_destination=inferred_dest,

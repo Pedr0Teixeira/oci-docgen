@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop", "hotfix/**", "feature/**", "fix/**", "refactor/**"]
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint (Ruff)
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint (Ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff
+        run: ruff check backend/
+        # Ignore rules are configured in pyproject.toml [tool.ruff.lint]
+
+  # ---------------------------------------------------------------------------
+  # Python SAST (Bandit)
+  # ---------------------------------------------------------------------------
+  sast:
+    name: Python SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit
+        run: |
+          bandit -r backend/ \
+            --skip B101,B104,B105,B106,B107,B311,B324,B608 \
+            --severity-level medium \
+            --confidence-level medium \
+            -f txt
+        # Skipped rules:
+        #   B101 assert_used       — test helpers use assert
+        #   B104 hardcoded_bind    — 0.0.0.0 bind is intentional in Docker
+        #   B105,106,107           — password/secret in strings (false positives on field names)
+        #   B311 random            — non-crypto random for palette index, not security-sensitive
+        #   B324 hashlib           — SHA-256 for key derivation (intentional, documented)
+        #   B608 hardcoded_sql     — all queries use parameterized placeholders (?); false positive
+
+  # ---------------------------------------------------------------------------
+  # Dependency Vulnerabilities (pip-audit)
+  # ---------------------------------------------------------------------------
+  pip-audit:
+    name: Dependency Vulnerabilities (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit dependencies
+        run: pip-audit -r backend/requirements.txt --skip-editable
+        continue-on-error: false
+
+  # ---------------------------------------------------------------------------
+  # Secret Detection (Gitleaks)
+  # ---------------------------------------------------------------------------
+  gitleaks:
+    name: Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Validate .env.example
+  # ---------------------------------------------------------------------------
+  validate-env:
+    name: Validate .env.example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check .env.example exists
+        run: |
+          if [ ! -f ".env.example" ]; then
+            echo "ERROR: .env.example not found at repo root"
+            exit 1
+          fi
+          echo ".env.example found"
+
+      - name: Check required keys are present
+        run: |
+          REQUIRED_KEYS=("SECRET_KEY" "FRONTEND_URL" "FRONTEND_PORT")
+          MISSING=()
+          for key in "${REQUIRED_KEYS[@]}"; do
+            if ! grep -q "^${key}=" .env.example && ! grep -q "^# ${key}" .env.example; then
+              MISSING+=("$key")
+            fi
+          done
+          if [ ${#MISSING[@]} -ne 0 ]; then
+            echo "ERROR: Missing keys in .env.example: ${MISSING[*]}"
+            exit 1
+          fi
+          echo "All required keys present in .env.example"
