@@ -269,13 +269,97 @@ DOC_STRINGS = {
         "doc.headers.associated_listener": "ASSOCIADO AO LISTENER",
         "doc.common.none": "Nenhum",
         # --- Document Types ---
-        "doc.type.full_infra": "Documentação de Infraestrutura",        "doc.type.new_host": "Documentação de Novo Host",
+        "doc.type.full_infra": "Documentação de Infraestrutura",
+        "doc.type.new_host": "Documentação de Novo Host",
         "doc.type.kubernetes": "Documentação de Kubernetes (OKE)",
+        "doc.type.database": "Documentação de Base de Dados (DBaaS)",
         "doc.type.default": "Documentação Técnica",
         "doc.identifier.full_infra": "Infraestrutura",
         "doc.identifier.new_host": "NovoHost",
         "doc.identifier.kubernetes": "Kubernetes",
+        "doc.identifier.database": "Database",
         "doc.identifier.default": "Geral",
+        # --- Database headings ---
+        "doc.headings.database_systems": "Sistemas de Base de Dados (DB Systems)",
+        "doc.headings.db_system": "DB System",
+        "doc.headings.db_network": "Informações de Rede",
+        "doc.headings.db_nodes": "DB Nodes",
+        "doc.headings.db_home": "DB Home",
+        "doc.headings.databases": "Databases",
+        "doc.headings.db_backup_config": "Configuração de Backup",
+        "doc.headings.db_connection_strings": "Connection Strings",
+        "doc.headers.db_edition": "Edição",
+        "doc.headers.db_cpu_cores": "CPU Cores",
+        "doc.headers.db_storage_gb": "Storage (GB)",
+        "doc.headers.db_node_count": "Nós",
+        "doc.headers.db_license": "Licenciamento",
+        "doc.headers.db_version": "Versão",
+        "doc.headers.db_hostname": "Hostname",
+        "doc.headers.db_domain": "Domínio",
+        "doc.headers.db_fault_domain": "Fault Domain",
+        "doc.headers.db_name": "Nome do DB",
+        "doc.headers.db_unique_name": "Nome Único",
+        "doc.headers.db_pdb_name": "PDB Name",
+        "doc.headers.db_workload": "Workload",
+        "doc.headers.db_charset": "Character Set",
+        "doc.headers.db_ncharset": "National Character Set",
+        "doc.headers.db_auto_backup": "Backup Automático",
+        "doc.headers.db_backup_window": "Janela de Backup",
+        "doc.headers.db_recovery_days": "Dias de Retenção",
+        "doc.messages.no_db_systems": "Nenhum DB System encontrado neste compartimento.",
+        "doc.messages.no_db_nodes": "Nenhum DB Node encontrado.",
+        "doc.messages.no_db_homes": "Nenhum DB Home encontrado.",
+        "doc.messages.no_databases": "Nenhuma database encontrada.",
+        # --- Database enriched headings/headers ---
+        "doc.headers.db_os_version": "Versão do S.O.",
+        "doc.headers.db_time_zone": "Timezone",
+        "doc.headers.db_created": "Data de Criação",
+        "doc.headers.db_cluster_name": "Nome do Cluster",
+        "doc.headings.db_compute_storage": "Computação e Storage",
+        "doc.headers.db_memory_gb": "Memória (GB)",
+        "doc.headers.db_data_storage_gb": "Storage de Dados (GB)",
+        "doc.headers.db_reco_storage_gb": "Storage de Recuperação (GB)",
+        "doc.headers.db_data_storage_pct": "% Storage para Dados",
+        "doc.headers.db_disk_redundancy": "Redundância de Disco",
+        "doc.headers.db_storage_perf_mode": "Modo de Performance de Storage",
+        "doc.headers.db_storage_management": "Gerenciamento de Storage",
+        "doc.headers.db_listener_port": "Porta do Listener",
+        "doc.headers.db_scan_dns": "DNS do SCAN",
+        "doc.headers.db_backup_subnet": "Subnet de Backup",
+        "doc.headers.db_scan_ips": "Qtd. SCAN IPs",
+        "doc.headers.db_vip_ids": "Qtd. VIP IDs",
+        "doc.headings.db_high_availability": "Alta Disponibilidade",
+        "doc.headers.db_fault_domains": "Fault Domains",
+        "doc.headers.db_ssh_keys": "Qtd. Chaves SSH",
+        "doc.headers.db_sw_storage": "Storage de Software (GB)",
+        "doc.headers.db_home_location": "Localização do DB Home",
+        "doc.headers.db_is_cdb": "É CDB?",
+        "doc.headers.db_sid_prefix": "Prefixo SID",
+        "doc.headers.db_last_backup": "Último Backup",
+        "doc.headers.db_kms_key": "ID da Chave KMS",
+        "doc.headers.name": "Nome",
+        "doc.headers.db_connection": "String de Conexão",
+        "doc.headers.db_full_backup_window": "Janela de Full Backup",
+        "doc.headers.db_full_backup_day": "Dia do Full Backup",
+        "doc.headers.db_backup_destination": "Destino do Backup",
+        "doc.headers.db_deletion_policy": "Política de Exclusão de Backup",
+        "doc.headings.db_backup_history": "Histórico de Backups RMAN",
+        "doc.headers.db_backup_type": "Tipo de Backup",
+        "doc.headers.db_start": "Início",
+        "doc.headers.db_end": "Fim",
+        "doc.headers.db_size": "Tamanho (GB)",
+        "doc.headings.db_data_guard": "Data Guard",
+        "doc.headers.db_role": "Role",
+        "doc.headers.db_peer_role": "Role do Peer",
+        "doc.headers.db_protection_mode": "Modo de Proteção",
+        "doc.headers.db_transport": "Tipo de Transporte",
+        "doc.headers.db_apply_lag": "Lag de Aplicação",
+        # --- Multi-compartment headings ---
+        "doc.headings.compartment_section": "Compartimento: ",
+        "doc.headings.multi_compartment_summary": "Sumário Multi-Compartimento",
+        "doc.headers.compartment": "Compartimento",
+        "doc.headers.resource_count": "Recursos",
+        "doc.headers.cross_compartment_connectivity": "Conectividade Cross-Compartimento",
     },
     "en": {
         # --- Common Terms ---
@@ -529,11 +613,94 @@ DOC_STRINGS = {
         "doc.type.full_infra": "Infrastructure Documentation",
         "doc.type.new_host": "New Host Documentation",
         "doc.type.kubernetes": "Kubernetes (OKE) Documentation",
+        "doc.type.database": "Database Documentation (DBaaS)",
         "doc.type.default": "Technical Documentation",
         "doc.identifier.full_infra": "Infrastructure",
         "doc.identifier.new_host": "NewHost",
         "doc.identifier.kubernetes": "Kubernetes",
+        "doc.identifier.database": "Database",
         "doc.identifier.default": "General",
+        # --- Database headings ---
+        "doc.headings.database_systems": "Database Systems (DB Systems)",
+        "doc.headings.db_system": "DB System",
+        "doc.headings.db_network": "Network Information",
+        "doc.headings.db_nodes": "DB Nodes",
+        "doc.headings.db_home": "DB Home",
+        "doc.headings.databases": "Databases",
+        "doc.headings.db_backup_config": "Backup Configuration",
+        "doc.headings.db_connection_strings": "Connection Strings",
+        "doc.headers.db_edition": "Edition",
+        "doc.headers.db_cpu_cores": "CPU Cores",
+        "doc.headers.db_storage_gb": "Storage (GB)",
+        "doc.headers.db_node_count": "Nodes",
+        "doc.headers.db_license": "License Model",
+        "doc.headers.db_version": "Version",
+        "doc.headers.db_hostname": "Hostname",
+        "doc.headers.db_domain": "Domain",
+        "doc.headers.db_fault_domain": "Fault Domain",
+        "doc.headers.db_name": "DB Name",
+        "doc.headers.db_unique_name": "Unique Name",
+        "doc.headers.db_pdb_name": "PDB Name",
+        "doc.headers.db_workload": "Workload",
+        "doc.headers.db_charset": "Character Set",
+        "doc.headers.db_ncharset": "National Character Set",
+        "doc.headers.db_auto_backup": "Auto Backup",
+        "doc.headers.db_backup_window": "Backup Window",
+        "doc.headers.db_recovery_days": "Recovery Days",
+        "doc.messages.no_db_systems": "No DB Systems found in this compartment.",
+        "doc.messages.no_db_nodes": "No DB Nodes found.",
+        "doc.messages.no_db_homes": "No DB Homes found.",
+        "doc.messages.no_databases": "No databases found.",
+        # --- Database enriched headings/headers ---
+        "doc.headers.db_os_version": "OS Version",
+        "doc.headers.db_time_zone": "Timezone",
+        "doc.headers.db_created": "Created At",
+        "doc.headers.db_cluster_name": "Cluster Name",
+        "doc.headings.db_compute_storage": "Compute & Storage",
+        "doc.headers.db_memory_gb": "Memory (GB)",
+        "doc.headers.db_data_storage_gb": "Data Storage (GB)",
+        "doc.headers.db_reco_storage_gb": "Recovery Storage (GB)",
+        "doc.headers.db_data_storage_pct": "Data Storage %",
+        "doc.headers.db_disk_redundancy": "Disk Redundancy",
+        "doc.headers.db_storage_perf_mode": "Storage Performance Mode",
+        "doc.headers.db_storage_management": "Storage Management",
+        "doc.headers.db_listener_port": "Listener Port",
+        "doc.headers.db_scan_dns": "SCAN DNS Name",
+        "doc.headers.db_backup_subnet": "Backup Subnet",
+        "doc.headers.db_scan_ips": "SCAN IP Count",
+        "doc.headers.db_vip_ids": "VIP ID Count",
+        "doc.headings.db_high_availability": "High Availability",
+        "doc.headers.db_fault_domains": "Fault Domains",
+        "doc.headers.db_ssh_keys": "SSH Key Count",
+        "doc.headers.db_sw_storage": "Software Storage (GB)",
+        "doc.headers.db_home_location": "DB Home Location",
+        "doc.headers.db_is_cdb": "Is CDB?",
+        "doc.headers.db_sid_prefix": "SID Prefix",
+        "doc.headers.db_last_backup": "Last Backup",
+        "doc.headers.db_kms_key": "KMS Key ID",
+        "doc.headers.name": "Name",
+        "doc.headers.db_connection": "Connection String",
+        "doc.headers.db_full_backup_window": "Full Backup Window",
+        "doc.headers.db_full_backup_day": "Full Backup Day",
+        "doc.headers.db_backup_destination": "Backup Destination",
+        "doc.headers.db_deletion_policy": "Backup Deletion Policy",
+        "doc.headings.db_backup_history": "RMAN Backup History",
+        "doc.headers.db_backup_type": "Backup Type",
+        "doc.headers.db_start": "Started",
+        "doc.headers.db_end": "Ended",
+        "doc.headers.db_size": "Size (GB)",
+        "doc.headings.db_data_guard": "Data Guard",
+        "doc.headers.db_role": "Role",
+        "doc.headers.db_peer_role": "Peer Role",
+        "doc.headers.db_protection_mode": "Protection Mode",
+        "doc.headers.db_transport": "Transport Type",
+        "doc.headers.db_apply_lag": "Apply Lag",
+        # --- Multi-compartment headings ---
+        "doc.headings.compartment_section": "Compartment: ",
+        "doc.headings.multi_compartment_summary": "Multi-Compartment Summary",
+        "doc.headers.compartment": "Compartment",
+        "doc.headers.resource_count": "Resources",
+        "doc.headers.cross_compartment_connectivity": "Cross-Compartment Connectivity",
     },
 }
 
@@ -1882,6 +2049,393 @@ def _apply_letterhead(
 
 
 # --- Document Generation ---
+def _add_database_section(
+    document: Document,
+    infra_data: InfrastructureData,
+    toc_list: list,
+    counters: Dict[int, int],
+    lang: str,
+):
+    """Renders the Database (DBaaS) section with hierarchical DB System details
+    including compute, storage, network, HA topology, DB nodes, DB homes, databases,
+    connection strings, RMAN backups history, Data Guard associations and encryption.
+    """
+    db_systems = getattr(infra_data, "db_systems", []) or []
+    _add_and_bookmark_heading(document, t("doc.headings.database_systems", lang), 1, toc_list, counters)
+
+    if not db_systems:
+        document.add_paragraph(t("doc.messages.no_db_systems", lang))
+        return
+
+    def _v(value: Any) -> str:
+        return "N/A" if value in (None, "", []) else str(value)
+
+    for dbs in sorted(db_systems, key=lambda d: d.display_name):
+        _add_and_bookmark_heading(
+            document,
+            f"{t('doc.headings.db_system', lang)}: {dbs.display_name}",
+            2, toc_list, counters,
+        )
+
+        # ── General info table ──────────────────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.general_info", lang), 3, toc_list, counters)
+        _create_titled_key_value_table(document, None, {
+            t("doc.headers.shape", lang): dbs.shape,
+            t("doc.headers.db_edition", lang): dbs.database_edition,
+            t("doc.headers.db_version", lang): dbs.version or "N/A",
+            t("doc.headers.db_os_version", lang): _v(dbs.os_version),
+            t("doc.headers.db_license", lang): dbs.license_model or "N/A",
+            t("doc.headers.db_time_zone", lang): _v(dbs.time_zone),
+            t("doc.headers.db_created", lang): _v(dbs.time_created),
+            t("doc.common.state", lang): dbs.lifecycle_state,
+            t("doc.headers.db_cluster_name", lang): _v(dbs.cluster_name),
+        })
+
+        # ── Compute & Storage ──────────────────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.db_compute_storage", lang), 3, toc_list, counters)
+        _create_titled_key_value_table(document, None, {
+            t("doc.headers.db_cpu_cores", lang): str(dbs.cpu_core_count),
+            t("doc.headers.db_memory_gb", lang): _v(dbs.memory_size_in_gbs),
+            t("doc.headers.db_node_count", lang): str(dbs.node_count),
+            t("doc.headers.db_data_storage_gb", lang): _v(dbs.data_storage_size_in_gbs),
+            t("doc.headers.db_reco_storage_gb", lang): _v(dbs.reco_storage_size_in_gb),
+            t("doc.headers.db_data_storage_pct", lang): f"{dbs.data_storage_percentage}%" if dbs.data_storage_percentage else "N/A",
+            t("doc.headers.db_disk_redundancy", lang): _v(dbs.disk_redundancy),
+            t("doc.headers.db_storage_perf_mode", lang): _v(dbs.storage_volume_performance_mode),
+            t("doc.headers.db_storage_management", lang): _v(dbs.storage_management),
+        })
+
+        # ── Network information ────────────────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.db_network", lang), 3, toc_list, counters)
+        _create_titled_key_value_table(document, None, {
+            t("doc.headers.db_hostname", lang): dbs.hostname or "N/A",
+            t("doc.headers.db_domain", lang): _v(dbs.domain),
+            t("doc.headers.db_listener_port", lang): _v(dbs.listener_port),
+            t("doc.headers.db_scan_dns", lang): _v(dbs.scan_dns_name),
+            "VCN": dbs.vcn_name or "N/A",
+            "Subnet": dbs.subnet_name or "N/A",
+            t("doc.headers.db_backup_subnet", lang): _v(dbs.backup_subnet_name),
+            t("doc.headers.db_scan_ips", lang): str(len(dbs.scan_ip_ids or [])),
+            t("doc.headers.db_vip_ids", lang): str(len(dbs.vip_ids or [])),
+            "NSGs": str(len(dbs.nsg_ids or [])),
+        })
+
+        # ── High Availability ─────────────────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.db_high_availability", lang), 3, toc_list, counters)
+        _create_titled_key_value_table(document, None, {
+            t("doc.common.ad", lang): dbs.availability_domain,
+            t("doc.headers.db_fault_domains", lang): ", ".join(dbs.fault_domains) if dbs.fault_domains else "N/A",
+            t("doc.headers.db_ssh_keys", lang): _v(dbs.ssh_public_keys_count),
+        })
+
+        # ── DB Nodes ───────────────────────────────────────────────────────
+        _add_and_bookmark_heading(document, t("doc.headings.db_nodes", lang), 3, toc_list, counters)
+        if dbs.db_nodes:
+            headers = [
+                t("doc.headers.db_hostname", lang),
+                t("doc.common.state", lang),
+                t("doc.headers.private_ip", lang),
+                t("doc.headers.db_fault_domain", lang),
+                t("doc.headers.db_sw_storage", lang),
+            ]
+            table = document.add_table(rows=1, cols=len(headers))
+            table.style = "Table Grid"
+            _style_table_headers(table, headers)
+            for node in dbs.db_nodes:
+                row = table.add_row().cells
+                row[0].text = node.hostname or "N/A"
+                row[1].text = node.lifecycle_state
+                row[2].text = node.private_ip or "N/A"
+                row[3].text = node.fault_domain or "N/A"
+                row[4].text = f"{node.software_storage_size_in_gb} GB" if node.software_storage_size_in_gb else "N/A"
+                _style_row_by_state(table.rows[-1], node.lifecycle_state)
+        else:
+            document.add_paragraph(t("doc.messages.no_db_nodes", lang))
+
+        # ── DB Homes and their Databases ──────────────────────────────────
+        for home in dbs.db_homes:
+            _add_and_bookmark_heading(
+                document,
+                f"{t('doc.headings.db_home', lang)}: {home.display_name}",
+                3, toc_list, counters,
+            )
+            _create_titled_key_value_table(document, None, {
+                t("doc.headers.db_version", lang): home.db_version,
+                t("doc.common.state", lang): home.lifecycle_state,
+                t("doc.headers.db_home_location", lang): _v(home.db_home_location),
+                t("doc.headers.db_created", lang): _v(home.time_created),
+            })
+
+            _add_and_bookmark_heading(document, t("doc.headings.databases", lang), 4, toc_list, counters)
+            if home.databases:
+                for db in home.databases:
+                    kv = {
+                        t("doc.headers.db_name", lang): db.db_name,
+                        t("doc.headers.db_unique_name", lang): db.db_unique_name,
+                        t("doc.common.state", lang): db.lifecycle_state,
+                        t("doc.headers.db_is_cdb", lang): (
+                            t("doc.common.yes", lang) if db.is_cdb else (t("doc.common.no", lang) if db.is_cdb is False else "N/A")
+                        ),
+                        t("doc.headers.db_workload", lang): db.db_workload or "N/A",
+                        t("doc.headers.db_charset", lang): db.character_set or "N/A",
+                        t("doc.headers.db_ncharset", lang): db.ncharacter_set or "N/A",
+                        t("doc.headers.db_sid_prefix", lang): _v(db.sid_prefix),
+                        t("doc.headers.db_last_backup", lang): _v(db.last_backup_timestamp),
+                        t("doc.headers.db_kms_key", lang): _v(db.kms_key_id),
+                        t("doc.headers.db_created", lang): _v(db.time_created),
+                    }
+                    if db.pdb_name:
+                        kv[t("doc.headers.db_pdb_name", lang)] = db.pdb_name
+                    _create_titled_key_value_table(document, db.db_name, kv)
+
+                    # Connection strings — full table
+                    if db.connection_strings:
+                        cs = db.connection_strings
+                        cs_rows: List[List[str]] = []
+                        if cs.get("cdb_default"):
+                            cs_rows.append(["CDB Default", cs["cdb_default"]])
+                        if cs.get("cdb_ip_default"):
+                            cs_rows.append(["CDB IP Default", cs["cdb_ip_default"]])
+                        for k, v in (cs.get("all_connection_strings") or {}).items():
+                            cs_rows.append([k, v])
+                        if cs_rows:
+                            p = document.add_paragraph()
+                            p.add_run(f"{t('doc.headings.db_connection_strings', lang)}").bold = True
+                            cs_table = document.add_table(rows=1, cols=2)
+                            cs_table.style = "Table Grid"
+                            _style_table_headers(
+                                cs_table,
+                                [t("doc.headers.name", lang), t("doc.headers.db_connection", lang)],
+                            )
+                            for k, v in cs_rows:
+                                cells = cs_table.add_row().cells
+                                cells[0].text = k
+                                cells[1].text = v
+                                for c in cells:
+                                    for run in c.paragraphs[0].runs:
+                                        run.font.size = Pt(8)
+
+                    # Backup config
+                    if db.backup_config:
+                        bc = db.backup_config
+                        _create_titled_key_value_table(
+                            document,
+                            t("doc.headings.db_backup_config", lang),
+                            {
+                                t("doc.headers.db_auto_backup", lang): t("doc.common.yes", lang) if bc.auto_backup_enabled else t("doc.common.no", lang),
+                                t("doc.headers.db_recovery_days", lang): _v(bc.recovery_window_in_days),
+                                t("doc.headers.db_backup_window", lang): _v(bc.auto_backup_window),
+                                t("doc.headers.db_full_backup_window", lang): _v(bc.auto_full_backup_window),
+                                t("doc.headers.db_full_backup_day", lang): _v(bc.auto_full_backup_day),
+                                t("doc.headers.db_backup_destination", lang): _v(bc.backup_destination),
+                                t("doc.headers.db_deletion_policy", lang): _v(bc.backup_deletion_policy),
+                            },
+                        )
+
+                    # Backups history (RMAN)
+                    if db.backups:
+                        p = document.add_paragraph()
+                        p.add_run(f"{t('doc.headings.db_backup_history', lang)} ({len(db.backups)})").bold = True
+                        b_headers = [
+                            t("doc.headers.name", lang),
+                            t("doc.common.state", lang),
+                            t("doc.headers.db_backup_type", lang),
+                            t("doc.headers.db_backup_destination", lang),
+                            t("doc.headers.db_start", lang),
+                            t("doc.headers.db_end", lang),
+                            t("doc.headers.db_size", lang),
+                        ]
+                        b_table = document.add_table(rows=1, cols=len(b_headers))
+                        b_table.style = "Table Grid"
+                        _style_table_headers(b_table, b_headers)
+                        for bk in db.backups:
+                            row = b_table.add_row().cells
+                            row[0].text = bk.display_name or "N/A"
+                            row[1].text = bk.lifecycle_state or "N/A"
+                            row[2].text = bk.type or "N/A"
+                            row[3].text = bk.backup_destination_type or "N/A"
+                            row[4].text = bk.time_started or "N/A"
+                            row[5].text = bk.time_ended or "N/A"
+                            row[6].text = f"{bk.database_size_in_gbs:.2f} GB" if bk.database_size_in_gbs else "N/A"
+                            _style_row_by_state(b_table.rows[-1], bk.lifecycle_state or "")
+
+                    # Data Guard
+                    if db.data_guard_associations:
+                        p = document.add_paragraph()
+                        p.add_run(t("doc.headings.db_data_guard", lang)).bold = True
+                        dg_headers = [
+                            t("doc.headers.db_role", lang),
+                            t("doc.headers.db_peer_role", lang),
+                            t("doc.headers.db_protection_mode", lang),
+                            t("doc.headers.db_transport", lang),
+                            t("doc.headers.db_apply_lag", lang),
+                            t("doc.common.state", lang),
+                        ]
+                        dg_table = document.add_table(rows=1, cols=len(dg_headers))
+                        dg_table.style = "Table Grid"
+                        _style_table_headers(dg_table, dg_headers)
+                        for dg in db.data_guard_associations:
+                            row = dg_table.add_row().cells
+                            row[0].text = dg.role or "N/A"
+                            row[1].text = dg.peer_role or "N/A"
+                            row[2].text = dg.protection_mode or "N/A"
+                            row[3].text = dg.transport_type or "N/A"
+                            row[4].text = dg.apply_lag or "N/A"
+                            row[5].text = dg.lifecycle_state or "N/A"
+            else:
+                document.add_paragraph(t("doc.messages.no_databases", lang))
+
+        if not dbs.db_homes:
+            document.add_paragraph(t("doc.messages.no_db_homes", lang))
+
+
+def _add_full_infra_sections(
+    document: Document,
+    infra_data: InfrastructureData,
+    toc_list: list,
+    counters: Dict[int, int],
+    lang: str,
+):
+    """Renders the standard full_infra sections (extracted to be reusable for multi-compartment)."""
+    _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, toc_list, counters)
+    # 1. Compute instances
+    _add_and_bookmark_heading(document, t("doc.headings.compute_instances", lang), 2, toc_list, counters)
+    _add_instances_table(document, infra_data.instances, lang)
+    # 2. Storage and volumes
+    _add_volume_and_backup_section(document, infra_data, toc_list, counters, lang)
+    if hasattr(infra_data, "volume_groups") and infra_data.volume_groups:
+        _add_volume_groups_section(document, infra_data, toc_list, counters, lang)
+    # 3. VCN topology
+    _add_vcn_details_section(document, infra_data, toc_list, counters, lang)
+    # 4. Load balancers
+    if hasattr(infra_data, "load_balancers") and infra_data.load_balancers:
+        _add_load_balancers_section(document, infra_data, toc_list, counters, lang)
+    # 5. Certificates
+    active_certs = [
+        c for c in (getattr(infra_data, "certificates", []) or [])
+        if isinstance(c, dict)
+        and c.get("lifecycle_state", "").upper() in ("ACTIVE", "PENDING_DELETION")
+    ]
+    if active_certs:
+        _add_and_bookmark_heading(
+            document,
+            t("doc.headers.certificates", lang),
+            1, toc_list, counters,
+        )
+        _add_compartment_certificates_section(
+            document, infra_data, toc_list, counters, lang
+        )
+    # 6. WAF policies
+    _add_waf_report_section(document, infra_data, toc_list, counters, lang)
+    # 7. External connectivity (DRG → CPE → VPN)
+    _add_connectivity_section(document, infra_data, toc_list, counters, lang)
+    # 8. Kubernetes (OKE)
+    _add_kubernetes_section(document, infra_data, toc_list, counters, lang)
+    # 9. Database (DBaaS)
+    if getattr(infra_data, "db_systems", None):
+        _add_database_section(document, infra_data, toc_list, counters, lang)
+
+
+def _filter_data_for_compartment(
+    infra_data: InfrastructureData,
+    compartment_id: str,
+    compartment_name: str,
+) -> InfrastructureData:
+    """Returns a shallow-filtered copy of InfrastructureData containing only
+    resources tagged to the given compartment."""
+    filtered = infra_data.copy(deep=True)
+    filtered.instances = [i for i in infra_data.instances if i.compartment_name == compartment_name]
+    filtered.vcns = [v for v in infra_data.vcns if getattr(v, "compartment_name", None) == compartment_name]
+    filtered.drgs = [d for d in infra_data.drgs if getattr(d, "compartment_name", None) == compartment_name]
+    filtered.cpes = [c for c in infra_data.cpes if getattr(c, "compartment_name", None) == compartment_name]
+    filtered.ipsec_connections = [i for i in infra_data.ipsec_connections if getattr(i, "compartment_name", None) == compartment_name]
+    filtered.load_balancers = [l for l in infra_data.load_balancers if getattr(l, "compartment_name", None) == compartment_name]
+    filtered.volume_groups = [v for v in infra_data.volume_groups if getattr(v, "compartment_name", None) == compartment_name]
+    filtered.standalone_volumes = [s for s in infra_data.standalone_volumes if getattr(s, "compartment_name", None) == compartment_name]
+    filtered.kubernetes_clusters = [k for k in infra_data.kubernetes_clusters if getattr(k, "compartment_name", None) == compartment_name]
+    filtered.db_systems = [d for d in infra_data.db_systems if getattr(d, "compartment_name", None) == compartment_name]
+    filtered.waf_policies = [w for w in infra_data.waf_policies if getattr(w, "compartment_name", None) == compartment_name]
+    # Certificates are dicts — filter by compartment_name field if present
+    filtered.certificates = [
+        c for c in (infra_data.certificates or [])
+        if isinstance(c, dict) and c.get("compartment_name") == compartment_name
+    ]
+    return filtered
+
+
+def _add_compartment_section(
+    document: Document,
+    comp_data: InfrastructureData,
+    compartment_name: str,
+    toc_list: list,
+    counters: Dict[int, int],
+    lang: str,
+):
+    """Renders a full_infra section scoped to a single compartment."""
+    document.add_page_break()
+    _add_and_bookmark_heading(
+        document,
+        f"{t('doc.headings.compartment_section', lang)}{compartment_name}",
+        1, toc_list, counters,
+    )
+    _add_full_infra_sections(document, comp_data, toc_list, counters, lang)
+
+
+def _add_multi_compartment_summary_section(
+    document: Document,
+    infra_data: InfrastructureData,
+    toc_list: list,
+    counters: Dict[int, int],
+    lang: str,
+):
+    """Adds a summary overview table when multiple compartments are present."""
+    _add_and_bookmark_heading(
+        document,
+        t("doc.headings.multi_compartment_summary", lang),
+        1, toc_list, counters,
+    )
+
+    headers = [
+        t("doc.headers.compartment", lang),
+        "VCNs", "Instances", "Load Balancers", "OKE Clusters", "DB Systems",
+    ]
+    table = document.add_table(rows=1, cols=len(headers))
+    table.style = "Table Grid"
+    _style_table_headers(table, headers)
+
+    for comp in infra_data.compartments:
+        comp_data = _filter_data_for_compartment(infra_data, comp.id, comp.name)
+        row = table.add_row().cells
+        row[0].text = comp.name
+        row[1].text = str(len(comp_data.vcns))
+        row[2].text = str(len(comp_data.instances))
+        row[3].text = str(len(comp_data.load_balancers))
+        row[4].text = str(len(comp_data.kubernetes_clusters))
+        row[5].text = str(len(comp_data.db_systems))
+
+    # Cross-compartment connectivity: DRGs attached to VCNs in different compartments
+    cross_connections = []
+    vcn_comp_map = {v.id: getattr(v, "compartment_name", "N/A") for v in infra_data.vcns}
+    for drg in infra_data.drgs:
+        drg_comp = getattr(drg, "compartment_name", "N/A")
+        for att in drg.attachments:
+            if att.network_id and att.network_id in vcn_comp_map:
+                vcn_comp = vcn_comp_map[att.network_id]
+                if vcn_comp != drg_comp:
+                    cross_connections.append(
+                        f"DRG '{drg.display_name}' ({drg_comp}) → VCN ({vcn_comp})"
+                    )
+
+    if cross_connections:
+        _add_and_bookmark_heading(
+            document,
+            t("doc.headers.cross_compartment_connectivity", lang),
+            2, toc_list, counters,
+        )
+        for conn in cross_connections:
+            document.add_paragraph(conn, style="List Bullet")
+
+
 def generate_documentation(
     doc_type: str,
     infra_data: InfrastructureData,
@@ -1934,6 +2488,7 @@ def generate_documentation(
         "new_host": (t("doc.type.new_host", lang), t("doc.identifier.new_host", lang)),
         "kubernetes": (t("doc.type.kubernetes", lang), t("doc.identifier.kubernetes", lang)),
         "waf_report": (t("doc.type.waf_report", lang), t("doc.identifier.waf_report", lang)),
+        "database": (t("doc.type.database", lang), t("doc.identifier.database", lang)),
     }
     doc_title_text, doc_identifier = doc_type_map.get(
         doc_type, (t("doc.type.default", lang), t("doc.identifier.default", lang))
@@ -2110,6 +2665,11 @@ def generate_documentation(
                 document, filtered_infra_data, headings_for_toc, numbering_counters, lang
             )
         
+    elif doc_type == "database":
+        _add_database_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        if infra_data.vcns:
+            _add_vcn_details_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+
     elif doc_type == "new_host":
         _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
         _add_and_bookmark_heading(document, t("doc.headings.compute_instances", lang), 2, headings_for_toc, numbering_counters)
@@ -2144,42 +2704,14 @@ def generate_documentation(
             _add_network_resource_details(document, t("doc.headings.rt_rules", lang), name, info["rules"], info.get("hosts"), "route", lang)
             
     else:  # 'full_infra'
-        _add_and_bookmark_heading(document, t("doc.headings.infra_config", lang), 1, headings_for_toc, numbering_counters)
-        # 1. Compute instances
-        _add_and_bookmark_heading(document, t("doc.headings.compute_instances", lang), 2, headings_for_toc, numbering_counters)
-        _add_instances_table(document, infra_data.instances, lang)
-        # 2. Storage and volumes
-        _add_volume_and_backup_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        if hasattr(infra_data, "volume_groups") and infra_data.volume_groups:
-            _add_volume_groups_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        # 3. VCN topology
-        _add_vcn_details_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        # 4. Load balancers
-        if hasattr(infra_data, "load_balancers") and infra_data.load_balancers:
-            _add_load_balancers_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        # 5. Certificates
-        active_certs = [
-            c for c in (getattr(infra_data, "certificates", []) or [])
-            if isinstance(c, dict)
-            and c.get("lifecycle_state", "").upper() in ("ACTIVE", "PENDING_DELETION")
-        ]
-        if active_certs:
-            _add_and_bookmark_heading(
-                document,
-                t("doc.headers.certificates", lang),
-                1, headings_for_toc, numbering_counters,
-            )
-            _add_compartment_certificates_section(
-                document, infra_data, headings_for_toc, numbering_counters, lang
-            )
-        # 6. WAF policies
-        _add_waf_report_section(
-            document, infra_data, headings_for_toc, numbering_counters, lang
-        )
-        # 7. External connectivity (DRG → CPE → VPN)
-        _add_connectivity_section(document, infra_data, headings_for_toc, numbering_counters, lang)
-        # 8. Kubernetes (OKE) — only rendered when clusters are present.
-        _add_kubernetes_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+        is_multi = len(getattr(infra_data, "compartments", []) or []) > 1
+        if is_multi:
+            _add_multi_compartment_summary_section(document, infra_data, headings_for_toc, numbering_counters, lang)
+            for comp in infra_data.compartments:
+                comp_data = _filter_data_for_compartment(infra_data, comp.id, comp.name)
+                _add_compartment_section(document, comp_data, comp.name, headings_for_toc, numbering_counters, lang)
+        else:
+            _add_full_infra_sections(document, infra_data, headings_for_toc, numbering_counters, lang)
 
     # Image sections positioned at "end" are injected after infrastructure content.
     _insert_image_sections(document, image_sections or [], "end", headings_for_toc, numbering_counters, lang)

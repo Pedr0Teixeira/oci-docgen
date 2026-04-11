@@ -249,11 +249,15 @@ const C = {
   cpe: '#848d97', vol: '#3fb950', vg: '#3fb950', subnet: '#388bfd',
   lpg: '#3fb950', nsg: '#e3b341', rt: '#58a6ff', sl: '#d29922',
   igw: '#3fb950', nat: '#f0883e', sgw: '#a371f7', rpc: '#4cc9f0',
+  db: '#e06c00',
   // Public/private subnet differentiation
   subnet_pub: '#3fb950', subnet_priv: '#388bfd',
   // Layout zones
   cloud_zone: '#2f81f7', onprem_zone: '#848d97',
 };
+
+// Compartment group palette (used when multi-compartment mode is active)
+const _COMP_PALETTE = ['#7c3aed','#0d9488','#d97706','#16a34a','#e11d48'];
 
 // i18n helper
 function _lang() {
@@ -416,7 +420,13 @@ class OciDiagram {
   }
 
   _diagramTitle() {
-    return _i('Topologia de Rede', 'Network Topology');
+    const base = _i('Topologia de Rede', 'Network Topology');
+    const comps = this.d.compartments || [];
+    if (comps.length > 1) {
+      const names = comps.map(c => c.name).filter(Boolean).join(', ');
+      return `${base} — ${names}`;
+    }
+    return base;
   }
 
   _defs() {
@@ -543,6 +553,27 @@ class OciDiagram {
       }
     });
 
+    // Place DB Systems into subnets or VCNs
+    const placedDbs = new Set();
+    (D.db_systems || []).forEach(db => {
+      let placed = false;
+      // Try subnet_id first
+      if (db.subnet_id && subToVcn[db.subnet_id] !== undefined) {
+        const vi = subToVcn[db.subnet_id];
+        if (vcns[vi].subMap[db.subnet_id]) {
+          if (!vcns[vi].subMap[db.subnet_id].databases) vcns[vi].subMap[db.subnet_id].databases = [];
+          vcns[vi].subMap[db.subnet_id].databases.push(db);
+          placed = true; placedDbs.add(db.id);
+        }
+      }
+      // Fall back to vcn_id → unplaced in that VCN
+      if (!placed && db.vcn_id && vcnIdMap[db.vcn_id] !== undefined) {
+        vcns[vcnIdMap[db.vcn_id]].unplaced.push({ type: 'db', data: db });
+        placedDbs.add(db.id);
+      }
+    });
+    const floatingDbs = (D.db_systems || []).filter(db => !placedDbs.has(db.id));
+
     // Attach DRGs from vcn_topology
     vcns.forEach(v => {
       const vt = (D.vcn_topology || []).find(t => t.vcn && t.vcn.id === v.vcn.id);
@@ -567,10 +598,10 @@ class OciDiagram {
     ];
 
     const hasContent = edge.length || vcns.length || floatingLbs.length || floatingInstances.length
-      || ipsecs.length || cpes.length || storage.length || (D.kubernetes_clusters || []).length;
+      || floatingDbs.length || ipsecs.length || cpes.length || storage.length || (D.kubernetes_clusters || []).length;
     if (!hasContent) return null;
 
-    return { edge, vcns, floatingLbs, floatingInstances, ipsecs, cpes, storage };
+    return { edge, vcns, floatingLbs, floatingInstances, floatingDbs, ipsecs, cpes, storage };
   }
 
   _ipInCidr(ip, cidr) {
@@ -633,14 +664,26 @@ class OciDiagram {
       vcnEndY += VGAP;
     }
 
-    // 4) Floating instances
+    // 4) Multi-compartment grouping (dashed bounding boxes around VCNs by compartment)
+    if (this.d.compartments && this.d.compartments.length > 1) {
+      this._layCompartmentGroups();
+    }
+
+    // 5) Floating instances
     if (topo.floatingInstances.length) {
       vcnEndY = this._layFloatingRow(topo.floatingInstances.map(i => this._descInst(i)),
         MARG, vcnEndY, vcnLayoutW, _i('COMPUTE (SEM SUBNET)', 'COMPUTE (NO SUBNET)'), C.instance);
       vcnEndY += VGAP;
     }
 
-    // 5) Storage
+    // 6) Floating DB Systems (not placed in any subnet or VCN)
+    if (topo.floatingDbs && topo.floatingDbs.length) {
+      vcnEndY = this._layFloatingRow(topo.floatingDbs.map(db => this._descDb(db)),
+        MARG, vcnEndY, vcnLayoutW, _i('DB SYSTEMS (SEM SUBNET)', 'DB SYSTEMS (NO SUBNET)'), C.db);
+      vcnEndY += VGAP;
+    }
+
+    // 7) Storage
     if (topo.storage.length) {
       vcnEndY = this._layStorageRow(topo.storage, MARG, vcnEndY, vcnLayoutW);
       vcnEndY += VGAP;
@@ -816,7 +859,7 @@ class OciDiagram {
 
   // Pre-measure VCN max width (without rendering)
   _measureVcnMaxWidth(vcnTopos) {
-    const { VCN_PAD, SUB_PAD, SUB_MIN_W, NW, HGAP, GW_NW, ARROW_GAP } = K;
+    const { VCN_PAD, SUB_PAD, SUB_MIN_W, NW, HGAP, GW_NW, ARROW_GAP, LPG_W } = K;
     return vcnTopos.reduce((maxW, vt) => {
       const subnets = Object.values(vt.subMap);
       const gateways = this._extractVcnGateways(vt.vcn);
@@ -829,7 +872,10 @@ class OciDiagram {
         return Math.max(m, Math.max(SUB_MIN_W, innerW + SUB_PAD * 2));
       }, SUB_MIN_W);
       const gwColW = gateways.length > 0 ? GW_NW + ARROW_GAP : 0;
-      const vcnW = Math.max(maxSubW + gwColW + VCN_PAD * 2, 400);
+      // LPGs can extend beyond the subnet+gateway column width — ensure VCN is wide enough
+      const lpgCount = Math.min(4, (vt.lpgs || vt.vcn.lpgs || []).length);
+      const lpgTotalW = lpgCount > 0 ? VCN_PAD * 2 + lpgCount * LPG_W + (lpgCount - 1) * 12 : 0;
+      const vcnW = Math.max(maxSubW + gwColW + VCN_PAD * 2, 400, lpgTotalW);
       return Math.max(maxW, vcnW);
     }, 200);
   }
@@ -972,6 +1018,83 @@ class OciDiagram {
   }
 
 
+  // Compartment group color from palette (cycles when idx exceeds palette length)
+  _compartmentColor(idx) {
+    return _COMP_PALETTE[idx % _COMP_PALETTE.length];
+  }
+
+
+  // Multi-compartment visual grouping: draws dashed bounding boxes around VCNs
+  // grouped by compartment_name, with a label header for each group.
+  _layCompartmentGroups() {
+    const compartments = this.d.compartments || [];
+    if (compartments.length <= 1) return;
+
+    // Group VCN positions by compartment_name
+    const vcns = this.d.vcns || [];
+    const vcnTopo = this.d.vcn_topology || [];
+    const allVcns = [
+      ...vcns.map(v => ({ id: v.id, compartment_name: v.compartment_name, lpgs: v.lpgs || [] })),
+      ...vcnTopo.map(vt => vt.vcn ? {
+        id: vt.vcn.id,
+        compartment_name: vt.vcn.compartment_name,
+        lpgs: vt.lpgs || vt.vcn.lpgs || [],
+      } : null).filter(Boolean),
+    ];
+
+    // Build map: compartment_name → list of position entries (VCNs + their LPGs)
+    const compGroups = {};
+    allVcns.forEach(v => {
+      const cname = v.compartment_name || _i('Sem compartimento', 'No compartment');
+      if (!compGroups[cname]) compGroups[cname] = [];
+      const pos = this._pos[v.id];
+      if (pos) compGroups[cname].push(pos);
+      // Include LPG positions so the bounding box covers LPGs that may extend beyond VCN width
+      (v.lpgs || []).forEach(lpg => {
+        const lpos = this._pos['lpg_' + lpg.id];
+        if (lpos) compGroups[cname].push(lpos);
+      });
+    });
+
+    const pad = 16;
+    const headerH = 24;
+    const { FN, FT } = K;
+
+    Object.keys(compGroups).forEach((cname, idx) => {
+      const positions = compGroups[cname];
+      if (positions.length === 0) return;
+
+      // Compute bounding box around all VCNs in this compartment
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      positions.forEach(p => {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x + p.w);
+        maxY = Math.max(maxY, p.y + p.h);
+      });
+
+      const bx = minX - pad;
+      const by = minY - pad - headerH;
+      const bw = (maxX - minX) + pad * 2;
+      const bh = (maxY - minY) + pad * 2 + headerH;
+      const color = this._compartmentColor(idx);
+
+      // Dashed bounding box
+      this.bgs.push(
+        `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="10" ` +
+        `style="fill:${color};fill-opacity:0.03;stroke:${color};stroke-width:1.6;stroke-dasharray:8,5;stroke-opacity:0.5;"/>`
+      );
+
+      // Compartment name label header
+      this.bgs.push(
+        `<text x="${bx + 12}" y="${by + headerH - 6}" ` +
+        `style="font:700 ${FN}px/1 'Inter',sans-serif;fill:${color};letter-spacing:.06em;opacity:0.85;">` +
+        `${this._esc(this._t(cname, 40))}</text>`
+      );
+    });
+  }
+
+
   // Render a single VCN (horizontal flow layout)
   _renderVcn(m, x, y, w) {
     const { VCN_PAD, VCN_HDR, VCN_R, VCN_BDR, SUB_GAP, DRG_W, DRG_H, RPC_W, RPC_H,
@@ -1070,7 +1193,9 @@ class OciDiagram {
       const upY = y + h - VCN_PAD - NH - (m.lpgH > 0 ? LPG_H + 12 : 0);
       m.vt.unplaced.forEach((item, i) => {
         const nx = x + VCN_PAD + i * (NW + HGAP);
-        const node = item.type === 'instance' ? this._descInst(item.data) : { id: 'u_' + i, kind: item.type, label: '?', sub: '' };
+        const node = item.type === 'instance' ? this._descInst(item.data)
+          : item.type === 'db' ? this._descDb(item.data)
+          : { id: 'u_' + i, kind: item.type, label: '?', sub: '' };
         this.els.push(this._nodeCard(nx, upY, node));
         this._pos[node.id] = { cx: nx+NW/2, cy: upY+NH/2, x: nx, y: upY, w: NW, h: NH };
       });
@@ -1432,7 +1557,7 @@ class OciDiagram {
 
     if (!resolved.length) return;
 
-    const THRESHOLD = 3, SDEP = 22, SARR = 22, JR = 4, LBL_GAP = 10;
+    const THRESHOLD = 3, SDEP = 18, SARR = 22, JR = 4, LBL_GAP = 10;
 
     // Stagger Y at arrivals (by gateway, sort by subnet Y top→bottom)
     const byGw = {};
@@ -1452,7 +1577,11 @@ class OciDiagram {
     });
     Object.values(bySub).forEach(arr => {
       const n = arr.length;
-      arr.forEach((c, i) => { depYOf[getKey(c)] = c.sp.cy + (i - (n-1)/2) * SDEP; });
+      arr.forEach((c, i) => {
+        const raw = c.sp.cy + (i - (n-1)/2) * SDEP;
+        // Clamp departure Y to stay within subnet bounds (with 8px margin)
+        depYOf[getKey(c)] = Math.max(c.sp.y + 8, Math.min(c.sp.y + c.sp.h - 8, raw));
+      });
     });
 
     const paths = resolved.map(c => ({
@@ -1499,7 +1628,7 @@ class OciDiagram {
       const avgY = Math.round(arr.reduce((s, c) => s + c.sp.cy, 0) / arr.length);
       const { gp, color, marker, midX, subRightMax } = rep;
       const d    = `M${subRightMax},${avgY} L${midX},${avgY} L${midX},${gp.cy} L${gp.x},${gp.cy}`;
-      const lbl  = `${arr.length} ${_i('rotas', 'routes')}`;
+      const lbl  = `+${arr.length} ${_i('rotas', 'routes')}`;
       const tw   = lbl.length * 5.5 + 14;
       const lx   = subRightMax + LBL_GAP + tw / 2;
       this.conn.push(
@@ -1548,7 +1677,7 @@ class OciDiagram {
      SVG RENDERERS
   ══════════════════════════════════════════════════════════════════════════ */
 
-  // Instance card — redesigned layout with separate IP rows and NSG badge
+  // Instance card — compact layout with NSG sub-cards at bottom
   _instCard(x, y, item) {
     const { NW: W, NH: H, NR: R, ICO_SIZE, FT, FN, FS } = K;
     const clr = C.instance;
@@ -1556,35 +1685,53 @@ class OciDiagram {
     const uid = `cl${this._uid++}`;
     const cx  = x + W / 2;
 
-    const hasNsg = item.nsgNames && item.nsgNames.length > 0;
-    const hasPub = !!item.pubIp;
+    const hasNsg   = item.nsgNames && item.nsgNames.length > 0;
+    const hasPub   = !!item.pubIp;
+    const nsgCount = hasNsg ? item.nsgNames.length : 0;
+    // Show individual sub-cards: up to 2 when no public IP, 1 when public IP present
+    const maxNsgCards = hasPub ? 1 : 2;
 
-    // Adaptive vertical layout
-    const icoCy  = y + 24;
-    const sepY   = icoCy + ICO_SIZE / 2 + 4;   // thin divider below icon
-    const nameY  = sepY + 11;
-    const shapeY = nameY + 12;
-    const privY  = shapeY + 12;
+    // Slightly compressed vertical layout to create room for NSG sub-cards
+    const icoCy  = y + 20;
+    const sepY   = icoCy + ICO_SIZE / 2 + 4;  // y + 42
+    const nameY  = sepY + 12;                  // y + 54
+    const shapeY = nameY + 13;                 // y + 67
+    const privY  = shapeY + 13;                // y + 80
     const pubY   = hasPub ? privY + 11 : privY;
-    const kindY  = (hasPub ? pubY : privY) + 13;
+    const kindY  = (hasPub ? pubY : privY) + 12;
 
-    // NSG pill badge with shield icon
-    let nsgBadge = '';
+    // NSG sub-cards: each NSG gets its own styled row with background card
+    let nsgSvg = '';
     if (hasNsg) {
-      const nsgText = item.nsgNames.length <= 2
-        ? item.nsgNames.map(n => this._t(n, 12)).join(', ')
-        : `${item.nsgNames.length} NSGs`;
-      const lbl = `NSG: ${nsgText}`;
-      const tw  = Math.min(lbl.length * 4.8 + 12, W - 12);
-      const bx  = x + (W - tw) / 2;
-      const by  = kindY + 5;
-      // Small shield icon (8×10px) at left of badge
-      const sx  = bx + 4;
-      const sy  = by + 2;
-      nsgBadge =
-        `<rect x="${bx}" y="${by}" width="${tw}" height="14" rx="3" style="fill:${C.nsg};fill-opacity:0.15;stroke:${C.nsg};stroke-width:0.9;stroke-opacity:0.85;"/>` +
-        `<path d="M${sx+4},${sy} L${sx+8},${sy+2} L${sx+8},${sy+5.5} Q${sx+8},${sy+9} ${sx+4},${sy+10} Q${sx},${sy+9} ${sx},${sy+5.5} L${sx},${sy+2} Z" style="fill:${C.nsg};fill-opacity:0.8;"/>` +
-        `<text x="${bx+tw/2+4}" y="${by+10}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${C.nsg};">${this._esc(this._t(lbl, 28))}</text>`;
+      const NSG_ROW_H  = 15;
+      const NSG_ROW_GAP = 3;
+      const NSG_PAD_X  = 6;
+      const nsgStartY  = kindY + 5;
+      // Tiny shield icon helper
+      const shield = (sx, sy) =>
+        `<path d="M${sx+3},${sy} L${sx+6},${sy+1.5} L${sx+6},${sy+4} Q${sx+6},${sy+7} ${sx+3},${sy+8} Q${sx},${sy+7} ${sx},${sy+4} L${sx},${sy+1.5} Z" style="fill:${C.nsg};fill-opacity:0.75;"/>`;
+
+      if (nsgCount <= maxNsgCards) {
+        // Individual sub-card per NSG
+        item.nsgNames.forEach((name, idx) => {
+          const bx = x + NSG_PAD_X;
+          const bw = W - NSG_PAD_X * 2;
+          const by = nsgStartY + idx * (NSG_ROW_H + NSG_ROW_GAP);
+          nsgSvg +=
+            `<rect x="${bx}" y="${by}" width="${bw}" height="${NSG_ROW_H}" rx="4" style="fill:${C.nsg};fill-opacity:0.10;stroke:${C.nsg};stroke-width:0.9;stroke-opacity:0.6;"/>` +
+            shield(bx + 4, by + 3) +
+            `<text x="${bx+16}" y="${by+11}" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${C.nsg};">${this._esc(this._t(name, 20))}</text>`;
+        });
+      } else {
+        // Collapsed: "+N NSGs" single sub-card
+        const lbl = `+${nsgCount} NSGs`;
+        const bx = x + NSG_PAD_X;
+        const bw = W - NSG_PAD_X * 2;
+        nsgSvg =
+          `<rect x="${bx}" y="${nsgStartY}" width="${bw}" height="${NSG_ROW_H}" rx="4" style="fill:${C.nsg};fill-opacity:0.10;stroke:${C.nsg};stroke-width:0.9;stroke-opacity:0.6;"/>` +
+          shield(bx + 4, nsgStartY + 3) +
+          `<text x="${bx+16}" y="${nsgStartY+11}" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${C.nsg};">${this._esc(lbl)}</text>`;
+      }
     }
 
     const tooltip = `Compute: ${item.label}${item.sub ? ' — ' + item.sub : ''}${item.status ? ' (' + item.status + ')' : ''}${item.privIp ? ' | Private: ' + item.privIp : ''}${item.pubIp ? ' | Public: ' + item.pubIp : ''}${hasNsg ? ' | NSG: ' + item.nsgNames.join(', ') : ''}`;
@@ -1602,7 +1749,7 @@ class OciDiagram {
     ${item.privIp ? `<circle cx="${x+9}" cy="${privY-3}" r="3" style="fill:${C.subnet_priv};fill-opacity:0.9;"/><text x="${x+16}" y="${privY}" style="font:400 ${FT+1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);">${this._esc(item.privIp)}</text>` : ''}
     ${hasPub ? `<circle cx="${x+9}" cy="${pubY-3}" r="3" style="fill:${C.igw};fill-opacity:0.9;"/><text x="${x+16}" y="${pubY}" style="font:400 ${FT+1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);">${this._esc(item.pubIp)}</text>` : ''}
     <text x="${cx}" y="${kindY}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);letter-spacing:.04em;text-transform:uppercase;">COMPUTE</text>
-    ${nsgBadge}
+    ${nsgSvg}
   </g>
   ${dot ? `<circle cx="${x+W-12}" cy="${y+12}" r="4.5" style="fill:${dot};"/>` : ''}
 </g>`;
@@ -1720,6 +1867,7 @@ class OciDiagram {
       { color: C.waf,         label: 'WAF',                                    icon: 'waf'      },
       { color: C.ipsec,       label: 'IPSec VPN',                              icon: 'ipsec'    },
       { color: C.cpe,         label: 'CPE',                                    icon: 'cpe'      },
+      { color: C.db,          label: 'DB System',                              icon: 'db'       },
       { color: C.vol,         label: 'Block Volume',                           icon: 'vol'      },
       { color: C.nsg,         label: 'NSG',                                    icon: 'nsg'      },
     ];
@@ -1784,13 +1932,35 @@ class OciDiagram {
   }
 
   _descDb(db) {
-    const sub = db.db_workload ? `${db.db_workload}${db.cpu_core_count ? ' · ' + db.cpu_core_count + ' OCPUs' : ''}` : (db.db_name || '');
+    // Shape badge (e.g. "VM.Standard2.2")
+    const shape = this._shapeShort(db.shape);
+    // Edition badge (e.g. "ENTERPRISE_EDITION" → "Enterprise")
+    const edition = db.database_edition
+      ? db.database_edition.replace(/_EDITION$/i, '').replace(/_/g, ' ')
+          .replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      : '';
+    // CPU + storage summary
+    const cpuInfo = db.cpu_core_count ? `${db.cpu_core_count} OCPUs` : '';
+    const storInfo = db.data_storage_size_in_gbs ? `${db.data_storage_size_in_gbs} GB` : '';
+    const sub = [shape, edition].filter(Boolean).join(' · ');
+    const sub2 = [cpuInfo, storInfo].filter(Boolean).join(' · ')
+      || this._dbNames(db).slice(0, 2).join(', ')
+      || '';
     return {
       id: db.id || db.display_name, kind: 'db',
       label: this._t(db.display_name, 18),
-      sub,
+      sub: sub || (db.db_workload || ''),
+      sub2: sub2 || undefined,
       status: db.lifecycle_state
     };
+  }
+
+  _dbNames(db) {
+    const names = [];
+    (db.db_homes || []).forEach(home => {
+      (home.databases || []).forEach(d => { if (d.db_name) names.push(d.db_name); });
+    });
+    return names;
   }
 
   _descWaf(p) {
