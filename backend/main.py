@@ -19,7 +19,7 @@ from celery_worker import (
     collect_new_host_task,
     collect_waf_report_task,
 )
-from schemas import GenerateDocRequest, TaskCreationResponse, TaskStatusResponse, LetterheadMeta
+from schemas import GenerateDocRequest, TaskCreationResponse, TaskStatusResponse
 
 logging.basicConfig(level=logging.INFO)
 
