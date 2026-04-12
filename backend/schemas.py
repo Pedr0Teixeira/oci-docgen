@@ -121,6 +121,7 @@ class LpgData(BaseModel):
     is_cross_tenancy_peering: bool
     route_table_name: Optional[str] = "N/A"
     peer_vcn_name: Optional[str] = None
+    peer_compartment_name: Optional[str] = None
 
 
 class VcnData(BaseModel):

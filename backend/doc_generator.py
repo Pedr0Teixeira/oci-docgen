@@ -22,6 +22,8 @@ DOC_STRINGS = {
     "pt": {
         # --- Common Terms ---
         "doc.common.client": "Cliente",
+        "doc.common.compartment_label": "Compartimento",
+        "doc.common.compartments_label": "Compartimentos",
         "doc.common.generation_date": "Data de Geração",
         "doc.common.toc": "Sumário",
         "doc.common.associated_hosts": "Hosts Associados: ",
@@ -362,6 +364,8 @@ DOC_STRINGS = {
     "en": {
         # --- Common Terms ---
         "doc.common.client": "Client",
+        "doc.common.compartment_label": "Compartment",
+        "doc.common.compartments_label": "Compartments",
         "doc.common.generation_date": "Generation Date",
         "doc.common.toc": "Table of Contents",
         "doc.common.associated_hosts": "Associated Hosts: ",
@@ -930,22 +934,28 @@ def _style_table_headers(table, headers, shade_color="4472C4"):
 def _create_titled_key_value_table(
     document, title, data_dict, col_widths=(Inches(2.0), Inches(4.5))
 ):
-    """Creates a two-column table with a merged, styled title header."""
-    table = document.add_table(rows=len(data_dict) + 1, cols=2, style="Table Grid")
+    """Creates a two-column table with an optional merged, styled title header.
+    When title is None the header row is omitted and data starts at row 0."""
+    has_title = title is not None
+    total_rows = len(data_dict) + (1 if has_title else 0)
+    table = document.add_table(rows=total_rows, cols=2, style="Table Grid")
     table.autofit = False
     table.allow_autofit = False
     table.columns[0].width = col_widths[0]
     table.columns[1].width = col_widths[1]
 
-    title_cell = table.cell(0, 0).merge(table.cell(0, 1))
-    title_cell.text = ""
-    p = title_cell.paragraphs[0]
-    run = p.add_run(title.upper())
-    run.font.bold = True
-    run.font.color.rgb = RGBColor.from_string("FFFFFF")
-    _shade_cell(title_cell)
+    data_start = 0
+    if has_title:
+        title_cell = table.cell(0, 0).merge(table.cell(0, 1))
+        title_cell.text = ""
+        p = title_cell.paragraphs[0]
+        run = p.add_run(title.upper())
+        run.font.bold = True
+        run.font.color.rgb = RGBColor.from_string("FFFFFF")
+        _shade_cell(title_cell)
+        data_start = 1
 
-    for i, (key, value) in enumerate(data_dict.items(), 1):
+    for i, (key, value) in enumerate(data_dict.items(), data_start):
         key_cell = table.cell(i, 0)
         key_cell.text = key
         key_cell.paragraphs[0].runs[0].font.bold = True
@@ -2509,7 +2519,10 @@ def generate_documentation(
         document.add_paragraph()
         title_p = document.add_paragraph(doc_title_text, style="Title")
         title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        meta_p = document.add_paragraph(client_name)
+        # Use "Compartimento" / "Compartimentos" based on how many compartments exist
+        _comp_count = len(infra_data.compartments) if getattr(infra_data, "compartments", None) else 1
+        _comp_label_key = "doc.common.compartments_label" if _comp_count > 1 else "doc.common.compartment_label"
+        meta_p = document.add_paragraph(f"{t(_comp_label_key, lang)}: {client_name}")
         meta_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         date_p = document.add_paragraph(
             f"{t('doc.common.generation_date', lang)}: {datetime.now().strftime('%d/%m/%Y')}"
@@ -2518,8 +2531,10 @@ def generate_documentation(
     else:
         title_p = document.add_paragraph(doc_title_text, style="Title")
         title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _comp_count = len(infra_data.compartments) if getattr(infra_data, "compartments", None) else 1
+        _comp_label_key = "doc.common.compartments_label" if _comp_count > 1 else "doc.common.compartment_label"
         document.add_paragraph(
-            f"{t('doc.common.client', lang)}: {client_name}\n{t('doc.common.generation_date', lang)}: {datetime.now().strftime('%d/%m/%Y')}"
+            f"{t(_comp_label_key, lang)}: {client_name}\n{t('doc.common.generation_date', lang)}: {datetime.now().strftime('%d/%m/%Y')}"
         )
     document.add_page_break()
     toc_placeholder = document.add_paragraph(t("doc.common.toc", lang), style="Heading 1")

@@ -3,6 +3,10 @@
 
 // Public API
 window.renderOciDiagram = function (data, docType) {
+  // Diagram is only rendered for full infrastructure documentation
+  if (docType && docType !== 'full_infra' && docType !== 'resumo_infra') return '';
+  // Expose compartment names so the PNG export can embed them in the filename
+  window._ociDiagramCompartments = ((data || {}).compartments || []).map(c => c.name).filter(Boolean);
   try { return new OciDiagram(data || {}, docType || 'full_infra').render(); }
   catch (e) { console.warn('[OciDiagram]', e); return ''; }
 };
@@ -169,10 +173,18 @@ window.exportDiagramPng = async function () {
 window._archExportPng = async function () {
   const blob = await window.exportDiagramPng();
   if (!blob) return;
+  // Build filename: oci-topology_<compartments>_HH-MM-DD-MM-YYYY.png
+  const p2 = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const ts = `${p2(now.getHours())}-${p2(now.getMinutes())}-${p2(now.getDate())}-${p2(now.getMonth() + 1)}-${now.getFullYear()}`;
+  const comps = window._ociDiagramCompartments || [];
+  const compStr = comps.length > 0
+    ? comps.map(n => n.replace(/[^a-zA-Z0-9]/g, '_')).slice(0, 3).join('-')
+    : 'OCI';
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'oci-topology.png';
+  a.download = `oci-topology_${compStr}_${ts}.png`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
@@ -208,7 +220,7 @@ const K = {
   W: 2000, MARG: 32,
   VGAP: 28, HGAP: 20, COL_GAP: 24,
   // Node cards  (NH_NSG=140 used when NSG is present, but we use 134 as base with NSG badge)
-  NW: 160, NH: 130, NR: 10,
+  NW: 160, NH: 165, NR: 10,
   ICO_SIZE: 36,
   FT: 9, FN: 11, FS: 10,
   // Subnet containers
@@ -235,7 +247,7 @@ const K = {
   ZONE_PX: 20, ZONE_PY: 16, ZONE_HDR: 36, ZONE_R: 12,
   SEP: 40,
   // Arrow gap between subnets and gateways (wide enough for CIDR labels)
-  ARROW_GAP: 160,
+  ARROW_GAP: 200,
   // Cloud / On-Premises horizontal split
   CLOUD_RATIO: 0.62, ZONE_SEP: 40, ZONE_HDR_H: 28,
   // Legend panel
@@ -291,11 +303,11 @@ const SVG_ICONS = {
 <line x1="14" y1="14" x2="22" y2="19" stroke="currentColor" stroke-width="1.8"/>
 <circle cx="14" cy="14" r="2" fill="currentColor"/>`,
   drg: `<path d="M14 2 L26 14 L14 26 L2 14 Z" fill="none" stroke="currentColor" stroke-width="1.8"/>
-<circle cx="14" cy="14" r="3.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
-<line x1="5.5" y1="9" x2="10.8" y2="12.2" stroke="currentColor" stroke-width="1.8"/>
-<line x1="22.5" y1="9" x2="17.2" y2="12.2" stroke="currentColor" stroke-width="1.8"/>
-<line x1="5.5" y1="19" x2="10.8" y2="15.8" stroke="currentColor" stroke-width="1.8"/>
-<line x1="22.5" y1="19" x2="17.2" y2="15.8" stroke="currentColor" stroke-width="1.8"/>`,
+<circle cx="14" cy="14" r="3.5" fill="currentColor" opacity="0.7"/>
+<line x1="7" y1="7" x2="11.2" y2="11.2" stroke="currentColor" stroke-width="1.5"/>
+<line x1="21" y1="7" x2="16.8" y2="11.2" stroke="currentColor" stroke-width="1.5"/>
+<line x1="7" y1="21" x2="11.2" y2="16.8" stroke="currentColor" stroke-width="1.5"/>
+<line x1="21" y1="21" x2="16.8" y2="16.8" stroke="currentColor" stroke-width="1.5"/>`,
   oke: `<circle cx="14" cy="14" r="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
 <circle cx="14" cy="3" r="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/>
 <circle cx="23.6" cy="8.5" r="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/>
@@ -330,16 +342,23 @@ const SVG_ICONS = {
 <path d="M24 8 V20" fill="none" stroke="currentColor" stroke-width="1.8"/>
 <ellipse cx="14" cy="20" rx="10" ry="3.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
 <path d="M4 14 Q4 17.8 14 17.8 Q24 17.8 24 14" fill="none" stroke="currentColor" stroke-width="1.8"/>`,
-  igw: `<circle cx="14" cy="14" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/>
-<line x1="14" y1="4" x2="14" y2="24" stroke="currentColor" stroke-width="1.5"/>
-<line x1="4" y1="14" x2="24" y2="14" stroke="currentColor" stroke-width="1.5"/>
-<line x1="7" y1="7" x2="21" y2="21" stroke="currentColor" stroke-width="1.3"/>
-<line x1="21" y1="7" x2="7" y2="21" stroke="currentColor" stroke-width="1.3"/>`,
-  nat: `<rect x="2" y="6" width="24" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
-<path d="M8 17 L8 11 L14 14 L14 11 L20 14 L14 17 L14 14 L8 17Z" fill="currentColor" opacity="0.8"/>`,
-  sgw: `<path d="M14 2 L25 7 L25 16 C25 22 20.5 26 14 27.5 C7.5 26 3 22 3 16 L3 7 Z" fill="none" stroke="currentColor" stroke-width="1.8"/>
-<circle cx="14" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/>
-<path d="M11 15 L13 17 L17 13" fill="none" stroke="currentColor" stroke-width="1.6"/>`,
+  igw: `<circle cx="14" cy="14" r="11" fill="none" stroke="currentColor" stroke-width="1.8"/>
+<ellipse cx="14" cy="14" rx="5.5" ry="11" fill="none" stroke="currentColor" stroke-width="1.3"/>
+<line x1="3" y1="14" x2="25" y2="14" stroke="currentColor" stroke-width="1.3"/>
+<path d="M5.5 8.5 Q14 11 22.5 8.5" fill="none" stroke="currentColor" stroke-width="1"/>
+<path d="M5.5 19.5 Q14 17 22.5 19.5" fill="none" stroke="currentColor" stroke-width="1"/>`,
+  nat: `<circle cx="5" cy="8" r="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+<circle cx="5" cy="14.5" r="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+<circle cx="5" cy="21" r="2.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+<line x1="7.8" y1="8" x2="14" y2="14.5" stroke="currentColor" stroke-width="1.4"/>
+<line x1="7.8" y1="14.5" x2="14" y2="14.5" stroke="currentColor" stroke-width="1.4"/>
+<line x1="7.8" y1="21" x2="14" y2="14.5" stroke="currentColor" stroke-width="1.4"/>
+<rect x="14" y="10.5" width="9" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+<line x1="23" y1="14.5" x2="26" y2="14.5" stroke="currentColor" stroke-width="1.6"/>
+<polyline points="23.5,12.5 26,14.5 23.5,16.5" fill="none" stroke="currentColor" stroke-width="1.4"/>`,
+  sgw: `<path d="M8.5 22 C6 22 3.5 20 3.5 17.5 C3.5 15 5.5 13.5 8 14 C8.5 11.5 10.5 9.5 13 9.5 C15.5 9.5 17.5 11 18 13.5 C20 13 24.5 14.5 24.5 17.5 C24.5 21 21 22 19 22 Z" fill="none" stroke="currentColor" stroke-width="1.8"/>
+<path d="M14 13 L17 14.7 L17 18.3 L14 20 L11 18.3 L11 14.7 Z" fill="none" stroke="currentColor" stroke-width="1.3"/>
+<circle cx="14" cy="16.5" r="1.4" fill="currentColor"/>`,
   vg: `<ellipse cx="14" cy="6" rx="10" ry="3.8" fill="none" stroke="currentColor" stroke-width="1.7"/>
 <path d="M4 6 V13" fill="none" stroke="currentColor" stroke-width="1.7"/>
 <path d="M24 6 V13" fill="none" stroke="currentColor" stroke-width="1.7"/>
@@ -437,8 +456,8 @@ class OciDiagram {
       ['arch-arr-purple','#a371f7'], ['arch-arr-green', '#3fb950'],
       ['arch-arr-orange','#f0883e'],
     ].map(([id, fill]) =>
-      `<marker id="${id}" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-        <path d="M0,0 L0,8 L8,4 Z" fill="${fill}" opacity="0.7"/>
+      `<marker id="${id}" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L0,8 L8,4 Z" fill="${fill}" opacity="0.8"/>
       </marker>`
     ).join('');
     const shadow = `<filter id="arch-shadow" x="-4%" y="-4%" width="108%" height="112%">
@@ -641,8 +660,11 @@ class OciDiagram {
     const onpremX = sepX + ZONE_SEP;
     const onpremW = Math.max(NW + HGAP * 2, W - onpremX - MARG);
 
-    // Start Y below zone header labels
-    let y = MARG + (hasOnPrem ? ZONE_HDR_H + 8 : 0);
+    // Start Y below zone header labels.
+    // When multi-compartment bounding boxes are visible, add extra top clearance so that
+    // the "Cloud OCI / On-Premises" zone labels don't end up inside any compartment box.
+    const multiComp = (this.d.compartments || []).length > 1;
+    let y = MARG + (hasOnPrem ? ZONE_HDR_H + (multiComp ? 40 : 8) : (multiComp ? 28 : 0));
 
     // 1) Edge Security row
     if (topo.edge.length) {
@@ -750,12 +772,12 @@ class OciDiagram {
       this.els.push(this._tunnelLine(ip.x + ip.w, ip.cy, cx, ip.cy, up, down));
     });
 
-    // Unmatched CPEs stacked below
+    // Unmatched CPEs (no IPSec connection referencing them) — rendered muted below matched ones
     const matched = new Set(ipsecs.map(i => i.cpe_id).filter(Boolean));
     let uy = maxBottom > 0 ? maxBottom + VGAP : (K.MARG + K.ZONE_HDR_H + 8);
     cpes.filter(c => !matched.has(c.id)).forEach(cpe => {
       const cx = onpremX + Math.max(0, (onpremW - CW) / 2);
-      this.els.push(this._cpeNode(cx, uy, cpe, CW));
+      this.els.push(this._cpeNode(cx, uy, cpe, CW, true /* orphaned */));
       this._pos[cpe.id] = { cx: cx + CW/2, cy: uy + CH/2, x: cx, y: uy, w: CW, h: CH };
       uy += CH + VGAP;
     });
@@ -995,7 +1017,7 @@ class OciDiagram {
         rules.forEach(rule => {
           const type = this._gwShort(rule.target);
           if (type === 'DRG') {
-            this._drgConns.push({ subnetId: s.subnet.id, drgId, destination: rule.destination });
+            this._drgConns.push({ subnetId: s.subnet.id, drgId, destination: rule.destination, vcnId: m.vt.vcn.id });
           }
         });
       });
@@ -1006,9 +1028,17 @@ class OciDiagram {
       if (m.hasDrg) this._drgVcnMap[m.vt.drg.id] = m.vt.drg.id;
     });
 
-    // Render VCNs stacked vertically
+    // Render VCNs stacked vertically, inserting extra space at compartment boundaries
+    // so that the colored compartment bounding boxes never overlap each other.
     let vy = y;
+    let _prevComp = null;
+    const _compBoundaryExtra = 54; // space for compartment box header + top padding of next box
     measured.forEach(m => {
+      const thisComp = m.vt.vcn.compartment_name;
+      if (_prevComp !== null && _prevComp !== thisComp && (this.d.compartments || []).length > 1) {
+        vy += _compBoundaryExtra;
+      }
+      _prevComp = thisComp;
       const w = Math.min(m.vcnW, totalW);
       const vx = x;
       const h = this._renderVcn(m, vx, vy, w);
@@ -1056,8 +1086,8 @@ class OciDiagram {
       });
     });
 
-    const pad = 16;
-    const headerH = 24;
+    const pad = 8;
+    const headerH = 22;
     const { FN, FT } = K;
 
     Object.keys(compGroups).forEach((cname, idx) => {
@@ -1184,7 +1214,7 @@ class OciDiagram {
       const lpgY = y + h - VCN_PAD - LPG_H;
       m.vt.lpgs.slice(0, 4).forEach((lpg, i) => {
         const lx = x + VCN_PAD + i * (LPG_W + 12);
-        this._renderLpg(lpg, lx, lpgY);
+        this._renderLpg(lpg, lx, lpgY, m.vt.vcn);
       });
     }
 
@@ -1336,62 +1366,272 @@ class OciDiagram {
   }
 
 
-  // LPG badge
-  _renderLpg(lpg, x, y) {
+  // LPG badge — Console Tile style (header band + icon + body rows)
+  // vcn: the VCN that owns this LPG (for compartment context)
+  _renderLpg(lpg, x, y, vcn) {
     const { LPG_W: W, LPG_H: H, FT, FS } = K;
+    const HDR_H = 20;
     const sc = lpg.peering_status === 'PEERED' ? C.lpg : '#e3b341';
-    const peerVcn = lpg.peer_vcn_name ? `Peer: ${this._t(lpg.peer_vcn_name, 18)}` : '';
-    const peerCidr = lpg.peer_advertised_cidr || '';
-    const crossTenancy = lpg.is_cross_tenancy_peering ? ' (Cross-Tenancy)' : '';
-    const line2 = [peerVcn, peerCidr].filter(Boolean).join(' \u00b7 ') + crossTenancy;
-    const ocidShort = lpg.id ? '...' + lpg.id.slice(-8) : '';
 
-    const lpgTip = `${_i('Gateway de Peering Local','Local Peering Gateway')}: ${lpg.display_name}${lpg.peer_vcn_name ? ' — Peer VCN: ' + lpg.peer_vcn_name : ''} (${lpg.peering_status || 'N/A'})`;
+    const GENERIC = /connected to a peer/i;
+    const clean = s => (s && !GENERIC.test(s)) ? s : '';
+
+    // Body line 1: peer context (type + identifier)
+    let bodyL1 = '';
+    if (lpg.is_cross_tenancy_peering) {
+      // Cross-tenancy: show tenancy/compartment hint — CIDR shown in EXT. TENANCY card only
+      const hint = clean(lpg.peer_compartment_name) || clean(lpg.peer_vcn_name) ||
+                   (lpg.peer_id ? '\u2026' + lpg.peer_id.slice(-12) : '');
+      bodyL1 = _i('Cross-Tenancy', 'Cross-Tenancy') + (hint ? ' \u00b7 ' + this._t(hint, 18) : '');
+    } else {
+      // Same-tenancy: peer VCN + compartment
+      const pv = lpg.peer_vcn_name ? this._t(lpg.peer_vcn_name, 18) : '';
+      const pc = lpg.peer_compartment_name ? this._t(lpg.peer_compartment_name, 12) : '';
+      bodyL1 = [pv, pc].filter(Boolean).join(' / ') || clean(lpg.peering_status_details) || '';
+    }
+
+    // Body line 2:
+    //   Cross-tenancy → route table only (CIDR lives in EXT. TENANCY card, avoid duplicate)
+    //   Same-tenancy  → advertised CIDR (useful routing info) or route table
+    const bodyL2 = lpg.is_cross_tenancy_peering
+      ? (lpg.route_table_name && lpg.route_table_name !== 'N/A' ? this._t(lpg.route_table_name, 32) : '')
+      : (lpg.peer_advertised_cidr || (lpg.route_table_name && lpg.route_table_name !== 'N/A'
+          ? this._t(lpg.route_table_name, 32) : ''));
+
+    // Peering icon: two distinct circles linked by a short bar (clean "link" metaphor)
+    // cx-5 and cx+5 with r=3.5 → gap of 3px between circles, no overlap
+    const icoLpg = (cx, cy) =>
+      `<circle cx="${cx-5}" cy="${cy}" r="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
+      `<circle cx="${cx+5}" cy="${cy}" r="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/>` +
+      `<line x1="${cx-1.5}" y1="${cy}" x2="${cx+1.5}" y2="${cy}" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`;
+
+    const lpgTip = `LPG: ${lpg.display_name}${lpg.peer_vcn_name ? ' \u2014 VCN Peer: ' + lpg.peer_vcn_name : ''}${lpg.is_cross_tenancy_peering ? ' [Cross-Tenancy]' : ''} (${lpg.peering_status || 'N/A'})${lpg.peer_advertised_cidr ? ' \u2014 CIDR: ' + lpg.peer_advertised_cidr : ''}`;
     this.els.push(`<g><title>${this._esc(lpgTip)}</title>
-<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="6" style="fill:var(--bg-card);stroke:${sc};stroke-width:1.2;cursor:default;"/>
-<circle cx="${x+12}" cy="${y+14}" r="5" style="fill:${sc};"/>
-<text x="${x+24}" y="${y+12}" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:var(--text-muted);text-transform:uppercase;">LPG</text>
-<text x="${x+50}" y="${y+12}" style="font:600 ${FS}px/1 'Inter',sans-serif;fill:var(--text-primary);">${this._esc(this._t(lpg.display_name,20))}</text>
-<text x="${x+W-8}" y="${y+12}" text-anchor="end" style="font:400 ${FT-1}px/1 'Inter',sans-serif;fill:var(--text-muted);">${this._esc(lpg.peering_status||'')}</text>
-<text x="${x+24}" y="${y+28}" style="font:400 ${FT}px/1 'Inter',sans-serif;fill:var(--text-secondary);">${this._esc(this._t(line2, 36))}</text>
-<text x="${x+24}" y="${y+42}" style="font:400 ${FT-1}px/1 'Inter',monospace,sans-serif;fill:var(--text-muted);opacity:0.6;">${this._esc(ocidShort)}</text>
+<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="6" filter="url(#arch-shadow)" style="fill:var(--bg-card);stroke:${sc};stroke-width:1.2;cursor:default;"/>
+<rect x="${x}" y="${y}" width="${W}" height="${HDR_H}" rx="6" style="fill:${sc};fill-opacity:0.14;stroke:none;"/>
+<rect x="${x}" y="${y+HDR_H-4}" width="${W}" height="4" style="fill:${sc};fill-opacity:0.14;stroke:none;"/>
+<g style="color:${sc};">${icoLpg(x + 14, y + HDR_H / 2)}</g>
+<text x="${x+30}" y="${y+14}" style="font:700 ${FT}px/1 'Inter',sans-serif;fill:${sc};letter-spacing:.06em;">LPG</text>
+<text x="${x+52}" y="${y+14}" style="font:600 ${FS}px/1 'Inter',sans-serif;fill:var(--text-primary);">${this._esc(this._t(lpg.display_name, 22))}</text>
+<text x="${x+W-8}" y="${y+14}" text-anchor="end" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${sc};opacity:0.85;">${this._esc(lpg.peering_status || '')}</text>
+${bodyL1 ? `<text x="${x+10}" y="${y+33}" style="font:400 ${FT}px/1 'Inter',sans-serif;fill:var(--text-secondary);">${this._esc(this._t(bodyL1, 38))}</text>` : ''}
+${bodyL2 ? `<text x="${x+10}" y="${y+47}" style="font:400 ${FT-1}px/1 'Inter',monospace,sans-serif;fill:var(--text-muted);opacity:0.65;">${this._esc(this._t(bodyL2, 36))}</text>` : ''}
 </g>`);
     this._pos['lpg_' + lpg.id] = { cx: x+W/2, cy: y+H/2, x, y, w: W, h: H };
   }
 
 
   // CPE node
-  _cpeNode(x, y, cpe, nodeW) {
+  // orphaned = true → CPE exists in OCI but has no associated IPSec connection
+  _cpeNode(x, y, cpe, nodeW, orphaned = false) {
     const W = nodeW || K.CW;
     const { CH: H, NR: R, FN, FS, FT, ICO_SIZE } = K;
-    const clr = C.cpe;
+    // Orphaned CPEs: muted grey color + dashed border + reduced opacity
+    const clr  = orphaned ? 'var(--text-muted)' : C.cpe;
+    const clrS = orphaned ? '#6e7681' : C.cpe;   // concrete hex for stroke
+    const opa  = orphaned ? 'opacity:0.55;' : '';
+    const bdr  = orphaned ? `stroke:${clrS};stroke-width:1.2;stroke-dasharray:5,3;` : `stroke:${clrS};stroke-width:1.4;`;
     const cx = x + W / 2;
     const icoCy = y + 30;
-    const cpeTip = `CPE On-Premises: ${cpe.display_name} — IP: ${cpe.ip_address || 'N/A'}${cpe.vendor && cpe.vendor !== 'N/A' ? ' — Vendor: ' + cpe.vendor : ''}`;
-    return `<g>
+    const noVpnBadge = orphaned
+      ? `<rect x="${cx-22}" y="${y+H-18}" width="44" height="13" rx="3" style="fill:${clrS};fill-opacity:0.12;stroke:${clrS};stroke-width:0.8;stroke-opacity:0.5;"/>` +
+        `<text x="${cx}" y="${y+H-8}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${clrS};opacity:0.7;">${_i('SEM VPN', 'NO VPN')}</text>`
+      : '';
+    const cpeTip = `CPE On-Premises: ${cpe.display_name} — IP: ${cpe.ip_address || 'N/A'}${cpe.vendor && cpe.vendor !== 'N/A' ? ' — Vendor: ' + cpe.vendor : ''}${orphaned ? ' [Sem conexão IPSec]' : ''}`;
+    return `<g style="${opa}">
   <title>${this._esc(cpeTip)}</title>
-  <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="${R}" filter="url(#arch-shadow)" style="fill:var(--bg-card);stroke:${clr};stroke-width:1.4;cursor:default;"/>
-  <circle cx="${cx}" cy="${icoCy}" r="${ICO_SIZE/2+4}" style="fill:${clr};fill-opacity:0.10;"/>
+  <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="${R}" filter="url(#arch-shadow)" style="fill:var(--bg-card);${bdr}cursor:default;"/>
+  <circle cx="${cx}" cy="${icoCy}" r="${ICO_SIZE/2+4}" style="fill:${clr};fill-opacity:${orphaned ? '0.06' : '0.10'};"/>
   <g transform="translate(${cx-ICO_SIZE/2},${icoCy-ICO_SIZE/2}) scale(${ICO_SIZE/28})" style="color:${clr};">${SVG_ICONS.cpe}</g>
   <text x="${cx}" y="${y+62}" text-anchor="middle" style="font:700 ${FN}px/1 'Inter',sans-serif;fill:var(--text-primary);">${this._esc(this._t(cpe.display_name,22))}</text>
   <text x="${cx}" y="${y+76}" text-anchor="middle" style="font:400 ${FS}px/1 'Inter',sans-serif;fill:var(--text-secondary);">IP: ${this._esc(cpe.ip_address||'N/A')}</text>
   ${cpe.vendor && cpe.vendor !== 'N/A' ? `<text x="${cx}" y="${y+90}" text-anchor="middle" style="font:400 ${FT}px/1 'Inter',sans-serif;fill:var(--text-muted);">${this._esc(cpe.vendor)}</text>` : ''}
-  <text x="${cx}" y="${y+H-4}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:var(--text-muted);text-transform:uppercase;">CPE On-Premises</text>
+  ${orphaned ? noVpnBadge : `<text x="${cx}" y="${y+H-4}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:var(--text-muted);text-transform:uppercase;">CPE ON-PREMISES</text>`}
 </g>`;
   }
 
 
-  // Storage Row
+  // Storage Row — VGs get tree-style cards; standalone volumes get standard node cards
   _layStorageRow(items, x, y, w) {
-    const nodes = items.map(item => {
-      if (item.type === 'vg') {
-        const v = item.data;
-        return { id: v.id, kind: 'vg', label: this._t(v.display_name, 18), sub: `${v.members?.length||0} volumes`, status: v.lifecycle_state };
-      }
+    const { NW, NH, HGAP, ZONE_HDR, ZONE_PY } = K;
+    const VG_W = 280, VG_MEMBER_H = 16, VG_MAX = 8;
+
+    // Pre-measure each VG card height (depends on member count)
+    const vgItems = items.filter(i => i.type === 'vg').map(item => {
       const v = item.data;
-      return { id: v.id, kind: 'vol', label: this._t(v.display_name, 18), sub: `${v.size_in_gbs||0} GB`, status: v.lifecycle_state };
+      const mems = v.members || [];
+      const vis   = Math.min(mems.length, VG_MAX);
+      const extra = mems.length > VG_MAX ? 1 : 0;
+      const cardH = 32 + vis * VG_MEMBER_H + extra * VG_MEMBER_H + 28; // header + tree rows + badge row
+      return { v, mems, vis, cardH };
     });
-    return this._layFloatingRow(nodes, x, y, w, _i('ARMAZENAMENTO', 'STORAGE'), C.vol);
+    const volItems = items.filter(i => i.type === 'vol');
+
+    const count = vgItems.length + volItems.length;
+    if (count === 0) return y;
+
+    const rowH  = Math.max(NH, vgItems.length ? Math.max(...vgItems.map(vi => vi.cardH)) : 0);
+    const zoneH = ZONE_HDR + ZONE_PY + rowH + ZONE_PY;
+    this.bgs.push(this._zoneBg(x, y, w, zoneH, C.vol, _i('ARMAZENAMENTO', 'STORAGE')));
+    const cY = y + ZONE_HDR + ZONE_PY;
+
+    // Center all cards in the zone width
+    const totalW = vgItems.length * (VG_W + HGAP) + volItems.length * (NW + HGAP) - HGAP;
+    let cx = x + Math.max(HGAP, (w - totalW) / 2);
+
+    vgItems.forEach(vi => {
+      this._renderVgTreeCard(cx, cY, vi.v, VG_W, vi.cardH);
+      cx += VG_W + HGAP;
+    });
+    volItems.forEach(item => {
+      const v    = item.data;
+      const node = { id: v.id, kind: 'vol', label: this._t(v.display_name, 18), sub: `${v.size_in_gbs || 0} GB`, status: v.lifecycle_state };
+      this.els.push(this._nodeCard(cx, cY, node));
+      this._pos[node.id] = { cx: cx + NW/2, cy: cY + NH/2, x: cx, y: cY, w: NW, h: NH };
+      cx += NW + HGAP;
+    });
+    return y + zoneH;
+  }
+
+
+  /**
+   * Tree-style Volume Group card.
+   * Shows member volume names in a "tree" layout (├─ / └─) together with
+   * backup policy and cross-region replication badges.
+   */
+  _renderVgTreeCard(x, y, vg, cardW, cardH) {
+    const { FT, FN, FS } = K;
+    const clr = C.vg;
+    const val  = vg.validation || {};
+    const mems = vg.members || [];
+    const VG_MAX = 8, VG_MEMBER_H = 16;
+
+    // Card frame + header strip
+    this.els.push(
+      `<rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="8" filter="url(#arch-shadow)" ` +
+        `style="fill:var(--bg-card);stroke:${clr};stroke-width:1.4;"/>` +
+      `<rect x="${x}" y="${y}" width="${cardW}" height="28" rx="8" ` +
+        `style="fill:${clr};fill-opacity:0.09;"/>` +
+      `<rect x="${x}" y="${y + 27}" width="${cardW}" height="1" ` +
+        `style="fill:${clr};fill-opacity:0.22;"/>` +
+      // Icon (scaled-down VG SVG icon)
+      `<g transform="translate(${x + 6},${y + 4}) scale(0.56)" style="color:${clr};">${SVG_ICONS.vg}</g>` +
+      // Header labels
+      `<text x="${x + 23}" y="${y + 11}" ` +
+        `style="font:700 ${FT}px/1 'Inter',sans-serif;fill:${clr};letter-spacing:.05em;">VOL. GROUP</text>` +
+      `<text x="${x + 23}" y="${y + 23}" ` +
+        `style="font:600 ${FS}px/1 'Inter',sans-serif;fill:var(--text-primary);">${this._esc(this._t(vg.display_name, 32))}</text>`
+    );
+
+    // Parse member name: "Boot Volume (hostname)" → boot type; "Block Volume (name)" → block type
+    const parseMem = raw => {
+      const bm = raw.match(/^Boot Volume \((.+)\)$/i);
+      if (bm) return { type: 'boot', name: bm[1], clr: '#d29922' };
+      const blm = raw.match(/^Block Volume \((.+)\)$/i);
+      if (blm) return { type: 'block', name: blm[1], clr: C.vg };
+      return { type: 'block', name: raw, clr: C.vg };
+    };
+
+    // Member list rows: colored dot + name + type badge
+    const PILL_H = VG_MEMBER_H - 2;
+    const BADGE_W = 34, TEXT_MAX_W = cardW - 20 - BADGE_W - 10; // available for name text
+    const maxCharsName = Math.max(12, Math.floor(TEXT_MAX_W / 5.2));
+    let treeY = y + 34;
+    const visible = mems.slice(0, VG_MAX);
+    visible.forEach((raw, i) => {
+      const { type, name, clr: mClr } = parseMem(raw);
+      const isLast = i === visible.length - 1 && mems.length <= VG_MAX;
+      const tc = isLast ? '\u2514' : '\u251c';
+      const displayName = name.length > maxCharsName ? name.slice(0, maxCharsName - 1) + '\u2026' : name;
+      const badgeLabel  = type === 'boot' ? 'BOOT' : 'BLOCK';
+      const badgeX      = x + cardW - BADGE_W - 4;
+
+      // Row background (alternating)
+      if (i % 2 === 0) {
+        this.els.push(
+          `<rect x="${x + 4}" y="${treeY}" width="${cardW - 8}" height="${PILL_H}" rx="3"` +
+            ` style="fill:${mClr};fill-opacity:0.07;"/>`
+        );
+      }
+      // Tree connector
+      this.els.push(
+        `<text x="${x + 4}" y="${treeY + 11}"` +
+          ` style="font:400 ${FT}px/1 'Courier New',monospace;fill:${clr};opacity:0.4;">${tc}\u2500</text>`
+      );
+      // Colored type dot
+      this.els.push(
+        `<circle cx="${x + 17}" cy="${treeY + 8}" r="3.5" style="fill:${mClr};opacity:0.85;"/>`
+      );
+      // Volume name
+      this.els.push(
+        `<text x="${x + 24}" y="${treeY + 11}"` +
+          ` style="font:500 ${FT}px/1 'Inter',sans-serif;fill:var(--text-secondary);">${this._esc(displayName)}</text>`
+      );
+      // Type badge (right-aligned)
+      this.els.push(
+        `<rect x="${badgeX}" y="${treeY + 2}" width="${BADGE_W}" height="${PILL_H - 4}" rx="3"` +
+          ` style="fill:${mClr};fill-opacity:0.12;stroke:${mClr};stroke-width:0.7;stroke-opacity:0.4;"/>` +
+        `<text x="${badgeX + BADGE_W/2}" y="${treeY + 10}" text-anchor="middle"` +
+          ` style="font:700 ${FT - 1}px/1 'Inter',sans-serif;fill:${mClr};opacity:0.9;">${badgeLabel}</text>`
+      );
+      treeY += VG_MEMBER_H;
+    });
+    if (mems.length > VG_MAX) {
+      this.els.push(
+        `<rect x="${x + 4}" y="${treeY}" width="${cardW - 8}" height="${PILL_H}" rx="3"` +
+          ` style="fill:${clr};fill-opacity:0.04;"/>` +
+        `<text x="${x + 14}" y="${treeY + 11}"` +
+          ` style="font:500 ${FT}px/1 'Inter',sans-serif;fill:${clr};opacity:0.65;">` +
+          `+${mems.length - VG_MAX} ${_i('volumes', 'volumes')}</text>`
+      );
+      treeY += VG_MEMBER_H;
+    }
+
+    // Backup policy + cross-region replication badges
+    const badgeY = treeY + 6;
+    let bx  = x + 6;
+    const pName    = val.policy_name || '';
+    const crossReg = !!val.is_cross_region_replication_enabled;
+    const crTarget = val.cross_region_target || '';
+
+    if (pName && pName !== 'Nenhuma' && pName !== 'None') {
+      const lbl = `${_i('Backup', 'Backup')}: ${this._t(pName, 10)}`;
+      const bw  = Math.min(lbl.length * 4.8 + 10, cardW / 2 - 4);
+      this.els.push(
+        `<rect x="${bx}" y="${badgeY}" width="${bw}" height="13" rx="3" ` +
+          `style="fill:${clr};fill-opacity:0.12;stroke:${clr};stroke-width:0.7;stroke-opacity:0.4;"/>` +
+        `<text x="${bx + bw/2}" y="${badgeY + 9}" text-anchor="middle" ` +
+          `style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${clr};opacity:0.9;">${this._esc(lbl)}</text>`
+      );
+      bx += bw + 5;
+    } else {
+      const lbl = _i('Sem Backup', 'No Backup');
+      const bw  = lbl.length * 4.8 + 10;
+      this.els.push(
+        `<rect x="${bx}" y="${badgeY}" width="${bw}" height="13" rx="3" ` +
+          `style="fill:#f85149;fill-opacity:0.10;stroke:#f85149;stroke-width:0.7;stroke-opacity:0.35;"/>` +
+        `<text x="${bx + bw/2}" y="${badgeY + 9}" text-anchor="middle" ` +
+          `style="font:600 ${FT}px/1 'Inter',sans-serif;fill:#f85149;opacity:0.8;">${this._esc(lbl)}</text>`
+      );
+      bx += bw + 5;
+    }
+    if (crossReg) {
+      const lbl = crTarget && crTarget !== 'Desabilitada'
+        ? `\u2197 ${crTarget}` : _i('Cross-Region', 'Cross-Region');
+      const bw = Math.min(lbl.length * 4.8 + 10, cardW - (bx - x) - 6);
+      this.els.push(
+        `<rect x="${bx}" y="${badgeY}" width="${bw}" height="13" rx="3" ` +
+          `style="fill:#a371f7;fill-opacity:0.12;stroke:#a371f7;stroke-width:0.7;stroke-opacity:0.4;"/>` +
+        `<text x="${bx + bw/2}" y="${badgeY + 9}" text-anchor="middle" ` +
+          `style="font:600 ${FT}px/1 'Inter',sans-serif;fill:#a371f7;opacity:0.9;">${this._esc(lbl)}</text>`
+      );
+    }
+
+    // Lifecycle state dot
+    const dot = this._stClr(vg.lifecycle_state);
+    if (dot) this.els.push(`<circle cx="${x + cardW - 10}" cy="${y + 10}" r="4" style="fill:${dot};"/>`);
+
+    this._pos[vg.id] = { cx: x + cardW/2, cy: y + cardH/2, x, y, w: cardW, h: cardH };
   }
 
 
@@ -1521,6 +1761,9 @@ class OciDiagram {
 
     // Subnet → DRG connections (horizontal arrows with CIDR labels)
     this._drawDrgRouteConnections();
+
+    // LPG peering: connect paired LPGs visually; draw cross-tenancy side cards
+    this._drawLpgPeerConnections();
   }
 
 
@@ -1535,12 +1778,15 @@ class OciDiagram {
    *     unique X lane so vertical segments never overlap.
    *  5. Line-jump arc (small upward semicircle) wherever a horizontal segment
    *     of one path crosses the vertical segment of another path.
+   *  6. Collapse per subnet+gateway PAIR when >THRESHOLD routes (avoids clutter).
+   *  7. CIDR labels: prefer vertical placement on V-segment; fall back to H1.
    */
   _drawGwConnections() {
     // Merge subnet→gateway and subnet→DRG into one unified list
     const gwConns  = this._gwConns  || [];
     const drgConns = (this._drgConns || []).map(dc => ({
-      subnetId: dc.subnetId, gwKey: dc.drgId, type: 'DRG', destination: dc.destination
+      subnetId: dc.subnetId, gwKey: dc.drgId, type: 'DRG', destination: dc.destination,
+      vcnId: dc.vcnId,
     }));
     const allConns = [...gwConns, ...drgConns];
     if (!allConns.length) return;
@@ -1557,40 +1803,65 @@ class OciDiagram {
 
     if (!resolved.length) return;
 
-    const THRESHOLD = 3, SDEP = 18, SARR = 22, JR = 4, LBL_GAP = 10;
+    // THRESHOLD: >= THRESHOLD routes from same subnet to same gateway → collapse to one arrow
+    const THRESHOLD = 4, SDEP = 20, SARR = 18, JR = 4;
 
-    // Stagger Y at arrivals (by gateway, sort by subnet Y top→bottom)
+    // ── Assign routeIdx per connection within each (subnet × gateway) pair ──
+    // Needed so multiple routes from the same subnet to the same gateway get unique Y positions.
+    const byPairForIdx = {};
+    resolved.forEach(c => {
+      const pk = c.subnetId + '|' + c.gwKey;
+      (byPairForIdx[pk] = byPairForIdx[pk] || []).push(c);
+    });
+    Object.values(byPairForIdx).forEach(arr => {
+      arr.forEach((c, i) => { c.routeIdx = i; });
+    });
+
+    // getKey:    groups by (subnet × gateway) — used for collapse detection
+    // getPosKey: unique per route — used for stagger position assignment
+    const getKey    = c => c.subnetId + '|' + c.gwKey;
+    const getPosKey = c => c.subnetId + '|' + c.gwKey + '|' + c.routeIdx;
+
+    // Stagger Y at arrivals (by gateway, sort by subnet Y then routeIdx)
     const byGw = {};
     resolved.forEach(c => { (byGw[c.gwKey] = byGw[c.gwKey] || []).push(c); });
-    Object.values(byGw).forEach(a => a.sort((a, b) => a.sp.y - b.sp.y));
+    Object.values(byGw).forEach(a => a.sort((a, b) =>
+      a.sp.y !== b.sp.y ? a.sp.y - b.sp.y : (a.routeIdx || 0) - (b.routeIdx || 0)
+    ));
 
-    // Stagger Y at departures (by subnet, sort by gateway Y top→bottom)
+    // Stagger Y at departures (by subnet, sort by gateway Y then routeIdx)
     const bySub = {};
     resolved.forEach(c => { (bySub[c.subnetId] = bySub[c.subnetId] || []).push(c); });
-    Object.values(bySub).forEach(a => a.sort((a, b) => a.gp.y - b.gp.y));
+    Object.values(bySub).forEach(a => a.sort((a, b) =>
+      a.gp.y !== b.gp.y ? a.gp.y - b.gp.y : (a.routeIdx || 0) - (b.routeIdx || 0)
+    ));
 
-    const getKey = c => c.subnetId + '|' + c.gwKey;
     const arrYOf = {}, depYOf = {};
     Object.values(byGw).forEach(arr => {
       const n = arr.length;
-      arr.forEach((c, i) => { arrYOf[getKey(c)] = c.gp.cy + (i - (n-1)/2) * SARR; });
+      arr.forEach((c, i) => {
+        const raw = c.gp.cy + (i - (n-1)/2) * SARR;
+        arrYOf[getPosKey(c)] = Math.max(c.gp.y + 4, Math.min(c.gp.y + c.gp.h - 4, raw));
+      });
     });
     Object.values(bySub).forEach(arr => {
       const n = arr.length;
       arr.forEach((c, i) => {
         const raw = c.sp.cy + (i - (n-1)/2) * SDEP;
-        // Clamp departure Y to stay within subnet bounds (with 8px margin)
-        depYOf[getKey(c)] = Math.max(c.sp.y + 8, Math.min(c.sp.y + c.sp.h - 8, raw));
+        depYOf[getPosKey(c)] = Math.max(c.sp.y + 8, Math.min(c.sp.y + c.sp.h - 8, raw));
       });
     });
 
     const paths = resolved.map(c => ({
-      ...c, depY: depYOf[getKey(c)], arrY: arrYOf[getKey(c)]
+      ...c, depY: depYOf[getPosKey(c)], arrY: arrYOf[getPosKey(c)]
     }));
 
-    // One fixed lane per GATEWAY TYPE per VCN (group by sp.x = same VCN start X)
+    // Group connections by VCN for lane assignment
     const byVcn = {};
-    paths.forEach(p => { (byVcn[p.sp.x] = byVcn[p.sp.x] || []).push(p); });
+    paths.forEach(p => {
+      const k = p.vcnId || p.sp.x;
+      (byVcn[k] = byVcn[k] || []).push(p);
+    });
 
     Object.values(byVcn).forEach(group => {
       const subRightMax = Math.max(...group.map(p => p.sp.x + p.sp.w));
@@ -1618,29 +1889,56 @@ class OciDiagram {
       return s + ` L${x2},${y}`;
     };
 
-    // Collapsed gateways → one summary arrow + count badge
-    const collapsedGws = new Set(
-      Object.entries(byGw).filter(([,a]) => a.length > THRESHOLD).map(([k]) => k)
+    // ── Two-pass rendering: collect all paths first, then all labels ─────────
+    // This ensures CIDR labels always render on top of arrow lines.
+    const allPathSvgs  = [];
+    const allLabelSvgs = [];
+
+    // ── Collapse per SUBNET+GATEWAY PAIR (>THRESHOLD routes) ──────────────
+    const byPair = {};
+    paths.forEach(p => {
+      const pk = getKey(p);
+      (byPair[pk] = byPair[pk] || []).push(p);
+    });
+    const collapsedPairs = new Set(
+      Object.keys(byPair).filter(pk => byPair[pk].length >= THRESHOLD)
     );
-    Object.entries(byGw).forEach(([gwKey, arr]) => {
-      if (!collapsedGws.has(gwKey)) return;
-      const rep  = arr[0];
-      const avgY = Math.round(arr.reduce((s, c) => s + c.sp.cy, 0) / arr.length);
+
+    Object.entries(byPair).forEach(([pk, arr]) => {
+      if (!collapsedPairs.has(pk)) return;
+      const rep = arr[0];
       const { gp, color, marker, midX, subRightMax } = rep;
-      const d    = `M${subRightMax},${avgY} L${midX},${avgY} L${midX},${gp.cy} L${gp.x},${gp.cy}`;
-      const lbl  = `+${arr.length} ${_i('rotas', 'routes')}`;
-      const tw   = lbl.length * 5.5 + 14;
-      const lx   = subRightMax + LBL_GAP + tw / 2;
-      this.conn.push(
-        `<path d="${d}" style="fill:none;stroke:${color};stroke-width:1.8;stroke-opacity:0.72;" marker-end="url(#${marker})"/>` +
-        `<rect x="${lx-tw/2}" y="${avgY-8}" width="${tw}" height="14" rx="3" style="fill:var(--bg-main);stroke:${color};stroke-width:1;stroke-opacity:0.7;"/>` +
-        `<text x="${lx}" y="${avgY+3}" text-anchor="middle" style="font:700 ${K.FT}px/1 'Inter',sans-serif;fill:${color};opacity:0.9;">${this._esc(lbl)}</text>`
+      const avgDepY = Math.round(arr.reduce((s, c) => s + c.depY, 0) / arr.length);
+      const endX = gp.x - 2;
+      const d = `M${subRightMax},${avgDepY} L${midX},${avgDepY} L${midX},${gp.cy} L${endX},${gp.cy}`;
+      const lbl = `${arr.length} ${_i('rotas', 'routes')}`;
+      const tw = lbl.length * 5.5 + 14;
+      const lx = Math.round((subRightMax + midX) / 2);
+      allPathSvgs.push(
+        `<path d="${d}" style="fill:none;stroke:${color};stroke-width:1.8;stroke-opacity:0.75;" marker-end="url(#${marker})"/>`
+      );
+      allLabelSvgs.push(
+        `<rect x="${lx - tw/2}" y="${avgDepY - 8}" width="${tw}" height="14" rx="3" style="fill:var(--bg-main);stroke:${color};stroke-width:1;stroke-opacity:0.7;"/>` +
+        `<text x="${lx}" y="${avgDepY + 3}" text-anchor="middle" style="font:700 ${K.FT}px/1 'Inter',sans-serif;fill:${color};opacity:0.9;">${this._esc(lbl)}</text>`
       );
     });
 
-    // Individual arrows — CIDR label on H1 departure side at depY
-    const indiv = paths.filter(p => !collapsedGws.has(p.gwKey));
+    // ── Individual arrows ─────────────────────────────────────────────────
+    const indiv = paths.filter(p => !collapsedPairs.has(getKey(p)));
+    // Sort: specific CIDRs first (non-default), default route (0.0.0.0/0) last.
+    // This ensures that when we pick ONE label per gateway, the most informative CIDR wins.
+    indiv.sort((a, b) => {
+      const aD = a.destination === '0.0.0.0/0' || a.destination === '::/0';
+      const bD = b.destination === '0.0.0.0/0' || b.destination === '::/0';
+      return aD !== bD ? (aD ? 1 : -1) : 0;
+    });
+    // gwLabeled: evita processar o mesmo arrow duas vezes (subnet × gateway × dest)
+    // h2Labeled: evita duplicar label no segmento H2 compartilhado (gateway × dest)
+    const gwLabeled = new Set();
+    const h2Labeled = new Set();
+
     indiv.forEach(pA => {
+      // Line-jump crossing detection (same VCN only)
       const h1J = [], h2J = [];
       indiv.forEach(pB => {
         if (pB === pA || pB.sp.x !== pA.sp.x) return;
@@ -1651,107 +1949,627 @@ class OciDiagram {
           h2J.push(vx);
       });
       h1J.sort((a,b)=>a-b); h2J.sort((a,b)=>a-b);
-      const d = `M${pA.sp.x+pA.sp.w},${pA.depY}` +
+
+      const gwEndX = pA.gp.x - 2;
+      const d = `M${pA.sp.x + pA.sp.w},${pA.depY}` +
                 hSeg(pA.midX, pA.depY, h1J) +
                 ` L${pA.midX},${pA.arrY}` +
-                hSeg(pA.gp.x, pA.arrY, h2J);
-      this.conn.push(
-        `<path d="${d}" style="fill:none;stroke:${pA.color};stroke-width:1.8;stroke-opacity:0.72;" marker-end="url(#${pA.marker})"/>`
+                hSeg(gwEndX, pA.arrY, h2J);
+      allPathSvgs.push(
+        `<path d="${d}" style="fill:none;stroke:${pA.color};stroke-width:1.8;stroke-opacity:0.75;" marker-end="url(#${pA.marker})"/>`
       );
-      if (pA.destination) {
-        const tw = Math.min(pA.destination.length * 5.5 + 12, 110);
-        const lx = Math.round(pA.sp.x + pA.sp.w + LBL_GAP + tw / 2);
-        this.conn.push(
-          `<rect x="${lx-tw/2}" y="${pA.depY-8}" width="${tw}" height="14" rx="3" style="fill:var(--bg-main);stroke:${pA.color};stroke-width:0.8;stroke-opacity:0.6;"/>` +
-          `<text x="${lx}" y="${pA.depY+3}" text-anchor="middle" style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${pA.color};opacity:0.9;">${this._esc(pA.destination)}</text>`
-        );
+
+      // CIDR label — toda seta recebe label, sem sobreposição de backgrounds.
+      //   Regra H2: apenas UM label por (gwKey × destino) no segmento H2.
+      //             Segmento compartilhado por múltiplas setas → deduplica neste segmento.
+      //   Regra H1: label própria por (subnetId × gwKey × destino).
+      //             Segmento exclusivo (depY único por subnet) → nunca sobrepõe.
+      //   Prioridade: H2 (se livre) → H1 → H2 truncado (se livre) → H1 truncado → H1 forçado.
+      {
+        const rawDest  = pA.destination || '';
+        const arrowKey = pA.subnetId + '|' + pA.gwKey + '|' + rawDest; // unique per arrow
+        const h2Key    = pA.gwKey + '|' + rawDest;                      // shared per gateway×dest
+
+        if (gwLabeled.has(arrowKey)) return; // mesmo arrow duplicado (não deve ocorrer)
+        gwLabeled.add(arrowKey);
+
+        const displayText = rawDest ? this._shortenDest(rawDest) : '—';
+        const fullTw  = displayText.length * 5.5 + 14;
+        // H2: entre midX e a borda esquerda do gateway
+        const h2Start  = pA.midX + 12;
+        const h2End    = gwEndX - 4;
+        const h2Len    = h2End - h2Start;
+        // H1: entre a borda direita do subnet e o midX (depY único por subnet → sem overlap)
+        const subRight = pA.sp.x + pA.sp.w;
+        const h1Start  = subRight + 6;
+        const h1End    = pA.midX - 8;
+        const h1Len    = h1End - h1Start;
+
+        const mkH2 = (tw, txt) => {
+          const lx = Math.max(h2Start, Math.round((h2Start + h2End) / 2) - tw / 2);
+          return `<rect x="${lx}" y="${pA.arrY - 7}" width="${tw}" height="13" rx="3"` +
+            ` style="fill:var(--bg-main);stroke:${pA.color};stroke-width:0.8;stroke-opacity:0.55;"/>` +
+            `<text x="${lx + tw/2}" y="${pA.arrY + 3}" text-anchor="middle"` +
+            ` style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${pA.color};opacity:0.9;">${this._esc(txt)}</text>`;
+        };
+        const mkH1 = (tw, txt) => {
+          const lx = Math.min(h1End - tw, Math.max(h1Start, Math.round((h1Start + h1End) / 2) - tw / 2));
+          return `<rect x="${lx}" y="${pA.depY - 7}" width="${tw}" height="13" rx="3"` +
+            ` style="fill:var(--bg-main);stroke:${pA.color};stroke-width:0.8;stroke-opacity:0.55;"/>` +
+            `<text x="${lx + tw/2}" y="${pA.depY + 3}" text-anchor="middle"` +
+            ` style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${pA.color};opacity:0.9;">${this._esc(txt)}</text>`;
+        };
+        const mkTrunc = (src, maxLen) => {
+          const n = Math.max(4, Math.floor((maxLen - 14) / 5.5));
+          return n >= src.length ? src : src.slice(0, n - 1) + '\u2026';
+        };
+
+        const h2Free = !h2Labeled.has(h2Key); // H2 ainda não tem label para este dest neste gateway
+
+        if (h2Free && fullTw <= h2Len) {
+          allLabelSvgs.push(mkH2(fullTw, displayText));
+          h2Labeled.add(h2Key);
+        } else if (h1Len >= fullTw) {
+          allLabelSvgs.push(mkH1(fullTw, displayText));
+        } else if (h2Free && h2Len >= 28) {
+          const t = mkTrunc(displayText, h2Len);
+          allLabelSvgs.push(mkH2(t.length * 5.5 + 14, t));
+          h2Labeled.add(h2Key);
+        } else if (h1Len >= 28) {
+          const t = mkTrunc(displayText, h1Len);
+          allLabelSvgs.push(mkH1(t.length * 5.5 + 14, t));
+        } else {
+          // Último recurso: força em H1 (depY único → não sobrepõe outros)
+          const avail = Math.max(h1Len, 28);
+          const t = mkTrunc(displayText, avail);
+          allLabelSvgs.push(mkH1(t.length * 5.5 + 14, t));
+        }
       }
     });
+
+    // Push paths first, then labels — labels always render on top of arrow lines
+    allPathSvgs.forEach(s => this.conn.push(s));
+    allLabelSvgs.forEach(s => this.conn.push(s));
   }
 
   /** DRG route connections are merged into _drawGwConnections. */
   _drawDrgRouteConnections() {}
 
 
+  /**
+   * LPG peer connections:
+   *  • PEERED + internal  → dashed green line connecting both LPG badges with a mid-label
+   *    showing the peer VCN name / compartment.
+   *  • Cross-tenancy      → amber dashed arrow from LPG to a "CROSS-TENANCY" info card
+   *    positioned to the right of the LPG row.
+   */
+  _drawLpgPeerConnections() {
+    // Gather every LPG visible in the topology (from vcn_topology and flat vcns)
+    const allLpgs = [];
+    const collectFrom = (vcn, lpgArr) => {
+      (lpgArr || []).forEach(lpg => allLpgs.push({
+        ...lpg,
+        vcnName: vcn.display_name || '',
+        vcnComp: vcn.compartment_name || '',
+        vcnId:   vcn.id,
+      }));
+    };
+    (this.d.vcn_topology || []).forEach(vt => {
+      if (vt.vcn) collectFrom(vt.vcn, vt.lpgs || vt.vcn.lpgs || []);
+    });
+    (this.d.vcns || []).forEach(vcn => {
+      if (!allLpgs.find(l => l.vcnId === vcn.id)) collectFrom(vcn, vcn.lpgs || []);
+    });
+
+    const drawn = new Set();
+    allLpgs.forEach(lpg => {
+      const pos = this._pos['lpg_' + lpg.id];
+      if (!pos) return;
+
+      // ── Cross-tenancy: info card to the right of the LPG ─────────────────
+      if (lpg.is_cross_tenancy_peering) {
+        const col       = C.ipsec;
+        const ARROW_GAP = 32;
+        const cW = 195, cH = 64, HDR_H = 20;
+        const cX = pos.x + pos.w + ARROW_GAP;
+        const cY = pos.cy - cH / 2;
+
+        // Filter out generic OCI boilerplate
+        const GENERIC = /connected to a peer/i;
+        const clean = s => (s && !GENERIC.test(s)) ? s : '';
+
+        const cleanVcn  = clean(lpg.peer_vcn_name);
+        const cleanComp = clean(lpg.peer_compartment_name);
+        const cleanDet  = clean(lpg.peering_status_details);
+
+        // Body line 1: best available identifier of the remote end
+        // Priority: peer VCN name → peer compartment → peer_id suffix → "Ext. Tenancy"
+        const body1 = cleanVcn || cleanComp
+          || (lpg.peer_id ? '\u2026' + lpg.peer_id.slice(-20) : '')
+          || cleanDet
+          || _i('Tenancy Externa', 'External Tenancy');
+
+        // Body line 2: CIDR advertised by peer (key routing info) or compartment (if VCN shown above)
+        let body2 = '';
+        if (lpg.peer_advertised_cidr) {
+          body2 = lpg.peer_advertised_cidr;
+        } else if (cleanVcn && cleanComp) {
+          body2 = this._t(cleanComp, 28);
+        }
+        // (no peer_id in body2 — already shown in body1 when needed)
+
+        // External tenancy icon: simple "share/external" arrow in a box (clean, recognizable)
+        const icoExt = (cx, cy) =>
+          `<rect x="${cx-5}" y="${cy-4}" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/>` +
+          `<line x1="${cx-2}" y1="${cy+1}" x2="${cx+5}" y2="${cy-6}" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>` +
+          `<polyline points="${cx+2},${cy-6} ${cx+5},${cy-6} ${cx+5},${cy-3}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+        const arrowX1 = pos.x + pos.w + 2;
+        const arrowX2 = cX - 2;
+        const arrowY  = pos.cy;
+        this.conn.push(
+          `<path d="M${arrowX1},${arrowY} L${arrowX2},${arrowY}" ` +
+            `style="fill:none;stroke:${col};stroke-width:1.5;stroke-dasharray:5,3;" ` +
+            `marker-end="url(#arch-arr-amber)"/>` +
+          // Card frame
+          `<rect x="${cX}" y="${cY}" width="${cW}" height="${cH}" rx="7" filter="url(#arch-shadow)" ` +
+            `style="fill:var(--bg-card);stroke:${col};stroke-width:1.5;"/>` +
+          // Header band
+          `<rect x="${cX}" y="${cY}" width="${cW}" height="${HDR_H}" rx="7" ` +
+            `style="fill:${col};fill-opacity:0.15;stroke:none;"/>` +
+          `<rect x="${cX}" y="${cY+HDR_H-4}" width="${cW}" height="4" ` +
+            `style="fill:${col};fill-opacity:0.15;stroke:none;"/>` +
+          // Header icon
+          `<g style="color:${col};">${icoExt(cX + 13, cY + HDR_H / 2)}</g>` +
+          // Header title
+          `<text x="${cX + 26}" y="${cY + 14}" ` +
+            `style="font:700 ${K.FT}px/1 'Inter',sans-serif;fill:${col};letter-spacing:.05em;">` +
+            `${_i('EXT. TENANCY', 'EXT. TENANCY')}</text>` +
+          // Status badge right-aligned
+          `<text x="${cX + cW - 8}" y="${cY + 14}" text-anchor="end" ` +
+            `style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${col};opacity:0.8;">` +
+            `${this._esc(lpg.peering_status || 'PEERED')}</text>` +
+          // Body line 1
+          `<text x="${cX + 10}" y="${cY + 37}" ` +
+            `style="font:500 ${K.FT}px/1 'Inter',sans-serif;fill:var(--text-primary);">` +
+            `${this._esc(this._t(body1, 28))}</text>` +
+          // Body line 2
+          (body2
+            ? `<text x="${cX + 10}" y="${cY + 52}" ` +
+              `style="font:400 ${K.FT - 1}px/1 'Inter',monospace,sans-serif;fill:var(--text-muted);opacity:0.75;">` +
+              `${this._esc(this._t(body2, 30))}</text>`
+            : '')
+        );
+        return;
+      }
+
+      // ── Internal peering: connect to peer LPG if it is also rendered ──────
+      if (lpg.peering_status !== 'PEERED') return;
+      const peerLpg = allLpgs.find(l =>
+        l.id !== lpg.id &&
+        ((lpg.peer_id && l.id === lpg.peer_id) ||
+         (lpg.peer_vcn_name && l.vcnName === lpg.peer_vcn_name))
+      );
+      if (!peerLpg) return;
+      const key = [lpg.id, peerLpg.id].sort().join('|');
+      if (drawn.has(key)) return;
+      drawn.add(key);
+
+      const pPos = this._pos['lpg_' + peerLpg.id];
+      if (!pPos) return;
+
+      // L-shaped dashed green line between the two LPG badges
+      const x1 = pos.cx,  y1 = pos.y + pos.h;
+      const x2 = pPos.cx, y2 = pPos.y;
+      const midY = Math.round((y1 + y2) / 2);
+      const lbl = this._t(
+        (peerLpg.vcnComp ? peerLpg.vcnComp + ' \u203a ' : '') + peerLpg.vcnName, 26
+      );
+      const lw = Math.min(lbl.length * 5 + 14, 150);
+      this.conn.push(
+        `<path d="M${x1},${y1} L${x1},${midY} L${x2},${midY} L${x2},${y2}" ` +
+          `style="fill:none;stroke:${C.lpg};stroke-width:1.6;stroke-dasharray:6,3;stroke-opacity:0.8;" ` +
+          `marker-end="url(#arch-arr-green)"/>` +
+        `<rect x="${(x1 + x2)/2 - lw/2}" y="${midY - 8}" width="${lw}" height="15" rx="3" ` +
+          `style="fill:var(--bg-main);stroke:${C.lpg};stroke-width:0.8;stroke-opacity:0.5;"/>` +
+        `<text x="${(x1 + x2)/2}" y="${midY + 4}" text-anchor="middle" ` +
+          `style="font:600 ${K.FT}px/1 'Inter',sans-serif;fill:${C.lpg};opacity:0.9;">` +
+          `${this._esc(lbl)}</text>`
+      );
+    });
+  }
+
+
   /* ══════════════════════════════════════════════════════════════════════════
      SVG RENDERERS
   ══════════════════════════════════════════════════════════════════════════ */
 
-  // Instance card — compact layout with NSG sub-cards at bottom
+  // ── Instance card ─────────────────────────────────────────────────────────
+  // Console-tile style: colored header, shape pill, CPU+RAM chips side-by-side,
+  // OS ghost chip (>_ icon), IP rows with custom icons, NSG shield pills.
   _instCard(x, y, item) {
-    const { NW: W, NH: H, NR: R, ICO_SIZE, FT, FN, FS } = K;
-    const clr = C.instance;
-    const dot = this._stClr(item.status);
-    const uid = `cl${this._uid++}`;
-    const cx  = x + W / 2;
-
-    const hasNsg   = item.nsgNames && item.nsgNames.length > 0;
+    const { NW: W, NH: H, NR: R, FT, FN } = K;
+    const clr      = C.instance;
+    const dot      = this._stClr(item.status);
+    const uid      = `cl${this._uid++}`;
     const hasPub   = !!item.pubIp;
+    const hasSub2  = !!item.sub2;
+    const hasSub3  = !!item.sub3;
+    const hasNsg   = !!(item.nsgNames && item.nsgNames.length > 0);
     const nsgCount = hasNsg ? item.nsgNames.length : 0;
-    // Show individual sub-cards: up to 2 when no public IP, 1 when public IP present
-    const maxNsgCards = hasPub ? 1 : 2;
+    const PAD = 7;
+    const CW  = W - PAD * 2;   // 146px usable width
+    const HDR_H = 34;
 
-    // Slightly compressed vertical layout to create room for NSG sub-cards
-    const icoCy  = y + 20;
-    const sepY   = icoCy + ICO_SIZE / 2 + 4;  // y + 42
-    const nameY  = sepY + 12;                  // y + 54
-    const shapeY = nameY + 13;                 // y + 67
-    const privY  = shapeY + 13;                // y + 80
-    const pubY   = hasPub ? privY + 11 : privY;
-    const kindY  = (hasPub ? pubY : privY) + 12;
+    // ── Vertical layout ────────────────────────────────────────────────────
+    let cy = y + HDR_H + 4;
 
-    // NSG sub-cards: each NSG gets its own styled row with background card
+    // 1) Shape pill (full width)
+    const pillY = cy, pillH = 16;
+    cy += pillH + 4;                               // → y+58
+
+    // 2) Spec chips — CPU left, RAM right (only if sub2)
+    const chip2Y = hasSub2 ? cy : 0;
+    const chip2H = 20;
+    const chipGap = 4;
+    const cpuW = Math.round(CW * 0.44);            // ~64px
+    const ramW = CW - cpuW - chipGap;              // ~78px
+    if (hasSub2) cy += chip2H + 4;                // → y+82
+
+    // 3) OS ghost chip (only if sub3)
+    const osY = hasSub3 ? cy : 0;
+    const osH = 17;
+    if (hasSub3) cy += osH + 4;                   // → y+103
+
+    // 4) IP separator + rows
+    const sep1Y = cy + 2;
+    cy = sep1Y + 8;                                // → y+110
+    const privY = item.privIp ? cy : 0;
+    if (item.privIp) cy += 13;
+    const pubY = hasPub ? cy : 0;
+    if (hasPub) cy += 13;
+
+    // 5) NSG section
+    const sep2Y = hasNsg ? cy + 2 : 0;
+    const nsgY0 = hasNsg ? sep2Y + 6 : 0;
+    const NSG_H = 14, NSG_GAP = 3;
+    const maxNsg = hasNsg ? Math.max(1, Math.floor((y + H - nsgY0 - 4) / (NSG_H + NSG_GAP))) : 0;
+
+    // ── Micro-icon helpers ─────────────────────────────────────────────────
+    // IC chip: 12×12 centered at (cx,cy)
+    const icoChip = (cx, icy) =>
+      `<rect x="${cx-4}" y="${icy-4}" width="8" height="8" rx="0.8" style="fill:none;stroke:${clr};stroke-width:1.1;"/>` +
+      `<line x1="${cx-4}" y1="${icy}" x2="${cx+4}" y2="${icy}" style="stroke:${clr};stroke-width:0.5;opacity:0.4;"/>` +
+      `<line x1="${cx}" y1="${icy-4}" x2="${cx}" y2="${icy+4}" style="stroke:${clr};stroke-width:0.5;opacity:0.4;"/>` +
+      `<line x1="${cx-2}" y1="${icy-6}" x2="${cx-2}" y2="${icy-4}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx+2}" y1="${icy-6}" x2="${cx+2}" y2="${icy-4}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx-2}" y1="${icy+4}" x2="${cx-2}" y2="${icy+6}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx+2}" y1="${icy+4}" x2="${cx+2}" y2="${icy+6}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx-6}" y1="${icy-2}" x2="${cx-4}" y2="${icy-2}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx-6}" y1="${icy+2}" x2="${cx-4}" y2="${icy+2}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx+4}" y1="${icy-2}" x2="${cx+6}" y2="${icy-2}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx+4}" y1="${icy+2}" x2="${cx+6}" y2="${icy+2}" style="stroke:${clr};stroke-width:0.9;"/>`;
+
+    // RAM module: 13×8 centered at (cx,cy)
+    const icoRam = (cx, icy) =>
+      `<rect x="${cx-6}" y="${icy-3}" width="12" height="5.5" rx="0.7" style="fill:none;stroke:${clr};stroke-width:1;"/>` +
+      `<line x1="${cx-2}" y1="${icy-3}" x2="${cx-2}" y2="${icy+2.5}" style="stroke:${clr};stroke-width:0.5;opacity:0.45;"/>` +
+      `<line x1="${cx+2}" y1="${icy-3}" x2="${cx+2}" y2="${icy+2.5}" style="stroke:${clr};stroke-width:0.5;opacity:0.45;"/>` +
+      `<rect x="${cx-5}" y="${icy+2.5}" width="2" height="1.5" rx="0.3" style="fill:${clr};opacity:0.55;"/>` +
+      `<rect x="${cx+3}" y="${icy+2.5}" width="2" height="1.5" rx="0.3" style="fill:${clr};opacity:0.55;"/>`;
+
+    // Globe: circle + equator + meridian arc, centered at (cx,cy) r=4.5
+    const icoGlobe = (cx, icy) =>
+      `<circle cx="${cx}" cy="${icy}" r="4.5" style="fill:none;stroke:${C.igw};stroke-width:1;"/>` +
+      `<ellipse cx="${cx}" cy="${icy}" rx="2.2" ry="4.5" style="fill:none;stroke:${C.igw};stroke-width:0.55;"/>` +
+      `<line x1="${cx-4.5}" y1="${icy}" x2="${cx+4.5}" y2="${icy}" style="stroke:${C.igw};stroke-width:0.55;"/>`;
+
+    // ── Split sub2 into CPU / RAM parts ────────────────────────────────────
+    const sub2Parts = (item.sub2 || '').split('·').map(s => s.trim());
+    const cpuLabel  = sub2Parts[0] || '';
+    const ramLabel  = sub2Parts[1] || '';
+
+    // ── NSG pills ──────────────────────────────────────────────────────────
+    const shield = (sx, sy) =>
+      `<path d="M${sx+3},${sy} L${sx+7},${sy+1.5} L${sx+7},${sy+5} Q${sx+7},${sy+9} ${sx+3},${sy+10} Q${sx-1},${sy+9} ${sx-1},${sy+5} L${sx-1},${sy+1.5} Z" style="fill:${C.nsg};fill-opacity:0.75;"/>`;
     let nsgSvg = '';
-    if (hasNsg) {
-      const NSG_ROW_H  = 15;
-      const NSG_ROW_GAP = 3;
-      const NSG_PAD_X  = 6;
-      const nsgStartY  = kindY + 5;
-      // Tiny shield icon helper
-      const shield = (sx, sy) =>
-        `<path d="M${sx+3},${sy} L${sx+6},${sy+1.5} L${sx+6},${sy+4} Q${sx+6},${sy+7} ${sx+3},${sy+8} Q${sx},${sy+7} ${sx},${sy+4} L${sx},${sy+1.5} Z" style="fill:${C.nsg};fill-opacity:0.75;"/>`;
-
-      if (nsgCount <= maxNsgCards) {
-        // Individual sub-card per NSG
-        item.nsgNames.forEach((name, idx) => {
-          const bx = x + NSG_PAD_X;
-          const bw = W - NSG_PAD_X * 2;
-          const by = nsgStartY + idx * (NSG_ROW_H + NSG_ROW_GAP);
-          nsgSvg +=
-            `<rect x="${bx}" y="${by}" width="${bw}" height="${NSG_ROW_H}" rx="4" style="fill:${C.nsg};fill-opacity:0.10;stroke:${C.nsg};stroke-width:0.9;stroke-opacity:0.6;"/>` +
-            shield(bx + 4, by + 3) +
-            `<text x="${bx+16}" y="${by+11}" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${C.nsg};">${this._esc(this._t(name, 20))}</text>`;
-        });
-      } else {
-        // Collapsed: "+N NSGs" single sub-card
-        const lbl = `+${nsgCount} NSGs`;
-        const bx = x + NSG_PAD_X;
-        const bw = W - NSG_PAD_X * 2;
-        nsgSvg =
-          `<rect x="${bx}" y="${nsgStartY}" width="${bw}" height="${NSG_ROW_H}" rx="4" style="fill:${C.nsg};fill-opacity:0.10;stroke:${C.nsg};stroke-width:0.9;stroke-opacity:0.6;"/>` +
-          shield(bx + 4, nsgStartY + 3) +
-          `<text x="${bx+16}" y="${nsgStartY+11}" style="font:600 ${FT}px/1 'Inter',sans-serif;fill:${C.nsg};">${this._esc(lbl)}</text>`;
+    if (hasNsg && nsgY0 > 0) {
+      const bx = x + PAD, bw = CW;
+      for (let i = 0; i < Math.min(maxNsg, nsgCount); i++) {
+        const name = (i === maxNsg - 1 && nsgCount > maxNsg)
+          ? `+${nsgCount - i} NSGs`
+          : this._t(item.nsgNames[i], 21);
+        const by = nsgY0 + i * (NSG_H + NSG_GAP);
+        nsgSvg +=
+          `<rect x="${bx}" y="${by}" width="${bw}" height="${NSG_H}" rx="3.5"
+            style="fill:${C.nsg};fill-opacity:0.08;stroke:${C.nsg};stroke-width:0.7;stroke-opacity:0.45;"/>` +
+          shield(bx + 4, by + 2) +
+          `<text x="${bx+17}" y="${by+10}" style="font:500 8px/1 'Inter',sans-serif;fill:${C.nsg};opacity:0.9;">${this._esc(name)}</text>`;
       }
     }
 
-    const tooltip = `Compute: ${item.label}${item.sub ? ' — ' + item.sub : ''}${item.status ? ' (' + item.status + ')' : ''}${item.privIp ? ' | Private: ' + item.privIp : ''}${item.pubIp ? ' | Public: ' + item.pubIp : ''}${hasNsg ? ' | NSG: ' + item.nsgNames.join(', ') : ''}`;
+    const chipMY = chip2Y + chip2H / 2;  // vertical midpoint of spec chips
+
+    const tooltip = `Compute: ${item.label}` +
+      (item.sub   ? ` | ${item.sub}`   : '') +
+      (item.sub2  ? ` | ${item.sub2}`  : '') +
+      (item.sub3  ? ` | OS: ${item.sub3}` : '') +
+      (item.privIp? ` | ${item.privIp}` : '') +
+      (item.pubIp ? ` | pub:${item.pubIp}` : '') +
+      (item.status? ` (${item.status})` : '') +
+      (hasNsg     ? ` | NSG: ${item.nsgNames.join(', ')}` : '');
 
     return `<g>
   <title>${this._esc(tooltip)}</title>
-  <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="${R}" filter="url(#arch-shadow)" style="fill:var(--bg-card);stroke:var(--border);stroke-width:1;cursor:default;"/>
-  <circle cx="${cx}" cy="${icoCy}" r="${ICO_SIZE/2+4}" style="fill:${clr};fill-opacity:0.12;stroke:${clr};stroke-width:1;stroke-opacity:0.2;"/>
-  <g transform="translate(${cx-ICO_SIZE/2},${icoCy-ICO_SIZE/2}) scale(${ICO_SIZE/28})" style="color:${clr};">${SVG_ICONS.instance}</g>
-  <line x1="${x+8}" y1="${sepY}" x2="${x+W-8}" y2="${sepY}" style="stroke:var(--border);stroke-width:0.6;stroke-opacity:0.35;"/>
-  <defs><clipPath id="${uid}"><rect x="${x+4}" y="${y}" width="${W-8}" height="${H}"/></clipPath></defs>
+  <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="${R}" filter="url(#arch-shadow)"
+    style="fill:var(--bg-card);stroke:${clr};stroke-width:1.4;stroke-opacity:0.3;cursor:default;"/>
+  <rect x="${x}" y="${y+R}" width="4" height="${H-R*2}" style="fill:${clr};opacity:0.8;"/>
+  <rect x="${x+4}" y="${y}" width="${W-4}" height="${HDR_H}" rx="0" style="fill:${clr};fill-opacity:0.13;stroke:none;"/>
+  <rect x="${x}" y="${y}" width="${W}" height="${HDR_H}" rx="${R}" style="fill:${clr};fill-opacity:0.05;stroke:none;"/>
+  <rect x="${x}" y="${y+HDR_H}" width="${W}" height="1" style="fill:${clr};fill-opacity:0.3;"/>
+  <g transform="translate(${x+8},${y+(HDR_H-22)/2+2}) scale(${22/28})" style="color:${clr};">${SVG_ICONS.instance}</g>
+  ${dot ? `<circle cx="${x+W-11}" cy="${y+11}" r="5" style="fill:${dot};stroke:var(--bg-card);stroke-width:1.2;"/>` : ''}
+  <defs><clipPath id="${uid}"><rect x="${x+4}" y="${y}" width="${W-5}" height="${H}"/></clipPath></defs>
   <g clip-path="url(#${uid})">
-    <text x="${cx}" y="${nameY}" text-anchor="middle" style="font:700 ${FN}px/1 'Inter',system-ui,sans-serif;fill:var(--text-primary);">${this._esc(item.label)}</text>
-    <text x="${cx}" y="${shapeY}" text-anchor="middle" style="font:400 ${FS-1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-secondary);">${this._esc(item.sub||'')}</text>
-    ${item.privIp ? `<circle cx="${x+9}" cy="${privY-3}" r="3" style="fill:${C.subnet_priv};fill-opacity:0.9;"/><text x="${x+16}" y="${privY}" style="font:400 ${FT+1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);">${this._esc(item.privIp)}</text>` : ''}
-    ${hasPub ? `<circle cx="${x+9}" cy="${pubY-3}" r="3" style="fill:${C.igw};fill-opacity:0.9;"/><text x="${x+16}" y="${pubY}" style="font:400 ${FT+1}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);">${this._esc(item.pubIp)}</text>` : ''}
-    <text x="${cx}" y="${kindY}" text-anchor="middle" style="font:600 ${FT}px/1 'Inter',system-ui,sans-serif;fill:var(--text-muted);letter-spacing:.04em;text-transform:uppercase;">COMPUTE</text>
+    <text x="${x+36}" y="${y+13}" dominant-baseline="middle"
+      style="font:700 ${FN}px/1 'Inter',system-ui,sans-serif;fill:var(--text-primary);">${this._esc(this._t(item.label, 16))}</text>
+    <text x="${x+36}" y="${y+HDR_H-7}"
+      style="font:700 8px/1 'Inter',sans-serif;fill:${clr};opacity:0.8;letter-spacing:.07em;">COMPUTE</text>
+    <!-- Shape pill -->
+    ${item.sub ? `
+    <rect x="${x+PAD}" y="${pillY}" width="${CW}" height="${pillH}" rx="${pillH/2}"
+      style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.8;stroke-opacity:0.40;"/>
+    <text x="${x+PAD+CW/2}" y="${pillY+pillH-4}" text-anchor="middle"
+      style="font:600 8.5px/1 'Inter',monospace,sans-serif;fill:${clr};">${this._esc(this._t(item.sub, 22))}</text>` : ''}
+    <!-- CPU chip (left) -->
+    ${hasSub2 && chip2Y ? `
+    <rect x="${x+PAD}" y="${chip2Y}" width="${cpuW}" height="${chip2H}" rx="4"
+      style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.7;stroke-opacity:0.38;"/>
+    ${icoChip(x + PAD + 8, chipMY + 3)}
+    <text x="${x+PAD+18}" y="${chip2Y+chip2H-4}"
+      style="font:600 8px/1 'Inter',sans-serif;fill:${clr};">${this._esc(cpuLabel)}</text>
+    <!-- RAM chip (right) -->
+    <rect x="${x+PAD+cpuW+chipGap}" y="${chip2Y}" width="${ramW}" height="${chip2H}" rx="4"
+      style="fill:${clr};fill-opacity:0.07;stroke:${clr};stroke-width:0.7;stroke-opacity:0.28;"/>
+    ${icoRam(x + PAD + cpuW + chipGap + 8, chipMY + 3)}
+    <text x="${x+PAD+cpuW+chipGap+18}" y="${chip2Y+chip2H-4}"
+      style="font:600 8px/1 'Inter',sans-serif;fill:${clr};">${this._esc(ramLabel)}</text>` : ''}
+    <!-- OS ghost chip — prompt prefix + nome completo do SO -->
+    ${hasSub3 && osY ? `
+    <rect x="${x+PAD}" y="${osY}" width="${CW}" height="${osH}" rx="4"
+      style="fill:${clr};fill-opacity:0.09;stroke:${clr};stroke-width:0.8;stroke-opacity:0.35;"/>
+    <text x="${x+PAD+6}" y="${osY+osH-4}"
+      style="font:800 9px/1 'Courier New',monospace;fill:${clr};opacity:0.95;">&gt;_</text>
+    <text x="${x+PAD+22}" y="${osY+osH-4}"
+      style="font:500 8.5px/1 'Inter',sans-serif;fill:var(--text-primary);opacity:0.92;">${this._esc(this._t(item.sub3, 24))}</text>` : ''}
+    <!-- IP separator -->
+    <line x1="${x+PAD}" y1="${sep1Y}" x2="${x+W-PAD}" y2="${sep1Y}"
+      style="stroke:var(--border-muted,#3d444d);stroke-width:0.6;stroke-opacity:0.4;stroke-dasharray:4,3;"/>
+    <!-- Private IP: filled dot -->
+    ${item.privIp && privY ? `
+    <circle cx="${x+PAD+5}" cy="${privY-4}" r="4" style="fill:${C.subnet_priv};opacity:0.85;"/>
+    <circle cx="${x+PAD+5}" cy="${privY-4}" r="1.5" style="fill:white;opacity:0.9;"/>
+    <text x="${x+PAD+14}" y="${privY}"
+      style="font:500 9px/1 'Inter',system-ui,sans-serif;fill:var(--text-secondary);">${this._esc(item.privIp)}</text>` : ''}
+    <!-- Public IP: globe icon -->
+    ${hasPub && pubY ? `
+    ${icoGlobe(x + PAD + 5, pubY - 4)}
+    <text x="${x+PAD+14}" y="${pubY}"
+      style="font:500 9px/1 'Inter',system-ui,sans-serif;fill:var(--text-secondary);">${this._esc(item.pubIp)}</text>` : ''}
+    <!-- NSG separator -->
+    ${hasNsg && sep2Y ? `
+    <line x1="${x+PAD}" y1="${sep2Y}" x2="${x+W-PAD}" y2="${sep2Y}"
+      style="stroke:${C.nsg};stroke-width:0.6;stroke-opacity:0.35;stroke-dasharray:3,3;"/>` : ''}
     ${nsgSvg}
   </g>
-  ${dot ? `<circle cx="${x+W-12}" cy="${y+12}" r="4.5" style="fill:${dot};"/>` : ''}
+</g>`;
+  }
+
+
+  // ── DB System card ────────────────────────────────────────────────────────
+  // Console-tile style matching instance card: colored header, shape+edition pill,
+  // CPU+Storage chips side-by-side, AD/FD ghost chip (building icon),
+  // DB schema names as small cylinder pills, footer label.
+  _dbCard(x, y, item) {
+    const { NW: W, NH: H, NR: R, FT, FN } = K;
+    const clr    = C.db;
+    const dot    = this._stClr(item.status);
+    const uid    = `dc${this._uid++}`;
+    const hasSub2 = !!item.sub2;
+    const hasSub3 = !!item.sub3;
+    const hasSub4 = !!item.sub4;
+    const hasSub5 = !!item.sub5;
+    const PAD  = 7;
+    const CW   = W - PAD * 2;
+    const HDR_H = 34;
+
+    // ── Vertical layout ────────────────────────────────────────────────────
+    let cy = y + HDR_H + 4;                        // y+38
+
+    // 1) Shape+Edition pill (full width)
+    const pillY = cy, pillH = 16;
+    cy += pillH + 4;                               // → y+58
+
+    // 2) Spec chips — OCPUs left, Storage right
+    const chip2Y  = hasSub2 ? cy : 0;
+    const chip2H  = 20;
+    const chipGap = 4;
+    const cpuW    = Math.round(CW * 0.44);
+    const storW   = CW - cpuW - chipGap;
+    if (hasSub2) cy += chip2H + 4;                // → y+82
+
+    // 3) AD/FD/version — individual chips in a row
+    const adRowY = hasSub3 ? cy : 0;
+    const adRowH = 14;
+    if (hasSub3) cy += adRowH + 4;                // → y+100
+
+    // 4) License/workload ghost chip (sub5)
+    const sub5Y = hasSub5 ? cy : 0;
+    const sub5H = 14;
+    if (hasSub5) cy += sub5H + 3;                 // → y+117
+
+    // 5) DB names separator + pills
+    const sep1Y   = cy + 3;                        // y+120
+    const dbPillY = hasSub4 ? sep1Y + 7 : 0;      // y+127
+    const dbPillH = 14;
+    if (hasSub4) cy = dbPillY + dbPillH + 4;       // → y+145
+    else         cy = sep1Y + 4;
+
+    // 6) Footer — anchored relative to content (no Math.min)
+    const footerSepY = cy + 5;                     // y+150
+    const footerY    = footerSepY + 11;             // y+161
+
+    // ── Micro-icon helpers ─────────────────────────────────────────────────
+    // IC chip (same as instance card)
+    const icoChip = (cx, icy) =>
+      `<rect x="${cx-4}" y="${icy-4}" width="8" height="8" rx="0.8" style="fill:none;stroke:${clr};stroke-width:1.1;"/>` +
+      `<line x1="${cx-4}" y1="${icy}" x2="${cx+4}" y2="${icy}" style="stroke:${clr};stroke-width:0.5;opacity:0.4;"/>` +
+      `<line x1="${cx}" y1="${icy-4}" x2="${cx}" y2="${icy+4}" style="stroke:${clr};stroke-width:0.5;opacity:0.4;"/>` +
+      `<line x1="${cx-2}" y1="${icy-6}" x2="${cx-2}" y2="${icy-4}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx+2}" y1="${icy-6}" x2="${cx+2}" y2="${icy-4}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx-2}" y1="${icy+4}" x2="${cx-2}" y2="${icy+6}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx+2}" y1="${icy+4}" x2="${cx+2}" y2="${icy+6}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx-6}" y1="${icy-2}" x2="${cx-4}" y2="${icy-2}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx-6}" y1="${icy+2}" x2="${cx-4}" y2="${icy+2}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx+4}" y1="${icy-2}" x2="${cx+6}" y2="${icy-2}" style="stroke:${clr};stroke-width:0.9;"/>` +
+      `<line x1="${cx+4}" y1="${icy+2}" x2="${cx+6}" y2="${icy+2}" style="stroke:${clr};stroke-width:0.9;"/>`;
+
+    // Mini cylinder for storage chip (cx,cy center)
+    const icoCyl = (cx, icy) =>
+      `<ellipse cx="${cx}" cy="${icy-3.5}" rx="5" ry="2" style="fill:none;stroke:${clr};stroke-width:0.9;"/>` +
+      `<rect x="${cx-5}" y="${icy-3.5}" width="10" height="6.5" style="fill:none;stroke:${clr};stroke-width:0.8;"/>` +
+      `<ellipse cx="${cx}" cy="${icy+3}" rx="5" ry="2" style="fill:none;stroke:${clr};stroke-width:0.9;"/>`;
+
+    // Building/datacenter icon for AD row (bx = left edge, by = top edge, h=10)
+    const icoDC = (bx, by) =>
+      `<rect x="${bx}" y="${by}" width="10" height="9" rx="0.5" style="fill:none;stroke:${clr};stroke-width:1;"/>` +
+      `<line x1="${bx}" y1="${by+4}" x2="${bx+10}" y2="${by+4}" style="stroke:${clr};stroke-width:0.5;opacity:0.45;"/>` +
+      `<rect x="${bx+1.5}" y="${by+1}" width="2.5" height="2" rx="0.3" style="fill:${clr};opacity:0.4;"/>` +
+      `<rect x="${bx+6}" y="${by+1}" width="2.5" height="2" rx="0.3" style="fill:${clr};opacity:0.4;"/>` +
+      `<rect x="${bx+1.5}" y="${by+5}" width="2.5" height="2" rx="0.3" style="fill:${clr};opacity:0.4;"/>` +
+      `<rect x="${bx+6}" y="${by+5}" width="2.5" height="2" rx="0.3" style="fill:${clr};opacity:0.4;"/>`;
+
+    // Mini cylinder for DB name pills (inline, 8×8)
+    const icoDbPill = (bx, by) =>
+      `<ellipse cx="${bx+4}" cy="${by+2}" rx="3.5" ry="1.5" style="fill:none;stroke:${clr};stroke-width:0.8;opacity:0.7;"/>` +
+      `<rect x="${bx+0.5}" y="${by+2}" width="7" height="4.5" style="fill:none;stroke:${clr};stroke-width:0.7;opacity:0.6;"/>` +
+      `<ellipse cx="${bx+4}" cy="${by+6.5}" rx="3.5" ry="1.5" style="fill:none;stroke:${clr};stroke-width:0.8;opacity:0.7;"/>`;
+
+    // ── Split sub2 (OCPUs · Storage) ───────────────────────────────────────
+    const sub2Parts = (item.sub2 || '').split('·').map(s => s.trim());
+    const cpuLabel  = sub2Parts[0] || '';
+    const storLabel = sub2Parts[1] || '';
+
+    // ── DB name pills ──────────────────────────────────────────────────────
+    let dbNamesSvg = '';
+    if (hasSub4 && dbPillY) {
+      const names   = (item.sub4 || '').split('·').map(s => s.trim()).filter(Boolean);
+      let bx = x + PAD;
+      names.forEach((n, i) => {
+        if (i >= 3) return;
+        const lbl = this._t(n, 12);
+        const pw  = Math.min(lbl.length * 5.2 + 20, 72);
+        if (bx + pw > x + W - PAD) return;
+        dbNamesSvg +=
+          `<rect x="${bx}" y="${dbPillY}" width="${pw}" height="${dbPillH}" rx="3.5"
+            style="fill:${clr};fill-opacity:0.07;stroke:${clr};stroke-width:0.6;stroke-opacity:0.22;"/>` +
+          icoDbPill(bx + 2, dbPillY + 3) +
+          `<text x="${bx+14}" y="${dbPillY+dbPillH-3}"
+            style="font:500 7.5px/1 'Inter',monospace,sans-serif;fill:${clr};opacity:0.8;">${this._esc(lbl)}</text>`;
+        bx += pw + 4;
+      });
+    }
+
+    const chipMY = chip2Y ? chip2Y + chip2H / 2 + 3 : 0; // +3 alinha visualmente ícone com texto 8px
+
+    // ── AD/FD/version individual chips ────────────────────────────────────
+    const adChipItems = hasSub3
+      ? (item.sub3 || '').split('·').map(s => s.trim()).filter(Boolean)
+      : [];
+    // Chip style per index: more opaque for AD, subtler for version
+    const adChipFill   = [0.10, 0.07, 0.05, 0.05];
+    const adChipStroke = [0.35, 0.25, 0.18, 0.18];
+    let adChipsSvg = '';
+    if (hasSub3 && adRowY) {
+      let acX = x + PAD;
+      adChipItems.forEach((chip, i) => {
+        const pw = Math.max(chip.length * 5.8 + 12, 28);
+        if (acX + pw > x + W - PAD + 2) return;
+        adChipsSvg +=
+          `<rect x="${acX}" y="${adRowY}" width="${pw}" height="${adRowH}" rx="3"
+            style="fill:${clr};fill-opacity:${adChipFill[i]||0.05};stroke:${clr};stroke-width:0.7;stroke-opacity:${adChipStroke[i]||0.18};"/>` +
+          `<text x="${acX+pw/2}" y="${adRowY+adRowH-3}" text-anchor="middle"
+            style="font:600 7.5px/1 'Inter',monospace,sans-serif;fill:${clr};opacity:${i===0?0.9:i===1?0.8:0.7};">${this._esc(chip)}</text>`;
+        acX += pw + 3;
+      });
+    }
+
+    const tooltip = `DB System: ${item.label}` +
+      (item.sub  ? ` | ${item.sub}`  : '') +
+      (item.sub2 ? ` | ${item.sub2}` : '') +
+      (item.sub3 ? ` | ${item.sub3}` : '') +
+      (item.sub4 ? ` | DB: ${item.sub4}` : '') +
+      (item.sub5 ? ` | ${item.sub5}` : '') +
+      (item.status ? ` (${item.status})` : '');
+
+    return `<g>
+  <title>${this._esc(tooltip)}</title>
+  <rect x="${x}" y="${y}" width="${W}" height="${H}" rx="${R}" filter="url(#arch-shadow)"
+    style="fill:var(--bg-card);stroke:${clr};stroke-width:1.4;stroke-opacity:0.3;cursor:default;"/>
+  <rect x="${x}" y="${y+R}" width="4" height="${H-R*2}" style="fill:${clr};opacity:0.8;"/>
+  <rect x="${x+4}" y="${y}" width="${W-4}" height="${HDR_H}" rx="0" style="fill:${clr};fill-opacity:0.13;stroke:none;"/>
+  <rect x="${x}" y="${y}" width="${W}" height="${HDR_H}" rx="${R}" style="fill:${clr};fill-opacity:0.05;stroke:none;"/>
+  <rect x="${x}" y="${y+HDR_H}" width="${W}" height="1" style="fill:${clr};fill-opacity:0.3;"/>
+  <g transform="translate(${x+8},${y+(HDR_H-22)/2+2}) scale(${22/28})" style="color:${clr};">${SVG_ICONS.db}</g>
+  ${dot ? `<circle cx="${x+W-11}" cy="${y+11}" r="5" style="fill:${dot};stroke:var(--bg-card);stroke-width:1.2;"/>` : ''}
+  <defs><clipPath id="${uid}"><rect x="${x+4}" y="${y}" width="${W-5}" height="${H}"/></clipPath></defs>
+  <g clip-path="url(#${uid})">
+    <text x="${x+36}" y="${y+13}" dominant-baseline="middle"
+      style="font:700 ${FN}px/1 'Inter',system-ui,sans-serif;fill:var(--text-primary);">${this._esc(this._t(item.label, 16))}</text>
+    <text x="${x+36}" y="${y+HDR_H-7}"
+      style="font:700 8px/1 'Inter',sans-serif;fill:${clr};opacity:0.8;letter-spacing:.07em;">DB SYSTEM</text>
+    <!-- Shape · Edition pill -->
+    ${item.sub ? `
+    <rect x="${x+PAD}" y="${pillY}" width="${CW}" height="${pillH}" rx="${pillH/2}"
+      style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.8;stroke-opacity:0.40;"/>
+    <text x="${x+PAD+CW/2}" y="${pillY+pillH-4}" text-anchor="middle"
+      style="font:600 8.5px/1 'Inter',monospace,sans-serif;fill:${clr};">${this._esc(this._t(item.sub, 22))}</text>` : ''}
+    <!-- OCPU chip (left) -->
+    ${hasSub2 && chip2Y ? `
+    <rect x="${x+PAD}" y="${chip2Y}" width="${cpuW}" height="${chip2H}" rx="4"
+      style="fill:${clr};fill-opacity:0.10;stroke:${clr};stroke-width:0.7;stroke-opacity:0.38;"/>
+    ${icoChip(x + PAD + 8, chipMY)}
+    <text x="${x+PAD+18}" y="${chip2Y+chip2H-4}"
+      style="font:600 8px/1 'Inter',sans-serif;fill:${clr};">${this._esc(cpuLabel)}</text>
+    <!-- Storage chip (right) -->
+    <rect x="${x+PAD+cpuW+chipGap}" y="${chip2Y}" width="${storW}" height="${chip2H}" rx="4"
+      style="fill:${clr};fill-opacity:0.07;stroke:${clr};stroke-width:0.7;stroke-opacity:0.28;"/>
+    ${icoCyl(x + PAD + cpuW + chipGap + 8, chipMY)}
+    <text x="${x+PAD+cpuW+chipGap+18}" y="${chip2Y+chip2H-4}"
+      style="font:600 8px/1 'Inter',sans-serif;fill:${clr};">${this._esc(storLabel)}</text>` : ''}
+    <!-- AD · FD · version — chips individuais -->
+    ${adChipsSvg}
+    <!-- Licença · Workload ghost chip -->
+    ${hasSub5 && sub5Y ? `
+    <rect x="${x+PAD}" y="${sub5Y}" width="${CW}" height="${sub5H}" rx="4"
+      style="fill:${clr};fill-opacity:0.08;stroke:${clr};stroke-width:0.7;stroke-opacity:0.30;"/>
+    <rect x="${x+PAD}" y="${sub5Y}" width="6" height="${sub5H}" rx="4"
+      style="fill:${clr};fill-opacity:0.20;stroke:none;"/>
+    <rect x="${x+PAD+4}" y="${sub5Y}" width="2" height="${sub5H}"
+      style="fill:${clr};fill-opacity:0.08;stroke:none;"/>
+    <text x="${x+PAD+11}" y="${sub5Y+sub5H-3}"
+      style="font:500 8px/1 'Inter',sans-serif;fill:var(--text-primary);opacity:0.90;">${this._esc(item.sub5)}</text>` : ''}
+    <!-- DB names separator + pills -->
+    ${hasSub4 ? `
+    <line x1="${x+PAD}" y1="${sep1Y}" x2="${x+W-PAD}" y2="${sep1Y}"
+      style="stroke:${clr};stroke-width:0.5;stroke-opacity:0.22;stroke-dasharray:4,3;"/>` : ''}
+    ${dbNamesSvg}
+    <!-- Footer -->
+    <line x1="${x+PAD}" y1="${footerSepY}" x2="${x+W-PAD}" y2="${footerSepY}"
+      style="stroke:${clr};stroke-width:0.4;stroke-opacity:0.18;stroke-dasharray:4,3;"/>
+    <text x="${x+W/2}" y="${footerY}" text-anchor="middle"
+      style="font:600 8px/1 'Inter',sans-serif;fill:var(--text-muted);opacity:0.55;letter-spacing:.06em;">${_i('BANCO DE DADOS', 'DATABASE')}</text>
+  </g>
 </g>`;
   }
 
@@ -1759,6 +2577,7 @@ class OciDiagram {
   // Icon-centered node card
   _nodeCard(x, y, item) {
     if (item.kind === 'instance') return this._instCard(x, y, item);
+    if (item.kind === 'db')       return this._dbCard(x, y, item);
 
     const { NW: W, NH: H, NR: R, ICO_SIZE, FT, FN, FS } = K;
     const clr = C[item.kind] || '#58a6ff';
@@ -1852,45 +2671,102 @@ class OciDiagram {
 
   // Legend panel (top-right corner)
   _renderLegend(x, y) {
-    const { LEGEND_W, LEGEND_PAD, LEGEND_ITEM_H, LEGEND_R, FT, FN } = K;
-    const label = _i('LEGENDA', 'LEGEND');
-    const items = [
-      { color: C.subnet_pub,  label: _i('Sub-rede Pública', 'Public Subnet'),  icon: 'subnet'   },
-      { color: C.subnet_priv, label: _i('Sub-rede Privada', 'Private Subnet'), icon: 'subnet'   },
-      { color: C.instance,    label: 'Compute',                                icon: 'instance' },
-      { color: C.lb,          label: 'Load Balancer',                          icon: 'lb'       },
-      { color: C.drg,         label: 'DRG',                                    icon: 'drg'      },
-      { color: C.igw,         label: _i('Internet GW', 'Internet GW'),         icon: 'igw'      },
-      { color: C.nat,         label: _i('NAT GW', 'NAT GW'),                   icon: 'nat'      },
-      { color: C.sgw,         label: _i('Service GW', 'Service GW'),           icon: 'sgw'      },
-      { color: C.oke,         label: 'OKE',                                    icon: 'oke'      },
-      { color: C.waf,         label: 'WAF',                                    icon: 'waf'      },
-      { color: C.ipsec,       label: 'IPSec VPN',                              icon: 'ipsec'    },
-      { color: C.cpe,         label: 'CPE',                                    icon: 'cpe'      },
-      { color: C.db,          label: 'DB System',                              icon: 'db'       },
-      { color: C.vol,         label: 'Block Volume',                           icon: 'vol'      },
-      { color: C.nsg,         label: 'NSG',                                    icon: 'nsg'      },
+    const { LEGEND_W, LEGEND_PAD, LEGEND_R, FT, FN } = K;
+    const ITEM_H   = 20;
+    const SEC_H    = 17; // section header row height
+    const ICON_SZ  = 14;
+    const ICON_SC  = ICON_SZ / 28;
+    const STRIPE_W = 3;
+    const label    = _i('LEGENDA', 'LEGEND');
+
+    const groups = [
+      {
+        title: _i('Rede', 'Network'),
+        items: [
+          { color: C.subnet_pub,  label: _i('Sub-rede Pública',  'Public Subnet'),  icon: 'subnet'   },
+          { color: C.subnet_priv, label: _i('Sub-rede Privada', 'Private Subnet'),  icon: 'subnet'   },
+        ]
+      },
+      {
+        title: _i('Recursos', 'Resources'),
+        items: [
+          { color: C.instance, label: 'Compute',       icon: 'instance' },
+          { color: C.lb,       label: 'Load Balancer', icon: 'lb'       },
+          { color: C.oke,      label: 'OKE',           icon: 'oke'      },
+          { color: C.waf,      label: 'WAF',           icon: 'waf'      },
+          { color: C.db,       label: 'DB System',     icon: 'db'       },
+          { color: C.vol,      label: 'Block Volume',  icon: 'vol'      },
+          { color: C.nsg,      label: 'NSG',           icon: 'nsg'      },
+        ]
+      },
+      {
+        title: _i('Gateways', 'Gateways'),
+        items: [
+          { color: C.igw, label: _i('Internet GW', 'Internet GW'), icon: 'igw' },
+          { color: C.nat, label: _i('NAT GW', 'NAT GW'),           icon: 'nat' },
+          { color: C.sgw, label: _i('Service GW', 'Service GW'),   icon: 'sgw' },
+          { color: C.drg, label: 'DRG',                            icon: 'drg' },
+          { color: C.lpg, label: 'LPG',                            icon: 'nsg' },
+        ]
+      },
+      {
+        title: _i('Edge / VPN', 'Edge / VPN'),
+        items: [
+          { color: C.ipsec, label: 'IPSec VPN', icon: 'ipsec' },
+          { color: C.cpe,   label: 'CPE',        icon: 'cpe'   },
+        ]
+      },
     ];
-    const ICON_BOX = 14;
-    const ICON_SCALE = ICON_BOX / 28;
-    const h = LEGEND_PAD * 2 + FN + 8 + items.length * LEGEND_ITEM_H;
+
+    // Compute total height
+    let totalRows = 0;
+    groups.forEach(g => { totalRows += g.items.length; });
+    const h = LEGEND_PAD * 2 + FN + 10     // title row
+            + groups.length * (SEC_H + 2)  // section headers + gaps
+            + totalRows * ITEM_H
+            + (groups.length - 1) * 4;     // divider gaps
+
+    // Background card
     this.els.push(
       `<rect x="${x}" y="${y}" width="${LEGEND_W}" height="${h}" rx="${LEGEND_R}" filter="url(#arch-shadow)"
-         style="fill:var(--bg-card);stroke:var(--border);stroke-width:1;opacity:0.92;"/>
-       <text x="${x + LEGEND_PAD}" y="${y + LEGEND_PAD + FN}"
-         style="font:700 ${FN}px/1 'Inter',sans-serif;fill:var(--text-muted);letter-spacing:.08em;">${this._esc(label)}</text>`
+         style="fill:var(--bg-card);stroke:var(--border);stroke-width:1;opacity:0.94;"/>` +
+      `<text x="${x + LEGEND_PAD}" y="${y + LEGEND_PAD + FN}"
+         style="font:700 ${FN}px/1 'Inter',sans-serif;fill:var(--text-muted);letter-spacing:.10em;">${this._esc(label)}</text>` +
+      `<line x1="${x + LEGEND_PAD}" y1="${y + LEGEND_PAD + FN + 4}" x2="${x + LEGEND_W - LEGEND_PAD}" y2="${y + LEGEND_PAD + FN + 4}"
+         style="stroke:var(--border);stroke-width:0.8;stroke-opacity:0.7;"/>`
     );
-    let iy = y + LEGEND_PAD + FN + 8;
-    items.forEach(item => {
-      const cy = iy + LEGEND_ITEM_H / 2;
-      const ix = x + LEGEND_PAD;
-      const iy_icon = cy - ICON_BOX / 2;
+
+    let iy = y + LEGEND_PAD + FN + 10;
+
+    groups.forEach((group, gi) => {
+      // Section label
       this.els.push(
-        `<g transform="translate(${ix},${iy_icon}) scale(${ICON_SCALE})" style="color:${item.color};">${SVG_ICONS[item.icon]}</g>`
+        `<text x="${x + LEGEND_PAD}" y="${iy + FT + 1}"
+           style="font:700 ${FT}px/1 'Inter',sans-serif;fill:var(--text-muted);opacity:0.55;letter-spacing:.07em;text-transform:uppercase;">${this._esc(group.title)}</text>`
       );
-      this.els.push(`<text x="${x + LEGEND_PAD + ICON_BOX + 6}" y="${cy + 4}"
-         style="font:400 ${FT}px/1 'Inter',sans-serif;fill:var(--text-secondary);">${this._esc(item.label)}</text>`);
-      iy += LEGEND_ITEM_H;
+      iy += SEC_H;
+
+      group.items.forEach(item => {
+        const cy      = iy + ITEM_H / 2;
+        const ix      = x + LEGEND_PAD;
+        const iconY   = cy - ICON_SZ / 2;
+        this.els.push(
+          `<rect x="${ix}" y="${iy + 2}" width="${STRIPE_W}" height="${ITEM_H - 4}" rx="1.5" style="fill:${item.color};opacity:0.85;"/>` +
+          `<g transform="translate(${ix + STRIPE_W + 4},${iconY}) scale(${ICON_SC})" style="color:${item.color};">${SVG_ICONS[item.icon]}</g>` +
+          `<text x="${ix + STRIPE_W + 4 + ICON_SZ + 5}" y="${cy + 4}"
+             style="font:400 ${FT}px/1 'Inter',sans-serif;fill:var(--text-secondary);">${this._esc(item.label)}</text>`
+        );
+        iy += ITEM_H;
+      });
+
+      if (gi < groups.length - 1) {
+        iy += 3;
+        this.els.push(
+          `<line x1="${x + LEGEND_PAD}" y1="${iy}" x2="${x + LEGEND_W - LEGEND_PAD}" y2="${iy}"
+             style="stroke:var(--border);stroke-width:0.7;stroke-opacity:0.4;stroke-dasharray:4,3;"/>`
+        );
+        iy += 5;
+      }
     });
   }
 
@@ -1910,10 +2786,19 @@ class OciDiagram {
     const hostName = i.host_name || i.display_name || 'instance';
     const nsgNames = (i.network_security_groups || []).map(n => n.name).filter(Boolean);
     const shape = this._shapeShort(i.shape);
+    // CPU + Memory badge
+    const ocpus = i.ocpus && String(i.ocpus) !== 'N/A' ? String(i.ocpus) : '';
+    const mem   = i.memory && String(i.memory) !== 'N/A' ? String(i.memory) : '';
+    const sub2  = [ocpus ? ocpus + ' vCPUs' : '', mem ? mem + ' GB RAM' : ''].filter(Boolean).join(' · ') || undefined;
+    // OS
+    const osRaw = i.os_name || '';
+    const sub3  = osRaw && osRaw !== 'N/A' ? this._t(osRaw, 22) : undefined;
     return {
       id: hostName, kind: 'instance',
       label: this._t(hostName, 18),
       sub: shape,
+      sub2,
+      sub3,
       privIp: priv || undefined,
       pubIp: pub || undefined,
       status: i.lifecycle_state || i.state,
@@ -1940,17 +2825,54 @@ class OciDiagram {
           .replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
       : '';
     // CPU + storage summary
-    const cpuInfo = db.cpu_core_count ? `${db.cpu_core_count} OCPUs` : '';
+    const cpuInfo  = db.cpu_core_count ? `${db.cpu_core_count} OCPUs` : '';
     const storInfo = db.data_storage_size_in_gbs ? `${db.data_storage_size_in_gbs} GB` : '';
-    const sub = [shape, edition].filter(Boolean).join(' · ');
+    const sub  = [shape, edition].filter(Boolean).join(' · ');
     const sub2 = [cpuInfo, storInfo].filter(Boolean).join(' · ')
       || this._dbNames(db).slice(0, 2).join(', ')
       || '';
+    // Availability Domain — shorten e.g. "vbDN:BR-SAOPAULO-1-AD-1" → "AD-1"
+    const adRaw = db.availability_domain || '';
+    const adShort = adRaw ? (adRaw.match(/AD-\d+$/i)?.[0] || adRaw.split(':').pop()?.split('-').slice(-2).join('-') || adRaw) : '';
+    // Fault Domains
+    const fds = (db.fault_domains || []).filter(Boolean);
+    const fdShort = fds.length ? fds.map(f => f.replace(/^FAULT.DOMAIN.?/i, 'FD-')).join(', ') : '';
+    // DB version (short)
+    const ver = db.version && db.version !== 'N/A' ? db.version.split('.').slice(0,2).join('.') : '';
+    // Node count
+    const nodeCount = db.node_count > 1 ? `${db.node_count} nós` : '';
+    const sub3 = [adShort, fdShort, ver ? `v${ver}` : '', nodeCount].filter(Boolean).join(' · ') || undefined;
+    const dbNamesList = this._dbNames(db).slice(0, 3);
+    const sub4 = dbNamesList.length ? dbNamesList.join(' · ') : undefined;
+    // License model
+    const licRaw = db.license_model || '';
+    const licLabel = licRaw === 'LICENSE_INCLUDED'   ? _i('Lic. Inclusa', 'License Incl.')
+                   : licRaw === 'BRING_YOUR_OWN_LICENSE' ? 'BYOL'
+                   : '';
+    // DB workload from first database
+    let wkl = '';
+    outerWkl: for (const home of (db.db_homes || [])) {
+      for (const d of (home.databases || [])) {
+        if (d.db_workload && d.db_workload !== 'N/A') { wkl = d.db_workload; break outerWkl; }
+      }
+    }
+    // Node count label (for RAC)
+    const nodeLabel = db.node_count > 1 ? `${db.node_count} nodes` : '';
+    // Hostname (short)
+    const hostLabel = db.hostname && db.hostname !== 'N/A' ? db.hostname.split('.')[0] : '';
+    const sub5Parts = [licLabel, wkl, nodeLabel].filter(Boolean);
+    const sub5 = sub5Parts.length ? sub5Parts.join(' · ') : undefined;
+    // sub6: hostname if useful
+    const sub6 = hostLabel || undefined;
     return {
       id: db.id || db.display_name, kind: 'db',
       label: this._t(db.display_name, 18),
       sub: sub || (db.db_workload || ''),
       sub2: sub2 || undefined,
+      sub3,
+      sub4,
+      sub5,
+      sub6,
       status: db.lifecycle_state
     };
   }
@@ -2020,7 +2942,7 @@ class OciDiagram {
         const nameMatch = rule.target.match(/^(.+?)\s*\(.*\)$/);
         const displayName = nameMatch ? nameMatch[1].trim() : rule.target;
         seen.set(rule.target, {
-          key: 'gw_' + rule.target.replace(/[^a-zA-Z0-9]/g, '_'),
+          key: 'gw_' + (vcn.id || '').slice(-8) + '_' + rule.target.replace(/[^a-zA-Z0-9]/g, '_'),
           type, displayName,
           color: this._gwColor(type),
           fullTarget: rule.target,
@@ -2040,9 +2962,10 @@ class OciDiagram {
         if (type === 'DRG' || type === 'LPG') return;
         conns.push({
           subnetId: s.subnet.id,
-          gwKey: 'gw_' + rule.target.replace(/[^a-zA-Z0-9]/g, '_'),
+          gwKey: 'gw_' + (vcn.id || '').slice(-8) + '_' + rule.target.replace(/[^a-zA-Z0-9]/g, '_'),
           destination: rule.destination,
           type,
+          vcnId: vcn.id,
         });
       });
     });
@@ -2096,6 +3019,25 @@ class OciDiagram {
     }
   }
   _shapeShort(s) { if (!s) return ''; const p = s.split('.'); return p.length >= 3 ? p.slice(-2).join('.') : s; }
+
+  // Shorten OCI service CIDR names for display on arrows.
+  // IP CIDRs (like "10.x.x.x/y", "0.0.0.0/0") are returned unchanged.
+  // OCI service gateway CIDRs (like "all-iad-services-in-oracle-services-network") get
+  // a human-readable form. The full original text is preserved in tooltips.
+  _shortenDest(dest) {
+    if (!dest) return '';
+    // IP CIDR patterns — keep as-is
+    if (/^\d{1,3}\.\d{1,3}\./.test(dest) || dest === '0.0.0.0/0' || dest === '::/0') return dest;
+    // OCI service CIDR names
+    if (/^all-.+-services-in-oracle-services-network$/i.test(dest)) return _i('Todos Serv. OCI', 'All OCI Services');
+    if (/^oci-.+-objectstorage$/i.test(dest)) return _i('Obj. Storage', 'Obj. Storage');
+    if (/^all-.+-services$/i.test(dest)) return _i('Todos os Serviços', 'All Services');
+    // Generic: strip region token and make it readable
+    // e.g. "oci-iad-somethinglong" → keep as is if short enough, else abbreviate
+    if (dest.length > 24) return dest.slice(0, 22) + '\u2026';
+    return dest;
+  }
+
   _t(s, n) { s = s ? String(s) : ''; return s.length > n ? s.slice(0,n-1)+'\u2026' : s; }
   _esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
 }
