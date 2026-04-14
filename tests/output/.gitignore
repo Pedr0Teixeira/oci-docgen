@@ -1,0 +1,3 @@
+# Generated test documents — excluded from version control.
+# Run tests/validate_all.py to regenerate them locally.
+*.docx
