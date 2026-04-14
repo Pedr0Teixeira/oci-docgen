@@ -61,6 +61,7 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 - [Swagger UI](#swagger-ui)
 - [SSL/TLS Reference](#ssltls-reference)
 - [Engineering Notes](#engineering-notes)
+- [Testing & Validation](#testing--validation)
 - [Contributing](#contributing)
 
 ---
@@ -495,6 +496,9 @@ oci-docgen/
 │   └── locales/
 │       ├── pt.json          # PT-BR translations
 │       └── en.json          # EN translations
+├── tests/
+│   ├── validate_all.py      # Comprehensive automated validation (no OCI credentials needed)
+│   └── output/              # Generated .docx files for manual inspection (gitignored)
 ├── docker-compose.yml
 ├── nginx.conf               # Default HTTP config (used inside the frontend container)
 ├── nginx.https.conf         # HTTPS template — copy over nginx.conf to enable TLS
@@ -1584,21 +1588,135 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 
 ---
 
+## Testing & Validation
+
+OCI DocGen ships with a comprehensive automated validation script — **no OCI credentials, no live tenancy required**. All data is mocked.
+
+### Quick start
+
+```bash
+# From the repo root — requires Docker to be running with the stack up
+bash tests/run_validation.sh
+```
+
+That single command:
+1. Copies the validation script and frontend assets into the running API container.
+2. Runs all checks inside the container (same Python environment as production).
+3. Copies the generated `.docx` files back to `tests/output/` for manual inspection.
+4. Prints a pass/fail summary.
+
+> **Prerequisite:** The Docker stack must already be running (`docker compose up -d`).  
+> The script will tell you if the API container is not up.
+
+---
+
+### What is validated (76 checks)
+
+| Group | Checks | What is verified |
+| :---- | -----: | :--------------- |
+| **Schema instantiation** | 41 | Every Pydantic model in `schemas.py` (`InfrastructureData` and all nested models) instantiates without error using rich mock data that covers every field. |
+| **Document generation** | 10 | `generate_documentation()` is called for all 5 `doc_type` × 2 `lang` combinations. Each run must produce a non-empty `.docx` (> 1 KB). |
+| **Locale completeness** | 6 | Every `t('key')` call found in `app.js` and `diagram.js` must exist in both `en.json` and `pt.json`. Dynamic prefixes like `t('ann.type.' + variable)` are automatically excluded. |
+| **Summary title keys** | 10 | All `summary.title.*` keys used by the Web Summary header (`full_infra`, `new_host`, `k8s`, `waf`, `database`) must be present in both locales and contain the `{name}` placeholder. |
+| **DOC_STRINGS parity** | 2 | The embedded `DOC_STRINGS` bilingual table in `doc_generator.py` must define the exact same set of keys in PT and EN. |
+
+---
+
+### Generated documents — manual inspection
+
+After a successful run, `tests/output/` contains one `.docx` per doc type and language:
+
+```
+tests/output/
+├── doc_database_en.docx       ← DB Systems: nodes, homes, backups, Data Guard (EN)
+├── doc_database_pt.docx       ← DB Systems: nodes, homes, backups, Data Guard (PT)
+├── doc_full_infra_en.docx     ← Complete infra: instances, VCN, LB, VPN, OKE, WAF (EN)
+├── doc_full_infra_pt.docx     ← Complete infra: instances, VCN, LB, VPN, OKE, WAF (PT)
+├── doc_kubernetes_en.docx     ← OKE clusters and node pools (EN)
+├── doc_kubernetes_pt.docx     ← OKE clusters and node pools (PT)
+├── doc_new_host_en.docx       ← New host: shape, volumes, OS, network rules (EN)
+├── doc_new_host_pt.docx       ← New host: shape, volumes, OS, network rules (PT)
+├── doc_waf_report_en.docx     ← WAF policies, firewalls, LB binding, VCN topology (EN)
+└── doc_waf_report_pt.docx     ← WAF policies, firewalls, LB binding, VCN topology (PT)
+```
+
+Open them in **Microsoft Word** or **LibreOffice** to visually inspect formatting, section layout, bilingual strings, and table rendering.
+
+> These files are **excluded from version control** (`.gitignore` inside `tests/output/`). Every run regenerates them from scratch.
+
+---
+
+### Running manually (without the helper script)
+
+If you need to run individual steps or debug a specific failure:
+
+**Inside the Docker container (step by step):**
+
+```bash
+# 1. Sync files into the container
+docker compose exec api mkdir -p /app/frontend_assets/locales /app/frontend_assets/js
+docker compose cp tests/validate_all.py          api:/app/validate_all.py
+docker compose cp frontend/locales/en.json       api:/app/frontend_assets/locales/en.json
+docker compose cp frontend/locales/pt.json       api:/app/frontend_assets/locales/pt.json
+docker compose cp frontend/js/app.js             api:/app/frontend_assets/js/app.js
+docker compose cp frontend/js/diagram.js         api:/app/frontend_assets/js/diagram.js
+
+# 2. Run the validation
+docker compose exec api python /app/validate_all.py
+
+# 3. Retrieve the generated documents
+docker compose cp api:/app/test_output/. ./tests/output/
+```
+
+**Locally (requires backend dependencies):**
+
+```bash
+# From the repo root
+pip install -r backend/requirements.txt
+python tests/validate_all.py
+# Documents are saved to tests/output/
+```
+
+---
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+| :------ | :----------- | :-- |
+| `API container is not running` | Stack is not up | `docker compose up -d` |
+| `Cannot load locale files` | Frontend assets not synced into container | Re-run `bash tests/run_validation.sh` |
+| `doc_type='...' lang='...' — File too small` | `generate_documentation()` crashed silently | Run step-by-step (manual mode above) to see the traceback |
+| `en.json missing key: 'some.key'` | New `t('key')` added to JS but not to locales | Add the key to `frontend/locales/en.json` and `pt.json` |
+| `Key only in PT / Key only in EN` | `DOC_STRINGS` PT and EN are out of sync | Add the missing key to the other language block in `doc_generator.py` |
+
+---
+
 ## Contributing
 
-1. Fork the repository
-2. Create a branch following the naming convention below
-3. Commit using [Conventional Commits](https://www.conventionalcommits.org/) prefixes
-4. Push and open a Pull Request targeting `develop`
+### Workflow
+
+This project uses a two-branch integration model with branch protection on `main`:
+
+```
+feature/*, fix/*, refactor/* ──PR──▶ develop ──PR──▶ main
+hotfix/* ──────────────────────────────────────────▶ main (then synced to develop)
+```
+
+1. Fork the repository (external contributors) or create a branch from `develop` (team).
+2. Follow the branch naming convention below.
+3. Commit using [Conventional Commits](https://www.conventionalcommits.org/) prefixes.
+4. Push and open a Pull Request targeting **`develop`**.
+5. Once the `develop` PR is merged and tested, open a second PR from `develop` → `main` to release.
+6. Hotfixes that need to go directly to production target `main` and must be back-merged into `develop` immediately after.
 
 ### Branch naming
 
-| Type      | Pattern                    | When to use                                      |
-| :-------- | :------------------------- | :----------------------------------------------- |
-| Feature   | `feature/short-description` | New functionality                                |
-| Fix       | `fix/short-description`     | Bug fix that goes through the normal PR flow     |
-| Hotfix    | `hotfix/short-description`  | Urgent fix applied directly to `main` and synced to `develop` |
-| Refactor  | `refactor/short-description`| Code cleanup with no functional change           |
+| Type      | Pattern                     | Target branch | When to use                                          |
+| :-------- | :-------------------------- | :------------ | :--------------------------------------------------- |
+| Feature   | `feature/short-description` | `develop`     | New functionality                                    |
+| Fix       | `fix/short-description`     | `develop`     | Bug fix going through the normal PR flow             |
+| Hotfix    | `hotfix/short-description`  | `main`        | Urgent production fix — sync to `develop` right after |
+| Refactor  | `refactor/short-description`| `develop`     | Code cleanup with no functional change               |
 
 ### Commit prefixes
 
@@ -1611,6 +1729,16 @@ docs:     documentation only
 style:    formatting, no logic change
 chore:    tooling, deps, CI
 ```
+
+### Before opening a PR
+
+Run the validation script to confirm all checks pass:
+
+```bash
+python tests/validate_all.py
+```
+
+All 76 checks must pass. See [Testing & Validation](#testing--validation) for details.
 
 ---
 
