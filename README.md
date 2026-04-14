@@ -100,7 +100,7 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 | **Full Infrastructure** | `full_infra` | Complete report: instances, volumes, VCN, load balancers, certificates, WAF, DRG, VPN, OKE.      |
 | **Kubernetes (OKE)**    | `kubernetes` | OKE clusters, node pools, networking, and API endpoints.                                         |
 | **WAF Report**          | `waf_report` | WAF policies, firewalls, LB binding, certificates (full lifecycle), and associated VCN topology. |
-| **Database (DBaaS)**    | `database`   | Oracle DB Systems including DB Nodes, DB Homes, Databases, connection strings, and backup configuration. Backup destination (Object Storage, NFS, Recovery Appliance) is inferred from backup history when the SDK does not populate it directly. |
+| **Database (DBaaS)**    | `database`   | Oracle DB Systems with full hierarchy: DB Nodes (private IP via VNIC resolution), DB Homes, Databases (CDB/PDB), connection strings, backup configuration, RMAN backup history, and Data Guard associations (role, peer system, protection mode, transport type, apply lag). Backup destination is inferred from backup history when the SDK does not expose it directly. |
 
 > **Multi-compartment support (Full Infrastructure):** The `full_infra` mode supports selecting multiple compartments in a single run. Resources are aggregated and deduplicated across compartments, and the generated document includes a multi-compartment summary followed by per-compartment sections.
 
@@ -129,12 +129,13 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 |                    | IPSec VPN         | Tunnels, Phase 1/2, IKE, BGP, Oracle compliance validation, compartment |
 | **Containers**     | OKE Clusters      | Kubernetes version, VCN, endpoint visibility, LB subnet        |
 |                    | Node Pools        | Shape, OCPU/memory, OS, node count, boot volume, subnet        |
-| **Database**       | DB Systems        | Shape, edition, storage, license model, lifecycle state, compartment |
-|                    | DB Nodes          | Hostname, lifecycle state, fault domain                         |
-|                    | DB Homes          | Database version, patch level                                   |
-|                    | Databases (CDB/PDB) | Name, connection strings, character set, backup configuration |
-|                    | Backup Config     | Auto-backup, destination type (Object Storage / NFS / Recovery Appliance), retention period, recovery window. Destination inferred from backup history when not reported by the SDK. |
-|                    | Backup History    | Per-database RMAN backup list with state, type, destination, timestamps, and size |
+| **Database**       | DB Systems        | Shape, edition, CPU cores, memory, storage, license model, availability domain, fault domains, lifecycle state, VCN/subnet resolution, compartment |
+|                    | DB Nodes          | Hostname, private IP (resolved via VNIC), lifecycle state, fault domain, software storage size |
+|                    | DB Homes          | Display name, database version, lifecycle state, home location, creation timestamp |
+|                    | Databases (CDB/PDB) | DB name, unique name, PDB name, SID prefix, is-CDB flag, workload type, character sets, connection strings, last backup timestamp, KMS key reference |
+|                    | Backup Config     | Auto-backup flag, recovery window, backup window, full backup window/day, destination type (Object Storage / NFS / Recovery Appliance / DBRS). Destination inferred from backup history when the SDK does not populate `backup_destination_details` directly. |
+|                    | Backup History    | Per-database RMAN backup list with state, type, destination type, start/end timestamps, and size in GB |
+|                    | Data Guard        | Role (PRIMARY / STANDBY), peer role, peer database and DB System OCIDs, protection mode, transport type, apply lag and rate, lifecycle state |
 
 ---
 
@@ -1362,6 +1363,7 @@ allow dynamic-group 'oci-docgen-dg' to read load-balancers in tenancy
 allow dynamic-group 'oci-docgen-dg' to read cluster-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read waf-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read leaf-certificate-family in tenancy
+allow dynamic-group 'oci-docgen-dg' to read database-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to use network-security-groups in tenancy where any {
   request.permission='NETWORK_SECURITY_GROUP_LIST_SECURITY_RULES',
   request.permission='NETWORK_SECURITY_GROUP_LIST_MEMBERS'
@@ -1433,6 +1435,8 @@ flowchart LR
 | OKE Clusters      | `cluster-family`          | Yes          | Required for kubernetes doc type                                |
 | DRG / CPE / IPSec | `virtual-network-family`  | Yes          | All use VirtualNetworkClient; covered by the same policy as VCN |
 | Volumes           | `volume-family`           | Yes          | Required for storage section                                    |
+| DB Systems        | `database-family`         | Yes          | Required for database doc type and full infrastructure          |
+| DB Nodes (VNICs)  | `virtual-network-family`  | No           | Private IP resolution via `GetVnic`; falls back to `null` if missing |
 
 ---
 
@@ -1465,7 +1469,7 @@ All endpoints are prefixed with `/api`. Authentication uses a Bearer token sent 
 | GET    | `/profiles`                         | Optional      | Tenancy profiles visible to this user, including inactive (marked `is_active: false`)                                                                               |
 | GET    | `/{region}/compartments`            | —             | List compartments (via selected profile)                                                                                                                            |
 | GET    | `/{region}/instances/{compartment}` | —             | List instances for New Host mode                                                                                                                                    |
-| POST   | `/start-collection`                 | **Partial**   | `new_host` — no auth required. `full_infra`, `waf_report`, `kubernetes` — Bearer token mandatory (HTTP 401 if absent). Returns HTTP 403 if the profile is inactive. |
+| POST   | `/start-collection`                 | **Partial**   | `new_host` — no auth required. All other types (`full_infra`, `waf_report`, `kubernetes`, `database`) — Bearer token mandatory (HTTP 401 if absent). Returns HTTP 403 if the profile is inactive. |
 | GET    | `/collection-status/{task_id}`      | —             | Poll collection progress                                                                                                                                            |
 | POST   | `/generate-document`                | Optional      | Render and download `.docx`                                                                                                                                         |
 
@@ -1629,6 +1633,9 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 - **Certificate version attribute naming:** `list_certificates` exposes `.current_version_summary`; `get_certificate` exposes `.current_version` — different names for the same concept. Handled in `_get_compartment_certificates`.
 - **WAF backward compatibility:** `WafPolicyData.integration` holds the first firewall integration; `WafPolicyData.integrations` holds the full list. Both fields are maintained to avoid breaking existing flows.
 - **DB backup config inference:** The OCI SDK does not populate `backup_destination_details` when the database uses the default Oracle-managed Object Storage destination. The connector detects this case (`auto_backup_enabled=True` + empty details list) and sets `OBJECT_STORE` explicitly. When `db_backup_config` is `None` entirely (IAM restriction on the Database object), the connector falls back to `list_backups` — each backup entry always carries `backup_destination_type` regardless of IAM — and reconstructs the config from the first entry found.
+- **DB collection hierarchy:** The `_get_db_systems()` function collects data top-down in a single pass: `list_db_systems` → per system `get_db_system` (richer than the list summary) → `list_db_nodes` + `list_db_homes` in parallel → per home `list_databases` → per database `list_backups` + `list_data_guard_associations`. This structure maps directly to the nested Pydantic models: `DbSystemData → DbNodeData / DbHomeData → DatabaseData → DbBackupData / DataGuardAssociationData`.
+- **DB Node private IP resolution:** `list_db_nodes` does not return the node's private IP directly. The connector calls `virtual_network_client.get_vnic(node.vnic_id)` for each node to resolve the IP. If the VNIC call fails (e.g., missing `virtual-network-family` policy), the `private_ip` field is left as `None` and the document renders it as `N/A`.
+- **Data Guard rendering:** Each `DataGuardAssociationData` entry carries both sides of the association (role, peer role, peer DB system OCID). The document renders a per-database Data Guard table only when associations exist; if none are found, the section is omitted entirely.
 
 **Document generation**
 
@@ -1643,7 +1650,7 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 
 - **Fernet key derivation:** The `SECRET_KEY` env variable is SHA-256 hashed and base64url-encoded to produce a valid 32-byte Fernet key, regardless of the original key length.
 - **Profile active state enforcement (dual-layer):** At the API layer, `/api/start-collection` validates `is_active` before dispatching any Celery task and returns HTTP 403 if the profile is inactive. At the frontend layer, inactive profiles are shown as locked items and wizard steps are disabled, preventing the request from being formed in the first place. Both layers are required: the API guard protects against direct API calls and stale browser state; the UI guard provides immediate feedback.
-- **Collection auth enforcement (dual-layer):** `POST /api/start-collection` requires a valid Bearer token for `full_infra`, `waf_report`, and `kubernetes` collection types — the three modes that perform a full OCI compartment scan and return sensitive infrastructure data. `new_host` remains accessible without authentication. At the API layer (`main.py`), `_optional_user()` is called before the Celery task is dispatched and raises HTTP 401 if no valid token is present. At the frontend layer, `app.js` always includes the `Authorization: Bearer <token>` header via `getAuthHeaders()` on every `/start-collection` request; a 401 response triggers a toast notification and redirects the user to the login screen. Both guards are required: the API guard protects against direct API calls and automation tools; the frontend guard ensures a clean UX on session expiry.
+- **Collection auth enforcement (dual-layer):** `POST /api/start-collection` requires a valid Bearer token for all collection types except `new_host` — that is, `full_infra`, `waf_report`, `kubernetes`, and `database`. These are the four modes that perform a full OCI compartment scan and return sensitive infrastructure data. `new_host` remains accessible without authentication. At the API layer (`main.py`), `_optional_user()` is called before the Celery task is dispatched and raises HTTP 401 if no valid token is present. At the frontend layer, `app.js` always includes the `Authorization: Bearer <token>` header via `getAuthHeaders()` on every `/start-collection` request; a 401 response triggers a toast notification and redirects the user to the login screen. Both guards are required: the API guard protects against direct API calls and automation tools; the frontend guard ensures a clean UX on session expiry.
 - **Permanent superadmin protection (dual-layer):** The built-in `admin` account cannot be deleted and its role cannot be downgraded — not even by itself. At the API layer, `PATCH /api/admin/users/{id}/role` checks the target username before applying any change and returns HTTP 400 if the target is `admin`. At the frontend layer, the role toggle for that row is rendered as permanently disabled with `pointer-events: none` and a tooltip explaining the restriction.
 
 **Frontend**
