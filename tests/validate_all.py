@@ -5,21 +5,25 @@ validate_all.py — OCI DocGen Comprehensive Automated Validation
 Tests:
   1. Backend doc generation for every doc_type (full_infra, database, kubernetes,
      waf_report, new_host) in both languages (pt / en) with rich mock data.
+     Generated .docx files are saved to tests/output/ for manual inspection.
   2. Frontend locale completeness: extracts every t('key') call from app.js and
      confirms each key exists in both en.json and pt.json.
   3. Summary title i18n: verifies the summary.title.* keys exist for every doc type
      that the frontend can display.
 
-Usage (from repo root or tests/):
+Usage (from repo root):
   python tests/validate_all.py
 
 No OCI credentials required — all data is mocked.
+
+Generated documents (manual inspection):
+  tests/output/doc_<doc_type>_<lang>.docx  — one file per doc_type × language
 """
 
-import io
 import json
 import os
 import re
+import shutil
 import sys
 import traceback
 
@@ -41,6 +45,16 @@ if _INSIDE_CONTAINER:
     FRONTEND_DIR = "/app/frontend_assets"
 
 sys.path.insert(0, BACKEND_DIR)
+
+# Output directory — generated .docx files land here for manual inspection.
+# Inside the container the script lives at /app/validate_all.py so output goes
+# to /app/test_output to remain accessible via `docker compose cp`.
+if _INSIDE_CONTAINER:
+    OUTPUT_DIR = "/app/test_output"
+else:
+    OUTPUT_DIR = os.path.join(SCRIPT_DIR, "output")
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Colour helpers
@@ -616,6 +630,7 @@ def test_doc_generation():
 
     doc_types = ["full_infra", "database", "kubernetes", "waf_report", "new_host"]
     languages = ["pt", "en"]
+    saved_files = []
 
     for doc_type in doc_types:
         for lang in languages:
@@ -630,6 +645,11 @@ def test_doc_generation():
                 )
                 # generate_documentation returns the output file path (str)
                 if result and os.path.isfile(result) and os.path.getsize(result) > 1000:
+                    # Copy to output dir with a predictable name for manual review
+                    dest_name = f"doc_{doc_type}_{lang}.docx"
+                    dest_path = os.path.join(OUTPUT_DIR, dest_name)
+                    shutil.copy2(result, dest_path)
+                    saved_files.append(dest_path)
                     record("doc_generation", label, True)
                 elif result and isinstance(result, str) and not os.path.isfile(result):
                     record("doc_generation", label, False,
@@ -642,6 +662,11 @@ def test_doc_generation():
                 print(f"    {RED}Traceback:{RESET}")
                 for line in traceback.format_exc().splitlines():
                     print(f"      {line}")
+
+    if saved_files:
+        print(f"\n  {CYAN}Generated documents saved for manual inspection:{RESET}")
+        for f in saved_files:
+            print(f"    {f}")
 
 
 # ===========================================================================
@@ -928,6 +953,17 @@ def main():
                 print(f"    {RED}✗{RESET} [{r['group']}] {r['name']}" +
                       (f"\n       → {r['detail']}" if r["detail"] else ""))
 
+    # Show where generated docs are
+    generated = [
+        os.path.join(OUTPUT_DIR, f)
+        for f in sorted(os.listdir(OUTPUT_DIR))
+        if f.endswith(".docx")
+    ]
+    if generated:
+        print(f"\n  {CYAN}Manual validation — generated documents:{RESET}")
+        for f in generated:
+            size_kb = os.path.getsize(f) // 1024
+            print(f"    {BOLD}{os.path.basename(f)}{RESET}  ({size_kb} KB)  →  {f}")
     print()
     sys.exit(0 if failed == 0 else 1)
 
