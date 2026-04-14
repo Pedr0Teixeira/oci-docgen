@@ -144,9 +144,9 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 
 ```mermaid
 flowchart LR
-  Browser(["🌐 Browser\nSPA · Bilingual · RBAC-aware"])
+  Browser(["Browser\nSPA · Bilingual · RBAC-aware"])
 
-  subgraph docker["🐳 Docker Network"]
+  subgraph docker["Docker Network"]
     subgraph fe["frontend · nginx:alpine"]
       Nginx["Nginx\nStatic files · /api proxy"]
     end
@@ -163,7 +163,7 @@ flowchart LR
     Redis[("Redis 7\nBroker · Results")]
   end
 
-  OCI(["☁️ Oracle Cloud\nInfrastructure API"])
+  OCI(["Oracle Cloud\nInfrastructure API"])
 
   Browser   -->|"HTTPS"| Nginx
   Nginx     -->|"proxy_pass /api"| FastAPI
@@ -197,11 +197,11 @@ flowchart LR
 ```mermaid
 sequenceDiagram
   autonumber
-  actor B as 🌐 Browser
+  actor B as Browser
   participant A as FastAPI
   participant R as Redis
   participant C as Celery Worker
-  participant O as ☁️ OCI API
+  participant O as OCI API
 
   B->>+A: POST /api/start-collection<br/>{doc_type, region, compartment, profile_id}
   A->>A: Validate profile · is_active
@@ -244,9 +244,9 @@ Admins create **Tenancy Profiles** — named credential sets (OCI API Key or Ins
 
 ```mermaid
 flowchart LR
-  subgraph users["👥 Users"]
-    Admin(["👤 Admin"])
-    Regular(["👤 Regular User"])
+  subgraph users["Users"]
+    Admin(["Admin"])
+    Regular(["Regular User"])
   end
 
   subgraph vis["Visibility Filter\n(regular users only)"]
@@ -257,14 +257,14 @@ flowchart LR
     V_admin["admin_only"]
   end
 
-  subgraph active["✅ Active Profiles"]
+  subgraph active["Active Profiles"]
     direction TB
     P1["Prod-Tenancy\nadmin_only"]
     P2["Demo-Tenancy\nall_users"]
     P3["Client-A\nby_group"]
   end
 
-  subgraph inactive["🔒 Inactive Profiles"]
+  subgraph inactive["Inactive Profiles"]
     P4["Client-B\nby_user · inactive"]
   end
 
@@ -329,13 +329,13 @@ stateDiagram-v2
 
   state Active {
     [*] --> selectable
-    selectable : ✅ Selectable in generator
+    selectable : Selectable in generator
     note right of selectable : Usable for OCI collection
   }
 
   state Inactive {
     [*] --> locked
-    locked : 🔒 Visible but locked in UI
+    locked : Visible but locked in UI
     note right of locked : HTTP 403 if called directly
   }
 ```
@@ -355,12 +355,12 @@ The generator is a sequential wizard. Steps 2–4 (Region, Document Type, Compar
 
 ```mermaid
 flowchart LR
-  S1["① Tenancy Profile"]
-  S2["② Region"]
-  S3["③ Document Type"]
-  S4["④ Compartment"]
-  BTN(["🔍 Buscar Dados da Infraestrutura"])
-  LOCK["⛔ Steps 2–4 + button\ndisabled"]
+  S1["Step 1: Tenancy Profile"]
+  S2["Step 2: Region"]
+  S3["Step 3: Document Type"]
+  S4["Step 4: Compartment"]
+  BTN(["Buscar Dados da Infraestrutura"])
+  LOCK["Steps 2-4 + button\ndisabled"]
 
   S1 -->|"active profile ✓"| S2
   S2 --> S3
@@ -390,7 +390,7 @@ flowchart LR
 ```mermaid
 sequenceDiagram
   autonumber
-  actor B as 🌐 Browser
+  actor B as Browser
   participant A as FastAPI
   participant DB as SQLite
 
@@ -942,9 +942,9 @@ The solution is the **DNS-01 challenge**: instead of serving a file over HTTP, C
 ```mermaid
 sequenceDiagram
   autonumber
-  participant C as 🤖 Certbot
-  participant D as 🌐 DNS Provider
-  participant L as 🔒 Let's Encrypt
+  participant C as Certbot
+  participant D as DNS Provider
+  participant L as Let's Encrypt
 
   rect rgb(20, 40, 80)
     Note over C,D: DNS-01 Challenge setup
@@ -956,7 +956,7 @@ sequenceDiagram
     Note over D,L: Ownership verification
     L->>+D: Validate _acme-challenge TXT
     D-->>-L: TXT record confirmed ✓
-    L-->>C: 🎉 Certificate issued
+    L-->>C: Certificate issued
   end
 
   rect rgb(60, 30, 10)
@@ -1380,13 +1380,13 @@ When a collection task fails due to a missing IAM policy — or any other condit
 
 ```mermaid
 flowchart LR
-  OCI(["☁️ OCI SDK Call"]) --> B{"ServiceError?"}
+  OCI(["OCI SDK Call"]) --> B{"ServiceError?"}
 
-  B -->|"No"| C["✅ Process data normally"]
+  B -->|"No"| C["Process data normally"]
   B -->|"Yes"| D{"status=404\nNotAuthorizedOrNotFound?"}
 
   D -->|"No"| E["Re-raise\noriginal exception"]
-  D -->|"Yes"| F["⚠️ PermissionError\n_iam_error_msg(resource_key)"]
+  D -->|"Yes"| F["PermissionError\n_iam_error_msg(resource_key)"]
 
   subgraph celery["Celery Worker"]
     F --> H["Propagates freely\nwaf_report · full_infra · new_host"]
@@ -1402,8 +1402,8 @@ flowchart LR
 
   O --> P{"error_type?"}
   P -->|"IAM_PERMISSION"| Q["Split error by newline"]
-  Q --> R["🔴 showToast\nintro + code block\nduration=0"]
-  P -->|"other"| S["🔴 showToast\ngeneric server error"]
+  Q --> R["showToast\nintro + code block\nduration=0"]
+  P -->|"other"| S["showToast\ngeneric server error"]
 
   E --> T["Celery default\nfailure handler"]
   T --> S
