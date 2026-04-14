@@ -1695,12 +1695,42 @@ python tests/validate_all.py
 
 ### Workflow
 
-This project uses a two-branch integration model with branch protection on `main`:
+This project uses a two-branch integration model. `develop` is the integration branch; `main` is the release branch.
 
+```mermaid
+gitGraph
+   commit id: "initial"
+   branch develop
+   checkout develop
+   commit id: " "
+   branch "feature/example"
+   checkout "feature/example"
+   commit id: "feat: work"
+   commit id: "feat: tests"
+   checkout develop
+   merge "feature/example" tag: "PR + CI ✓"
+   checkout main
+   merge develop tag: "release PR + CI ✓"
+   branch "hotfix/urgent"
+   checkout "hotfix/urgent"
+   commit id: "hotfix: patch"
+   checkout main
+   merge "hotfix/urgent" tag: "PR + CI ✓"
+   checkout develop
+   merge main tag: "back-merge"
 ```
-feature/*, fix/*, refactor/* ──PR──▶ develop ──PR──▶ main
-hotfix/* ──────────────────────────────────────────▶ main (then synced to develop)
-```
+
+**CI checks run on every PR** (both `develop` and `main` targets):
+
+| Check | Tool |
+| :---- | :--- |
+| Python SAST | Bandit |
+| Dependency vulnerabilities | pip-audit |
+| Secret detection | Gitleaks |
+| Lint | Ruff |
+| `.env.example` validation | custom |
+
+**Steps:**
 
 1. Fork the repository (external contributors) or create a branch from `develop` (team).
 2. Follow the branch naming convention below.
