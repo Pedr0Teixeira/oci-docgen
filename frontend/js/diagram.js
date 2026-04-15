@@ -151,28 +151,102 @@ window.exportDiagramPng = async function () {
   const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
 
+  // Adaptive scale: aim for 4x quality but cap canvas to a safe size.
+  // Most browsers support up to ~268MP (Chrome) but Safari caps at ~16MP.
+  // We target max 8000px on the longest side so any browser can render it.
+  const MAX_DIM = 8000;
+  const scale = Math.min(4, MAX_DIM / Math.max(w, h, 1));
+
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      // 4K export: scale factor 4 for high-quality output
-      const scale = 4;
       const canvas = document.createElement('canvas');
-      canvas.width = w * scale;
-      canvas.height = h * scale;
+      canvas.width  = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
       const ctx = canvas.getContext('2d');
       ctx.scale(scale, scale);
       ctx.drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
-      canvas.toBlob(b => resolve(b), 'image/png');
+
+      // toBlob is async and returns null on canvas-size failure — fall back
+      // to the synchronous toDataURL path which is more lenient.
+      canvas.toBlob(b => {
+        if (b) { resolve(b); return; }
+        try {
+          const dataUrl = canvas.toDataURL('image/png');
+          const [, b64] = dataUrl.split(',');
+          const binary  = atob(b64);
+          const bytes   = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          resolve(new Blob([bytes], { type: 'image/png' }));
+        } catch (_) { resolve(null); }
+      }, 'image/png');
     };
     img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     img.src = url;
   });
 };
 
+// --- Export loading helpers ------------------------------------------------
+
+function _exportSetLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn._origHtml    = btn.innerHTML;
+    btn._origTip     = btn.getAttribute('data-tip') || '';
+    btn.disabled     = true;
+    btn.style.opacity   = '0.55';
+    btn.style.cursor    = 'not-allowed';
+    btn.innerHTML    = ICON_SPINNER;
+    btn.removeAttribute('data-tip');
+  } else {
+    btn.disabled     = false;
+    btn.style.opacity   = '';
+    btn.style.cursor    = '';
+    btn.innerHTML    = btn._origHtml || '';
+    if (btn._origTip) btn.setAttribute('data-tip', btn._origTip);
+  }
+}
+
+function _exportShowToast(message) {
+  const container = document.getElementById('toast-container');
+  if (!container) return () => {};
+  const toast = document.createElement('div');
+  toast.className = 'toast info';
+  const infoIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+  toast.innerHTML = `<div class="toast-icon-wrap">${infoIcon}</div><div class="toast-body"><div class="toast-title">${message}</div></div>`;
+  container.appendChild(toast);
+  return function dismiss() {
+    toast.style.animation = 'toastSlideOut 0.28s ease forwards';
+    setTimeout(() => toast.remove(), 290);
+  };
+}
+
+// ---------------------------------------------------------------------------
+
 window._archExportPng = async function () {
-  const blob = await window.exportDiagramPng();
-  if (!blob) return;
+  const btn = document.querySelector('.arch-export-btn');
+  _exportSetLoading(btn, true);
+  const dismissToast = _exportShowToast(_i('Gerando PNG, aguarde...', 'Generating PNG, please wait...'));
+
+  let blob;
+  try {
+    blob = await window.exportDiagramPng();
+  } catch (e) {
+    blob = null;
+  }
+
+  dismissToast();
+  _exportSetLoading(btn, false);
+  if (!blob) {
+    if (window.showToast) window.showToast(
+      _i('Falha ao gerar o PNG. Tente com um conjunto menor de compartimentos.',
+         'Failed to generate PNG. Try with fewer compartments.'),
+      'error'
+    );
+    return;
+  }
+
   // Build filename: oci-topology_<compartments>_HH-MM-DD-MM-YYYY.png
   const p2 = n => String(n).padStart(2, '0');
   const now = new Date();
@@ -181,16 +255,35 @@ window._archExportPng = async function () {
   const compStr = comps.length > 0
     ? comps.map(n => n.replace(/[^a-zA-Z0-9]/g, '_')).slice(0, 3).join('-')
     : 'OCI';
+  const filename = `oci-topology_${compStr}_${ts}.png`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `oci-topology_${compStr}_${ts}.png`;
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  if (window.showToast) window.showToast(
+    filename,
+    'success',
+    _i('Topologia exportada', 'Topology exported')
+  );
 };
 
 window._archAddToDoc = async function () {
-  const blob = await window.exportDiagramPng();
+  const btn = document.querySelector('.arch-add-doc-btn');
+  _exportSetLoading(btn, true);
+  const dismissToast = _exportShowToast(_i('Preparando imagem para o documento...', 'Preparing image for document...'));
+
+  let blob;
+  try {
+    blob = await window.exportDiagramPng();
+  } catch (e) {
+    blob = null;
+  }
+
+  dismissToast();
+  _exportSetLoading(btn, false);
   if (!blob) return;
   const file = new File([blob], 'topology-diagram.png', { type: 'image/png' });
   const api = window._diagramApi;
@@ -381,7 +474,8 @@ const ICON_DIAGRAM = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16
   <rect x="1" y="9.5" width="5.5" height="5.5" rx="1"/><rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1"/></svg>`;
 
 const ICON_DOWNLOAD = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 2v9M4 8l4 4 4-4"/><path d="M2 13h12"/></svg>`;
-const ICON_ADDDOC = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="1" width="12" height="14" rx="2"/><line x1="5" y1="5" x2="11" y2="5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="8" y2="11"/></svg>`;
+const ICON_ADDDOC   = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="1" width="12" height="14" rx="2"/><line x1="5" y1="5" x2="11" y2="5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="8" y2="11"/></svg>`;
+const ICON_SPINNER  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><g><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><animateTransform attributeName="transform" attributeType="XML" type="rotate" from="0 12 12" to="360 12 12" dur="0.75s" repeatCount="indefinite"/></g></svg>`;
 
 
 /* ═══════════════════════════════════════════════════════════════════════════

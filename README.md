@@ -100,7 +100,7 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 | **Full Infrastructure** | `full_infra` | Complete report: instances, volumes, VCN, load balancers, certificates, WAF, DRG, VPN, OKE.      |
 | **Kubernetes (OKE)**    | `kubernetes` | OKE clusters, node pools, networking, and API endpoints.                                         |
 | **WAF Report**          | `waf_report` | WAF policies, firewalls, LB binding, certificates (full lifecycle), and associated VCN topology. |
-| **Database (DBaaS)**    | `database`   | Oracle DB Systems including DB Nodes, DB Homes, Databases, connection strings, and backup configuration. Backup destination (Object Storage, NFS, Recovery Appliance) is inferred from backup history when the SDK does not populate it directly. |
+| **Database (DBaaS)**    | `database`   | Oracle DB Systems with full hierarchy: DB Nodes (private IP via VNIC resolution), DB Homes, Databases (CDB/PDB), connection strings, backup configuration, RMAN backup history, and Data Guard associations (role, peer system, protection mode, transport type, apply lag). Backup destination is inferred from backup history when the SDK does not expose it directly. |
 
 > **Multi-compartment support (Full Infrastructure):** The `full_infra` mode supports selecting multiple compartments in a single run. Resources are aggregated and deduplicated across compartments, and the generated document includes a multi-compartment summary followed by per-compartment sections.
 
@@ -129,12 +129,13 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 |                    | IPSec VPN         | Tunnels, Phase 1/2, IKE, BGP, Oracle compliance validation, compartment |
 | **Containers**     | OKE Clusters      | Kubernetes version, VCN, endpoint visibility, LB subnet        |
 |                    | Node Pools        | Shape, OCPU/memory, OS, node count, boot volume, subnet        |
-| **Database**       | DB Systems        | Shape, edition, storage, license model, lifecycle state, compartment |
-|                    | DB Nodes          | Hostname, lifecycle state, fault domain                         |
-|                    | DB Homes          | Database version, patch level                                   |
-|                    | Databases (CDB/PDB) | Name, connection strings, character set, backup configuration |
-|                    | Backup Config     | Auto-backup, destination type (Object Storage / NFS / Recovery Appliance), retention period, recovery window. Destination inferred from backup history when not reported by the SDK. |
-|                    | Backup History    | Per-database RMAN backup list with state, type, destination, timestamps, and size |
+| **Database**       | DB Systems        | Shape, edition, CPU cores, memory, storage, license model, availability domain, fault domains, lifecycle state, VCN/subnet resolution, compartment |
+|                    | DB Nodes          | Hostname, private IP (resolved via VNIC), lifecycle state, fault domain, software storage size |
+|                    | DB Homes          | Display name, database version, lifecycle state, home location, creation timestamp |
+|                    | Databases (CDB/PDB) | DB name, unique name, PDB name, SID prefix, is-CDB flag, workload type, character sets, connection strings, last backup timestamp, KMS key reference |
+|                    | Backup Config     | Auto-backup flag, recovery window, backup window, full backup window/day, destination type (Object Storage / NFS / Recovery Appliance / DBRS). Destination inferred from backup history when the SDK does not populate `backup_destination_details` directly. |
+|                    | Backup History    | Per-database RMAN backup list with state, type, destination type, start/end timestamps, and size in GB |
+|                    | Data Guard        | Role (PRIMARY / STANDBY), peer role, peer database and DB System OCIDs, protection mode, transport type, apply lag and rate, lifecycle state |
 
 ---
 
@@ -143,86 +144,99 @@ Credentials are stored encrypted server-side as **Tenancy Profiles**, allowing a
 ### System Overview
 
 ```mermaid
-flowchart TD
-  subgraph Browser["Browser (SPA)"]
-    UI["index.html + app.js + diagram.js<br/>Vanilla JS · Bilingual · RBAC-aware"]
+flowchart LR
+  Browser(["Browser\nSPA · Bilingual · RBAC-aware"])
+
+  subgraph docker["Docker Network"]
+    subgraph fe["frontend · nginx:alpine"]
+      Nginx["Nginx\nStatic files · /api proxy"]
+    end
+    subgraph api_svc["api · FastAPI"]
+      FastAPI["FastAPI\nmain.py"]
+      Auth["auth.py\nSQLite WAL"]
+      SQLite[("SQLite\noci_docgen.db")]
+    end
+    subgraph worker_svc["worker · Celery"]
+      Celery["Celery Worker"]
+      Connector["oci_connector.py"]
+      DocGen["doc_generator.py"]
+    end
+    Redis[("Redis 7\nBroker · Results")]
   end
 
-  subgraph DockerNetwork["Docker Network"]
-    subgraph Frontend["frontend · nginx:alpine"]
-      Nginx["Nginx<br/>Static files + /api reverse proxy"]
-    end
+  OCI(["Oracle Cloud\nInfrastructure API"])
 
-    subgraph API["api · Python / FastAPI"]
-      FastAPI["FastAPI<br/>main.py"]
-      Auth["Auth Module<br/>auth.py · SQLite WAL"]
-      SQLite[("SQLite<br/>oci_docgen.db")]
-    end
+  Browser   -->|"HTTPS"| Nginx
+  Nginx     -->|"proxy_pass /api"| FastAPI
+  FastAPI  <-->|"sessions · users"| Auth
+  Auth     <-->|"CRUD · WAL"| SQLite
+  FastAPI  <-->|"dispatch · result"| Redis
+  Redis     -->|"consume"| Celery
+  Celery    -->|"SDK calls"| Connector
+  Connector<-->|"REST / SDK"| OCI
+  Celery    -->|"store result"| Redis
+  FastAPI   -->|"render"| DocGen
+  DocGen    -->|"stream .docx"| Browser
 
-    subgraph Worker["worker · Celery"]
-      Celery["Celery Worker<br/>celery_worker.py"]
-      Connector["OCI Connector<br/>oci_connector.py"]
-      DocGen["Doc Generator<br/>doc_generator.py"]
-    end
+  classDef browser fill:#1f6feb,stroke:#388bfd,color:#fff
+  classDef nginx   fill:#6e7681,stroke:#8b949e,color:#fff
+  classDef api     fill:#6e40c9,stroke:#8957e5,color:#fff
+  classDef worker  fill:#2ea043,stroke:#3fb950,color:#fff
+  classDef store   fill:#0d1117,stroke:#30363d,color:#8b949e
+  classDef oci     fill:#0550ae,stroke:#1f6feb,color:#fff
 
-    Redis[("Redis 7<br/>Broker + Result Backend")]
-  end
-
-  OCI_API[("Oracle Cloud<br/>Infrastructure API")]
-
-  Browser -->|"HTTPS"| Nginx
-  Nginx -->|"proxy_pass"| FastAPI
-  FastAPI <-->|"sessions / users / metrics"| Auth
-  Auth <-->|"CRUD · WAL mode"| SQLite
-  FastAPI <-->|"dispatch / read result"| Redis
-  Redis -->|"consume"| Celery
-  Celery -->|"OCI SDK calls"| Connector
-  Connector <-->|"REST / SDK"| OCI_API
-  Celery -->|"store result"| Redis
-  FastAPI -->|"render"| DocGen
-  DocGen -->|"stream .docx"| Browser
+  class Browser browser
+  class Nginx nginx
+  class FastAPI,Auth api
+  class Celery,Connector,DocGen worker
+  class SQLite,Redis store
+  class OCI oci
 ```
 
 ### Async Collection Pipeline
 
 ```mermaid
 sequenceDiagram
-  participant B as Browser
+  autonumber
+  actor B as Browser
   participant A as FastAPI
   participant R as Redis
   participant C as Celery Worker
   participant O as OCI API
 
-  B->>A: POST /api/start-collection<br/>{doc_type, region, compartment, profile_id}
-  A->>A: Validate profile exists and is_active
+  B->>+A: POST /api/start-collection<br/>{doc_type, region, compartment, profile_id}
+  A->>A: Validate profile · is_active
   A->>R: Dispatch collect_infrastructure task
-  A-->>B: {task_id}
+  A-->>-B: {task_id}
 
   loop Polling every 2s
-    B->>A: GET /api/collection-status/{task_id}
+    B->>+A: GET /api/collection-status/{task_id}
     A->>R: Read task state
-    A-->>B: {status, progress%, current_step}
+    A-->>-B: {status, progress%, current_step}
   end
 
-  C->>R: Consume task
-  C->>O: Parallel SDK calls (ThreadPoolExecutor)
-  O-->>C: Raw OCI objects
-  C->>C: Validate via Pydantic schemas
-  C->>R: Store serialised result
+  rect rgb(30, 70, 30)
+    C->>R: Consume task
+    C->>+O: Parallel SDK calls (ThreadPoolExecutor)
+    O-->>-C: Raw OCI objects
+    C->>C: Validate via Pydantic schemas
+    C->>R: Store serialised result
+  end
 
   A-->>B: {status: "SUCCESS", result: {infra_data}}
 
-  Note over B: diagram.js renders topology SVG from infra_data<br/>Cloud (left) / On-Premises (right) — no server round-trip
+  Note over B: diagram.js renders topology SVG<br/>Cloud (left) · On-Premises (right) — no server round-trip
 
   opt User clicks "Add to document"
     B->>B: Export diagram as 4K PNG (canvas 4× scale)
-    B->>B: Push PNG into image_sections[] as "Network Topology"
+    B->>B: Push PNG → image_sections[] as "Network Topology"
   end
 
-  B->>A: POST /api/generate-document<br/>{infra_data, doc_type, compartment_name, image_sections[] (opt. diagram PNG), language}
-  A->>DocGen: generate_documentation(infra_data, compartment_name, ...)
-  DocGen-->>A: .docx bytes
-  A-->>B: Stream download
+  rect rgb(20, 40, 80)
+    B->>+A: POST /api/generate-document<br/>{infra_data, doc_type, compartment_name, image_sections[], language}
+    A->>A: generate_documentation(...)
+    A-->>-B: Stream .docx download
+  end
 ```
 
 ### Tenancy Profile Access Model
@@ -230,42 +244,60 @@ sequenceDiagram
 Admins create **Tenancy Profiles** — named credential sets (OCI API Key or Instance Principal) encrypted at rest. Each profile has a **visibility** tier that controls which users can select it in the generator, and an **active state** that controls whether it can be used at all.
 
 ```mermaid
-flowchart TD
-  subgraph Users["Users"]
-    Admin["Admin"]
-    Regular["Regular User"]
+flowchart LR
+  subgraph users["Users"]
+    Admin(["Admin"])
+    Regular(["Regular User"])
   end
 
-  subgraph Visibility["Visibility Filter (regular users only)"]
+  subgraph vis["Visibility Filter\n(regular users only)"]
+    direction TB
     V_all["all_users"]
     V_group["by_group"]
     V_user["by_user"]
     V_admin["admin_only"]
   end
 
-  subgraph ActiveProfiles["Active Profiles"]
-    P1["Prod-Tenancy<br/>admin_only"]
-    P2["Demo-Tenancy<br/>all_users"]
-    P3["Client-A<br/>by_group"]
+  subgraph active["Active Profiles"]
+    direction TB
+    P1["Prod-Tenancy\nadmin_only"]
+    P2["Demo-Tenancy\nall_users"]
+    P3["Client-A\nby_group"]
   end
 
-  subgraph InactiveProfiles["Inactive Profiles"]
-    P4["Client-B<br/>by_user · inactive"]
+  subgraph inactive["Inactive Profiles"]
+    P4["Client-B\nby_user · inactive"]
   end
 
-  subgraph InactiveHandling["Inactive: behaviour"]
-    I1["Shown as locked in selector"]
+  subgraph locked_ui["Inactive Behaviour"]
+    direction TB
+    I1["Shown locked in selector"]
     I2["Cannot be selected"]
     I3["HTTP 403 if called directly"]
   end
 
-  Admin -->|"sees all active"| ActiveProfiles
-  Admin -->|"sees locked"| InactiveProfiles
-  Regular --> Visibility
-  V_all --> P2
-  V_group --> P3
-  V_admin -->|"hidden"| P1
-  InactiveProfiles --> InactiveHandling
+  Admin      -->|"sees all"| active
+  Admin      -->|"sees locked"| inactive
+  Regular    --> vis
+  V_all      --> P2
+  V_group    --> P3
+  V_user     --> P2
+  V_admin    -. "hidden" .-> P1
+  inactive   --> locked_ui
+
+  classDef adminNode  fill:#1f6feb,stroke:#388bfd,color:#fff
+  classDef userNode   fill:#6e40c9,stroke:#8957e5,color:#fff
+  classDef activeP    fill:#2ea043,stroke:#3fb950,color:#fff
+  classDef inactiveP  fill:#da3633,stroke:#f85149,color:#fff
+  classDef lockedB    fill:#6e1a1a,stroke:#f85149,color:#f8d7da
+  classDef visNode    fill:#9a6700,stroke:#e3b341,color:#fff
+
+  class Admin adminNode
+  class Regular userNode
+  class P1,P2,P3 activeP
+  class P4 inactiveP
+  class I1,I2,I3 lockedB
+  class V_all,V_group,V_user,V_admin visNode
 ```
 
 **Credential fields per profile:**
@@ -289,14 +321,24 @@ A Tenancy Profile can be **deactivated** without being deleted. This is useful w
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Active: Profile created
-  Active --> Inactive: Admin deactivates
-  Inactive --> Active: Admin reactivates
-  Active --> [*]: Profile deleted
-  Inactive --> [*]: Profile deleted
+  direction LR
+  [*]      --> Active   : Profile created
+  Active   --> Inactive : Admin deactivates
+  Inactive --> Active   : Admin reactivates
+  Active   --> [*]      : Profile deleted
+  Inactive --> [*]      : Profile deleted
 
-  Active: Active<br/>Selectable in generator<br/>Usable for collection
-  Inactive: Inactive<br/>Visible but locked in generator<br/>Blocked at API layer (HTTP 403)
+  state Active {
+    [*] --> selectable
+    selectable : Selectable in generator
+    note right of selectable : Usable for OCI collection
+  }
+
+  state Inactive {
+    [*] --> locked
+    locked : Visible but locked in UI
+    note right of locked : HTTP 403 if called directly
+  }
 ```
 
 **Behaviour when a profile is inactive:**
@@ -313,20 +355,26 @@ stateDiagram-v2
 The generator is a sequential wizard. Steps 2–4 (Region, Document Type, Compartment) are disabled until a valid active profile is selected in Step 1. This prevents incomplete requests and avoids misleading data being fetched under an invalid context.
 
 ```mermaid
-flowchart TD
+flowchart LR
   S1["Step 1: Tenancy Profile"]
   S2["Step 2: Region"]
   S3["Step 3: Document Type"]
   S4["Step 4: Compartment"]
-  BTN["Buscar Dados da Infraestrutura"]
+  BTN(["Buscar Dados da Infraestrutura"])
+  LOCK["Steps 2-4 + button\ndisabled"]
 
-  S1 -->|"active profile selected"| S2
-  S1 -->|"no profile / inactive profile"| LOCK["Steps 2–4 + button<br/>disabled"]
+  S1 -->|"active profile ✓"| S2
   S2 --> S3
   S3 --> S4
   S4 --> BTN
+  S1 -->|"no profile /\ninactive profile"| LOCK
 
-  classDef locked fill:#2a1a1a,stroke:#f85149,color:#f85149
+  classDef step    fill:#1f6feb,stroke:#388bfd,color:#fff
+  classDef btn     fill:#2ea043,stroke:#3fb950,color:#fff
+  classDef locked  fill:#6e1a1a,stroke:#f85149,color:#f8d7da
+
+  class S1,S2,S3,S4 step
+  class BTN btn
   class LOCK locked
 ```
 
@@ -342,29 +390,41 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-  participant B as Browser
+  autonumber
+  actor B as Browser
   participant A as FastAPI
   participant DB as SQLite
 
-  B->>A: POST /api/auth/login {username, password}
-  A->>DB: Verify bcrypt hash
-  DB-->>A: User record
-  A->>DB: INSERT session (token UUID, user_id, created_at)
-  A-->>B: {token, username, user_id, is_admin, force_password_change}
+  rect rgb(20, 40, 80)
+    Note over B,DB: Login
+    B->>+A: POST /api/auth/login {username, password}
+    A->>+DB: Verify bcrypt hash
+    DB-->>-A: User record
+    A->>DB: INSERT session (token UUID, user_id, created_at)
+    A-->>-B: {token, username, user_id, is_admin, force_password_change}
+  end
 
-  B->>A: GET /api/auth/me (Authorization: Bearer <token>)
-  A->>DB: SELECT session → user
-  A-->>B: {id, username, is_admin, force_password_change}
+  rect rgb(30, 50, 20)
+    Note over B,DB: Session validation
+    B->>+A: GET /api/auth/me — Authorization: Bearer token
+    A->>+DB: SELECT session → user
+    DB-->>-A: User record
+    A-->>-B: {id, username, is_admin, force_password_change}
+  end
 
   alt force_password_change = true
     B->>B: Show forced password reset modal
-    B->>A: POST /api/auth/change-password
-    A->>DB: UPDATE password_hash, force_password_change=0
+    B->>+A: POST /api/auth/change-password
+    A->>DB: UPDATE password_hash · force_password_change=0
+    A-->>-B: {ok: true}
   end
 
-  B->>A: POST /api/auth/logout
-  A->>DB: DELETE session
-  A-->>B: {ok: true}
+  rect rgb(60, 20, 20)
+    Note over B,DB: Logout
+    B->>+A: POST /api/auth/logout
+    A->>DB: DELETE session
+    A-->>-B: {ok: true}
+  end
 ```
 
 Session tokens are Bearer tokens sent in the `Authorization` header. The `force_password_change` flag is set by admins and enforced on the frontend before any other action is permitted.
@@ -882,27 +942,29 @@ The solution is the **DNS-01 challenge**: instead of serving a file over HTTP, C
 
 ```mermaid
 sequenceDiagram
-    participant C as Certbot
-    participant D as DNS Provider
-    participant L as Let's Encrypt
+  autonumber
+  participant C as Certbot
+  participant D as DNS Provider
+  participant L as Let's Encrypt
 
-    C->>D: API — create _acme-challenge TXT record
-    activate D
-    D-->>C: Record created
-    deactivate D
+  rect rgb(20, 40, 80)
+    Note over C,D: DNS-01 Challenge setup
+    C->>+D: API — create _acme-challenge TXT record
+    D-->>-C: Record created ✓
+  end
 
-    note over D,L: Let's Encrypt queries the TXT record
-    L->>D: Validate _acme-challenge TXT
-    activate D
-    D-->>L: TXT record confirmed
-    deactivate D
-
+  rect rgb(30, 50, 20)
+    Note over D,L: Ownership verification
+    L->>+D: Validate _acme-challenge TXT
+    D-->>-L: TXT record confirmed ✓
     L-->>C: Certificate issued
+  end
 
-    C->>D: API — delete TXT record
-    activate D
-    D-->>C: Record deleted
-    deactivate D
+  rect rgb(60, 30, 10)
+    Note over C,D: Cleanup
+    C->>+D: API — delete TXT record
+    D-->>-C: Record deleted ✓
+  end
 ```
 
 **Requirements before starting:**
@@ -1301,6 +1363,7 @@ allow dynamic-group 'oci-docgen-dg' to read load-balancers in tenancy
 allow dynamic-group 'oci-docgen-dg' to read cluster-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read waf-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to read leaf-certificate-family in tenancy
+allow dynamic-group 'oci-docgen-dg' to read database-family in tenancy
 allow dynamic-group 'oci-docgen-dg' to use network-security-groups in tenancy where any {
   request.permission='NETWORK_SECURITY_GROUP_LIST_SECURITY_RULES',
   request.permission='NETWORK_SECURITY_GROUP_LIST_MEMBERS'
@@ -1318,38 +1381,46 @@ Reference: [OCI IAM Policy Reference](https://docs.oracle.com/en-us/iaas/Content
 When a collection task fails due to a missing IAM policy — or any other condition worth surfacing to the operator — the application propagates the error through a structured pipeline from the OCI SDK all the way to the browser toast notification.
 
 ```mermaid
-flowchart TD
-    A([OCI SDK Call]) --> B{ServiceError?}
+flowchart LR
+  OCI(["OCI SDK Call"]) --> B{"ServiceError?"}
 
-    B -- "No" --> C[Process data normally]
-    B -- "Yes" --> D{"status=404<br/>code=NotAuthorizedOrNotFound?"}
+  B -->|"No"| C["Process data normally"]
+  B -->|"Yes"| D{"status=404\nNotAuthorizedOrNotFound?"}
 
-    D -- "No" --> E[Re-raise original exception]
-    D -- "Yes" --> F["PermissionError<br/>_iam_error_msg(resource_key)"]
+  D -->|"No"| E["Re-raise\noriginal exception"]
+  D -->|"Yes"| F["PermissionError\n_iam_error_msg(resource_key)"]
 
-    F --> H["PermissionError propagates freely<br/>waf_report · full_infra · new_host"]
+  subgraph celery["Celery Worker"]
+    F --> H["Propagates freely\nwaf_report · full_infra · new_host"]
+    H --> K["Task catches PermissionError"]
+    K --> L["update_state\nstate='IAM_ERROR'\nmeta={error, error_type}"]
+    L --> M["raise Ignore()\npreserves meta in Redis"]
+  end
 
-    H --> K["Celery task catches PermissionError"]
-    K --> L["update_state<br/>state='IAM_ERROR'<br/>meta={error, error_type}"]
-    L --> M["raise Ignore()<br/>preserves meta in Redis"]
+  subgraph api["FastAPI"]
+    M --> N["GET /api/collection-status\ndetects IAM_ERROR"]
+    N --> O["status: FAILURE\nresult: {error, error_type}"]
+  end
 
-    M --> N["GET /api/collection-status<br/>detects state='IAM_ERROR'"]
-    N --> O["Returns<br/>status: FAILURE<br/>result: {error, error_type}"]
+  O --> P{"error_type?"}
+  P -->|"IAM_PERMISSION"| Q["Split error by newline"]
+  Q --> R["showToast\nintro + code block\nduration=0"]
+  P -->|"other"| S["showToast\ngeneric server error"]
 
-    O --> P{error_type?}
+  E --> T["Celery default\nfailure handler"]
+  T --> S
 
-    P -- "IAM_PERMISSION" --> Q["Split error string by newline"]
-    Q --> R["showToast<br/>intro + code block<br/>error, duration=0"]
+  classDef ok       fill:#2ea043,stroke:#3fb950,color:#fff
+  classDef warn     fill:#9a6700,stroke:#e3b341,color:#fff
+  classDef err      fill:#da3633,stroke:#f85149,color:#fff
+  classDef decision fill:#1f6feb,stroke:#388bfd,color:#fff
+  classDef oci      fill:#0550ae,stroke:#1f6feb,color:#fff
 
-    P -- "other" --> S["showToast<br/>generic server error"]
-
-    E --> T["Celery default failure handler"]
-    T --> U["showToast generic server error"]
-
-    style F fill:#f97316,color:#fff
-    style L fill:#f97316,color:#fff
-    style R fill:#ef4444,color:#fff
-    style C fill:#22c55e,color:#fff
+  class C ok
+  class F,H,K,L,M warn
+  class R,S,T,E err
+  class B,D,P decision
+  class OCI oci
 ```
 
 **Resource criticality matrix** — determines whether a missing IAM policy aborts the task or silently skips the resource:
@@ -1364,6 +1435,8 @@ flowchart TD
 | OKE Clusters      | `cluster-family`          | Yes          | Required for kubernetes doc type                                |
 | DRG / CPE / IPSec | `virtual-network-family`  | Yes          | All use VirtualNetworkClient; covered by the same policy as VCN |
 | Volumes           | `volume-family`           | Yes          | Required for storage section                                    |
+| DB Systems        | `database-family`         | Yes          | Required for database doc type and full infrastructure          |
+| DB Nodes (VNICs)  | `virtual-network-family`  | No           | Private IP resolution via `GetVnic`; falls back to `null` if missing |
 
 ---
 
@@ -1396,7 +1469,7 @@ All endpoints are prefixed with `/api`. Authentication uses a Bearer token sent 
 | GET    | `/profiles`                         | Optional      | Tenancy profiles visible to this user, including inactive (marked `is_active: false`)                                                                               |
 | GET    | `/{region}/compartments`            | —             | List compartments (via selected profile)                                                                                                                            |
 | GET    | `/{region}/instances/{compartment}` | —             | List instances for New Host mode                                                                                                                                    |
-| POST   | `/start-collection`                 | **Partial**   | `new_host` — no auth required. `full_infra`, `waf_report`, `kubernetes` — Bearer token mandatory (HTTP 401 if absent). Returns HTTP 403 if the profile is inactive. |
+| POST   | `/start-collection`                 | **Partial**   | `new_host` — no auth required. All other types (`full_infra`, `waf_report`, `kubernetes`, `database`) — Bearer token mandatory (HTTP 401 if absent). Returns HTTP 403 if the profile is inactive. |
 | GET    | `/collection-status/{task_id}`      | —             | Poll collection progress                                                                                                                                            |
 | POST   | `/generate-document`                | Optional      | Render and download `.docx`                                                                                                                                         |
 
@@ -1560,6 +1633,9 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 - **Certificate version attribute naming:** `list_certificates` exposes `.current_version_summary`; `get_certificate` exposes `.current_version` — different names for the same concept. Handled in `_get_compartment_certificates`.
 - **WAF backward compatibility:** `WafPolicyData.integration` holds the first firewall integration; `WafPolicyData.integrations` holds the full list. Both fields are maintained to avoid breaking existing flows.
 - **DB backup config inference:** The OCI SDK does not populate `backup_destination_details` when the database uses the default Oracle-managed Object Storage destination. The connector detects this case (`auto_backup_enabled=True` + empty details list) and sets `OBJECT_STORE` explicitly. When `db_backup_config` is `None` entirely (IAM restriction on the Database object), the connector falls back to `list_backups` — each backup entry always carries `backup_destination_type` regardless of IAM — and reconstructs the config from the first entry found.
+- **DB collection hierarchy:** The `_get_db_systems()` function collects data top-down in a single pass: `list_db_systems` → per system `get_db_system` (richer than the list summary) → `list_db_nodes` + `list_db_homes` in parallel → per home `list_databases` → per database `list_backups` + `list_data_guard_associations`. This structure maps directly to the nested Pydantic models: `DbSystemData → DbNodeData / DbHomeData → DatabaseData → DbBackupData / DataGuardAssociationData`.
+- **DB Node private IP resolution:** `list_db_nodes` does not return the node's private IP directly. The connector calls `virtual_network_client.get_vnic(node.vnic_id)` for each node to resolve the IP. If the VNIC call fails (e.g., missing `virtual-network-family` policy), the `private_ip` field is left as `None` and the document renders it as `N/A`.
+- **Data Guard rendering:** Each `DataGuardAssociationData` entry carries both sides of the association (role, peer role, peer DB system OCID). The document renders a per-database Data Guard table only when associations exist; if none are found, the section is omitted entirely.
 
 **Document generation**
 
@@ -1574,7 +1650,7 @@ OCI Load Balancer supports three SSL modes. Understanding which is in use is nec
 
 - **Fernet key derivation:** The `SECRET_KEY` env variable is SHA-256 hashed and base64url-encoded to produce a valid 32-byte Fernet key, regardless of the original key length.
 - **Profile active state enforcement (dual-layer):** At the API layer, `/api/start-collection` validates `is_active` before dispatching any Celery task and returns HTTP 403 if the profile is inactive. At the frontend layer, inactive profiles are shown as locked items and wizard steps are disabled, preventing the request from being formed in the first place. Both layers are required: the API guard protects against direct API calls and stale browser state; the UI guard provides immediate feedback.
-- **Collection auth enforcement (dual-layer):** `POST /api/start-collection` requires a valid Bearer token for `full_infra`, `waf_report`, and `kubernetes` collection types — the three modes that perform a full OCI compartment scan and return sensitive infrastructure data. `new_host` remains accessible without authentication. At the API layer (`main.py`), `_optional_user()` is called before the Celery task is dispatched and raises HTTP 401 if no valid token is present. At the frontend layer, `app.js` always includes the `Authorization: Bearer <token>` header via `getAuthHeaders()` on every `/start-collection` request; a 401 response triggers a toast notification and redirects the user to the login screen. Both guards are required: the API guard protects against direct API calls and automation tools; the frontend guard ensures a clean UX on session expiry.
+- **Collection auth enforcement (dual-layer):** `POST /api/start-collection` requires a valid Bearer token for all collection types except `new_host` — that is, `full_infra`, `waf_report`, `kubernetes`, and `database`. These are the four modes that perform a full OCI compartment scan and return sensitive infrastructure data. `new_host` remains accessible without authentication. At the API layer (`main.py`), `_optional_user()` is called before the Celery task is dispatched and raises HTTP 401 if no valid token is present. At the frontend layer, `app.js` always includes the `Authorization: Bearer <token>` header via `getAuthHeaders()` on every `/start-collection` request; a 401 response triggers a toast notification and redirects the user to the login screen. Both guards are required: the API guard protects against direct API calls and automation tools; the frontend guard ensures a clean UX on session expiry.
 - **Permanent superadmin protection (dual-layer):** The built-in `admin` account cannot be deleted and its role cannot be downgraded — not even by itself. At the API layer, `PATCH /api/admin/users/{id}/role` checks the target username before applying any change and returns HTTP 400 if the target is `admin`. At the frontend layer, the role toggle for that row is rendered as permanently disabled with `pointer-events: none` and a tooltip explaining the restriction.
 
 **Frontend**
@@ -1695,12 +1771,42 @@ python tests/validate_all.py
 
 ### Workflow
 
-This project uses a two-branch integration model with branch protection on `main`:
+This project uses a two-branch integration model. `develop` is the integration branch; `main` is the release branch.
 
+```mermaid
+gitGraph
+   commit id: "initial"
+   branch develop
+   checkout develop
+   commit id: " "
+   branch "feature/example"
+   checkout "feature/example"
+   commit id: "feat: work"
+   commit id: "feat: tests"
+   checkout develop
+   merge "feature/example" tag: "PR + CI ✓"
+   checkout main
+   merge develop tag: "release PR + CI ✓"
+   branch "hotfix/urgent"
+   checkout "hotfix/urgent"
+   commit id: "hotfix: patch"
+   checkout main
+   merge "hotfix/urgent" tag: "PR + CI ✓"
+   checkout develop
+   merge main tag: "back-merge"
 ```
-feature/*, fix/*, refactor/* ──PR──▶ develop ──PR──▶ main
-hotfix/* ──────────────────────────────────────────▶ main (then synced to develop)
-```
+
+**CI checks run on every PR** (both `develop` and `main` targets):
+
+| Check | Tool |
+| :---- | :--- |
+| Python SAST | Bandit |
+| Dependency vulnerabilities | pip-audit |
+| Secret detection | Gitleaks |
+| Lint | Ruff |
+| `.env.example` validation | custom |
+
+**Steps:**
 
 1. Fork the repository (external contributors) or create a branch from `develop` (team).
 2. Follow the branch naming convention below.
