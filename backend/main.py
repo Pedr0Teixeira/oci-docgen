@@ -426,6 +426,40 @@ async def get_metrics(request: Request):
     return auth.get_metrics(user_id=None)
 
 
+@app.get("/api/admin/generations/regions", summary="Regiões distintas nas gerações (admin)")
+async def list_generation_regions(request: Request):
+    """Admin-only: distinct region codes present in doc_generations."""
+    _require_admin(request)
+    return auth.get_distinct_regions()
+
+
+@app.get("/api/admin/generations", summary="Listar gerações com filtros e paginacao (admin)")
+async def list_generations(
+    request: Request,
+    page: int = 1,
+    per_page: int = 25,
+    doc_type: Optional[str] = None,
+    username: Optional[str] = None,
+    region: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Admin-only: paginated, filterable list of all doc generations."""
+    _require_admin(request)
+    per_page = max(10, min(per_page, 100))
+    return auth.get_generations_list(
+        page=page,
+        per_page=per_page,
+        doc_type=doc_type or None,
+        username=username or None,
+        region=region or None,
+        search=search or None,
+        date_from=date_from or None,
+        date_to=date_to or None,
+    )
+
+
 # --- Announcements ---
 
 @app.get("/api/announcements", summary="Listar avisos ativos (todos os usuarios)")
