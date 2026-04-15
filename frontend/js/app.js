@@ -584,6 +584,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (duration > 0) setTimeout(dismiss, duration);
   }
 
+  // Expose showToast globally so diagram.js can add notifications
+  window.showToast = showToast;
+
   const showProgress = () => {
     loadingOverlay.classList.remove('hidden');
     progressBar.style.width = '0%';
@@ -1093,14 +1096,58 @@ document.addEventListener('DOMContentLoaded', () => {
     items.appendChild(itemsListContainer);
     container.appendChild(items);
 
+    // Dynamic sizing + auto-flip + escape-clipping:
+    //   - Chip area is capped via CSS (max-height:148px) so the trigger height
+    //     is bounded and this math stays stable no matter how many chips exist.
+    //   - Open downward by default. If space below is insufficient AND there
+    //     is more room above, flip the dropdown to open upward instead.
+    //   - Use `position: fixed` with viewport coordinates computed from the
+    //     trigger's bounding rect. This escapes any ancestor `overflow:hidden`
+    //     or `transform` that would otherwise clip a flipped-upward dropdown.
+    //     The scroll/resize listeners below re-run this on page movement so
+    //     the dropdown stays glued to the trigger.
+    const adjustDropdownHeight = () => {
+      const r = selected.getBoundingClientRect();
+      const margin = 24; // breathing room to the viewport edge
+      const gap = 6;     // gap between trigger and dropdown
+      const spaceBelow = Math.max(0, window.innerHeight - r.bottom - margin);
+      const spaceAbove = Math.max(0, r.top - margin);
+      const MAX = 600;
+      const MIN_BELOW = 320; // below this we consider flipping upward
+      const openUp = spaceBelow < MIN_BELOW && spaceAbove > spaceBelow;
+
+      items.style.position = 'fixed';
+      items.style.left  = r.left  + 'px';
+      items.style.width = r.width + 'px';
+      if (openUp) {
+        items.style.top    = 'auto';
+        items.style.bottom = (window.innerHeight - r.top + gap) + 'px';
+        items.style.maxHeight = Math.min(MAX, spaceAbove) + 'px';
+      } else {
+        items.style.top    = (r.bottom + gap) + 'px';
+        items.style.bottom = 'auto';
+        items.style.maxHeight = Math.min(MAX, spaceBelow) + 'px';
+      }
+    };
+
     selected.addEventListener('click', (e) => {
       e.stopPropagation();
       if (selected.classList.contains('disabled')) return;
       const wasOpen = !items.classList.contains('select-hide');
       closeAllSelects(isMultiSelect ? container : null);
       if (!wasOpen) {
-        items.classList.toggle('select-hide');
-        selected.classList.toggle('select-arrow-active');
+        items.classList.remove('select-hide');
+        selected.classList.add('select-arrow-active');
+        adjustDropdownHeight();
+        // Recompute on trigger resize (defensive — chip area is capped, but
+        // page reflows or search focus can still change the trigger height).
+        const obs = new ResizeObserver(adjustDropdownHeight);
+        obs.observe(selected);
+        items._resizeObs = obs;
+        // Recompute on window resize / scroll so the dropdown always fits.
+        items._onReflow = adjustDropdownHeight;
+        window.addEventListener('resize', items._onReflow);
+        window.addEventListener('scroll', items._onReflow, true);
       }
     });
   }
@@ -1185,6 +1232,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.select-items').forEach(item => {
       if (item.parentElement !== except) {
         item.classList.add('select-hide');
+        if (item._resizeObs) { item._resizeObs.disconnect(); item._resizeObs = null; }
+        if (item._onReflow) {
+          window.removeEventListener('resize', item._onReflow);
+          window.removeEventListener('scroll', item._onReflow, true);
+          item._onReflow = null;
+        }
+        // Reset all inline positioning so the next open starts from CSS.
+        item.style.maxHeight = '';
+        item.style.position  = '';
+        item.style.top       = '';
+        item.style.bottom    = '';
+        item.style.left      = '';
+        item.style.width     = '';
       }
     });
     document.querySelectorAll('.select-selected').forEach(sel => {
@@ -4660,31 +4720,45 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('kpi-top-type').textContent =
       data.by_type.length ? docTypeLabel(data.by_type[0].type) : '—';
 
+    // Avg/day over the last 30 days (sum all type keys across those rows / 30)
+    const last30 = (data.time_series || []).slice(-30);
+    const sum30  = last30.reduce((acc, d) =>
+      acc + ALL_TYPE_KEYS.reduce((s, k) => s + (d[k] || 0), 0), 0);
+    const avgDay = last30.length ? (sum30 / last30.length).toFixed(1) : '0';
+    const avgEl  = document.getElementById('kpi-avg-day');
+    if (avgEl) avgEl.textContent = avgDay;
+
     if (metricsTitle) metricsTitle.textContent = t('metrics_global_title') || 'Métricas Globais';
     metricsGuestNotice && metricsGuestNotice.classList.add('hidden');
 
-    // By-type bars
-    const maxCount = data.by_type.length ? data.by_type[0].count : 1;
-    const byTypeEl = document.getElementById('metrics-by-type');
+    // By-type bars — color-coded per type + show % of total alongside count
+    const maxCount  = data.by_type.length ? data.by_type[0].count : 1;
+    const totalDocs = data.by_type.reduce((s, i) => s + i.count, 0) || 1;
+    const byTypeEl  = document.getElementById('metrics-by-type');
     if (!data.by_type.length) {
       byTypeEl.innerHTML = '<p class="no-data-message">Nenhum dado disponível.</p>';
     } else {
       byTypeEl.innerHTML = data.by_type.map(item => {
-        const pct = Math.round((item.count / maxCount) * 100);
+        const barPct   = Math.round((item.count / maxCount) * 100);
+        const sharePct = Math.round((item.count / totalDocs) * 100);
+        const color    = SERIES_CONFIG[item.type]?.color || 'var(--accent)';
         return `
           <div class="metrics-type-row">
             <div class="metrics-type-top">
               <span class="metrics-type-name">${docTypeLabel(item.type)}</span>
-              <span class="metrics-type-count">${item.count}</span>
+              <span class="metrics-type-count">
+                ${item.count}
+                <span class="metrics-type-share">${sharePct}%</span>
+              </span>
             </div>
             <div class="metrics-type-bar-track">
-              <div class="metrics-type-bar-fill" style="width:${pct}%"></div>
+              <div class="metrics-type-bar-fill" style="width:${barPct}%;background:${color}"></div>
             </div>
           </div>`;
       }).join('');
     }
 
-    // Recent list
+    // Recent list — dot colored by doc type
     const recentEl = document.getElementById('metrics-recent');
     if (!data.recent.length) {
       recentEl.innerHTML = '<p class="no-data-message" style="padding:16px 20px">Nenhuma geração registrada.</p>';
@@ -4695,15 +4769,16 @@ document.addEventListener('DOMContentLoaded', () => {
           currentLanguage === 'pt' ? 'pt-BR' : 'en-US',
           { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }
         );
-        const who = item.username ? `<span style="opacity:.6">· ${item.username}</span>` : '';
+        const who      = item.username ? `<span style="opacity:.6">· ${item.username}</span>` : '';
+        const dotColor = SERIES_CONFIG[item.doc_type]?.color || '#2f81f7';
         return `
           <div class="metrics-recent-row">
-            <div class="metrics-recent-dot"></div>
+            <div class="metrics-recent-dot" style="background:${dotColor};box-shadow:0 0 0 3px ${dotColor}22"></div>
             <div class="metrics-recent-body">
               <div class="metrics-recent-name">${item.compartment}</div>
               <div class="metrics-recent-meta">${dateStr} · ${item.region} ${who}</div>
             </div>
-            <span class="metrics-recent-badge">${docTypeLabel(item.doc_type)}</span>
+            <span class="metrics-recent-badge" style="border-color:${dotColor}33;color:${dotColor}">${docTypeLabel(item.doc_type)}</span>
           </div>`;
       }).join('');
     }
@@ -4756,6 +4831,15 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       perUserSection && perUserSection.classList.add('hidden');
     }
+
+    // Generations table — init once; subsequent loads just refresh data
+    if (!document.getElementById('gen-table-section')?._genInited) {
+      const s = document.getElementById('gen-table-section');
+      if (s) s._genInited = true;
+      _initGenTable();
+    } else {
+      loadGenTable(1);
+    }
   }
 
   // ── Spline chart state ────────────────────────────────────────────────────────
@@ -4765,12 +4849,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let _chartRenderType  = 'spline'; // 'spline' | 'bar' | 'pie'
 
   const SERIES_CONFIG = {
-    all:        { label: () => t('metrics_filter_all') || 'Total',         color: '#2f81f7' },
-    new_host:   { label: () => t('metrics_filter_new_host') || 'Novo Host', color: '#3fb950' },
+    all:        { label: () => t('metrics_filter_all') || 'Total',          color: '#2f81f7' },
+    new_host:   { label: () => t('metrics_filter_new_host') || 'Novo Host',  color: '#3fb950' },
     full_infra: { label: () => t('metrics_filter_full_infra') || 'Infra Completa', color: '#f0883e' },
-    kubernetes: { label: () => 'Kubernetes',                               color: '#bc8cff' },
-    waf_report: { label: () => 'WAF Report',                               color: '#58a6ff' },
+    kubernetes: { label: () => 'Kubernetes',                                color: '#bc8cff' },
+    waf_report: { label: () => 'WAF Report',                                color: '#58a6ff' },
+    database:   { label: () => 'Database',                                  color: '#26c6da' },
   };
+
+  // Ordered list of all per-type series keys (excludes the synthetic 'all' key).
+  const ALL_TYPE_KEYS = ['new_host', 'full_infra', 'kubernetes', 'waf_report', 'database'];
 
   function getSeriesLabel(key) {
     const cfg = SERIES_CONFIG[key];
@@ -4807,7 +4895,8 @@ document.addEventListener('DOMContentLoaded', () => {
         d.setDate(d.getDate() + i);
         const key = d.toISOString().slice(0, 10);
         const existing = series.find(s => s.day === key);
-        filled.push(existing || { day: key, new_host: 0, full_infra: 0, kubernetes: 0, waf_report: 0 });
+        const blank = ALL_TYPE_KEYS.reduce((o, k) => { o[k] = 0; return o; }, { day: key });
+        filled.push(existing || blank);
       }
       series = filled;
     }
@@ -4819,10 +4908,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const cH  = H - pad.top - pad.bottom;
     const n   = series.length;
 
-    // Decide which series to draw — when 'all' show all 4 types for comparison
-    const activeSeries = typeFilter === 'all'
-      ? ['new_host', 'full_infra', 'kubernetes', 'waf_report']
-      : [typeFilter];
+    // Decide which series to draw — when 'all' show all types for comparison
+    const activeSeries = typeFilter === 'all' ? ALL_TYPE_KEYS : [typeFilter];
 
     // Compute max value across active series
     const maxVal = Math.max(
@@ -4969,9 +5056,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const series = allSeries.slice(-periodDays);
     if (!series.length) { wrap.innerHTML = '<p class="no-data-message">Sem dados</p>'; return; }
 
-    const activeSeries = typeFilter === 'all'
-      ? ['new_host', 'full_infra', 'kubernetes', 'waf_report']
-      : [typeFilter];
+    const activeSeries = typeFilter === 'all' ? ALL_TYPE_KEYS : [typeFilter];
 
     const W = Math.max(wrap.clientWidth || 600, 400);
     const H = 220;
@@ -5032,16 +5117,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!wrap) return;
     const series = allSeries.slice(-periodDays);
 
-    const keys = typeFilter === 'all'
-      ? ['new_host', 'full_infra', 'kubernetes', 'waf_report']
-      : [typeFilter];
+    const keys = typeFilter === 'all' ? ALL_TYPE_KEYS : [typeFilter];
 
     const totals = keys.map(k => ({ key: k, val: series.reduce((s, d) => s + (d[k] || 0), 0) }));
     const grand = totals.reduce((s, t) => s + t.val, 0);
 
     if (!grand) { wrap.innerHTML = '<p class="no-data-message" style="padding:40px 20px;text-align:center">Sem dados</p>'; return; }
 
-    const W = 280, H = 220, cx = 110, cy = 110, r = 90, ir = 52;
+    const W = 340, H = 220, cx = 110, cy = 110, r = 90, ir = 52;
+    const legendX = 220; // start of legend text, 20px gap after the donut edge (cx+r=200)
     let startAngle = -Math.PI / 2;
 
     // Helper: arc path that handles the degenerate 100%-slice case
@@ -5075,7 +5159,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const legendItems = totals.map(({ key, val }) => {
       const cfg = SERIES_CONFIG[key];
-      return `<text x="200" y="${cy - 40 + totals.indexOf(totals.find(t=>t.key===key)) * 22}" fill="${cfg.color}" font-size="11" font-family="Inter, sans-serif">● ${getSeriesLabel(key)}: ${val}</text>`;
+      return `<text x="${legendX}" y="${cy - 40 + totals.indexOf(totals.find(t=>t.key===key)) * 22}" fill="${cfg.color}" font-size="11" font-family="Inter, sans-serif">● ${getSeriesLabel(key)}: ${val}</text>`;
     });
 
     wrap.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="overflow:visible">
@@ -5089,6 +5173,249 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   bindChartFilters();
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // ALL-GENERATIONS TABLE
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  // Complete OCI region code → { city, abbr } mapping.
+  // "label" format shown in the UI: "São Paulo - GRU"
+  const OCI_REGIONS = {
+    // Brazil
+    'sa-saopaulo-1':    { city: 'São Paulo',     abbr: 'GRU' },
+    'sa-vinhedo-1':     { city: 'Vinhedo',        abbr: 'VCP' },
+    // North America
+    'us-ashburn-1':     { city: 'Ashburn',        abbr: 'IAD' },
+    'us-phoenix-1':     { city: 'Phoenix',        abbr: 'PHX' },
+    'us-chicago-1':     { city: 'Chicago',        abbr: 'ORD' },
+    'us-sanjose-1':     { city: 'San Jose',       abbr: 'SJC' },
+    'ca-toronto-1':     { city: 'Toronto',        abbr: 'YYZ' },
+    'ca-montreal-1':    { city: 'Montreal',       abbr: 'YUL' },
+    'mx-queretaro-1':   { city: 'Queretaro',      abbr: 'QRO' },
+    'mx-monterrey-1':   { city: 'Monterrey',      abbr: 'MTY' },
+    // Europe
+    'eu-frankfurt-1':   { city: 'Frankfurt',      abbr: 'FRA' },
+    'eu-amsterdam-1':   { city: 'Amsterdam',      abbr: 'AMS' },
+    'eu-london-1':      { city: 'London',         abbr: 'LHR' },
+    'uk-london-1':      { city: 'London',         abbr: 'LHR' },
+    'eu-milan-1':       { city: 'Milan',          abbr: 'LIN' },
+    'eu-stockholm-1':   { city: 'Stockholm',      abbr: 'ARN' },
+    'eu-paris-1':       { city: 'Paris',          abbr: 'CDG' },
+    'eu-madrid-1':      { city: 'Madrid',         abbr: 'MAD' },
+    'eu-jovanovac-1':   { city: 'Jovanovac',      abbr: 'BEG' },
+    'eu-marseille-1':   { city: 'Marseille',      abbr: 'MRS' },
+    // Middle East & Africa
+    'me-dubai-1':       { city: 'Dubai',          abbr: 'DXB' },
+    'me-jeddah-1':      { city: 'Jeddah',         abbr: 'JED' },
+    'me-abudhabi-1':    { city: 'Abu Dhabi',      abbr: 'AUH' },
+    'il-jerusalem-1':   { city: 'Jerusalem',      abbr: 'MTZ' },
+    'af-johannesburg-1':{ city: 'Johannesburg',   abbr: 'JNB' },
+    // Asia Pacific
+    'ap-tokyo-1':       { city: 'Tokyo',          abbr: 'NRT' },
+    'ap-osaka-1':       { city: 'Osaka',          abbr: 'KIX' },
+    'ap-sydney-1':      { city: 'Sydney',         abbr: 'SYD' },
+    'ap-melbourne-1':   { city: 'Melbourne',      abbr: 'MEL' },
+    'ap-mumbai-1':      { city: 'Mumbai',         abbr: 'BOM' },
+    'ap-hyderabad-1':   { city: 'Hyderabad',      abbr: 'HYD' },
+    'ap-singapore-1':   { city: 'Singapore',      abbr: 'SIN' },
+    'ap-seoul-1':       { city: 'Seoul',          abbr: 'ICN' },
+    'ap-chuncheon-1':   { city: 'Chuncheon',      abbr: 'YNY' },
+  };
+
+  /** Human-readable label for an OCI region code. Returns e.g. "São Paulo - GRU". */
+  function regionLabel(code) {
+    if (!code) return '—';
+    const r = OCI_REGIONS[code];
+    return r ? `${r.city} - ${r.abbr}` : code;
+  }
+
+  /** Short abbreviation only (for the table cell). */
+  function regionAbbr(code) {
+    if (!code) return '—';
+    return OCI_REGIONS[code]?.abbr ?? code;
+  }
+
+  let _genPage      = 1;
+  let _genFilters   = { search: '', doc_type: '', region: '', date_from: '', date_to: '' };
+  let _genDebounce  = null;
+  let _genLoading   = false;
+
+  async function loadGenTable(page = 1) {
+    if (_genLoading) return;
+    _genLoading = true;
+    _genPage = page;
+
+    const tbody = document.getElementById('gen-table-body');
+    const countEl = document.getElementById('gen-table-count');
+    if (!tbody) { _genLoading = false; return; }
+
+    // Skeleton while loading
+    tbody.innerHTML = `<tr><td colspan="6" class="gen-table-empty">
+      <div class="metrics-skeleton" style="height:60px;margin:8px 0"></div></td></tr>`;
+
+    const params = new URLSearchParams({ page, per_page: 25 });
+    if (_genFilters.search)    params.set('search',    _genFilters.search);
+    if (_genFilters.doc_type)  params.set('doc_type',  _genFilters.doc_type);
+    if (_genFilters.region)    params.set('region',    _genFilters.region);
+    if (_genFilters.date_from) params.set('date_from', _genFilters.date_from);
+    if (_genFilters.date_to)   params.set('date_to',   _genFilters.date_to);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/generations?${params}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('Falha ao carregar gerações.');
+      const data = await res.json();
+      _renderGenTable(data);
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="gen-table-empty gen-table-error">${e.message}</td></tr>`;
+      if (countEl) countEl.textContent = '';
+    } finally {
+      _genLoading = false;
+    }
+  }
+
+  function _renderGenTable(data) {
+    const tbody   = document.getElementById('gen-table-body');
+    const countEl = document.getElementById('gen-table-count');
+    const pageInfo  = document.getElementById('gen-page-info');
+    const prevBtn   = document.getElementById('gen-page-prev');
+    const nextBtn   = document.getElementById('gen-page-next');
+    if (!tbody) return;
+
+    // Count label — "1–25 de 42" / "1–25 of 42"
+    const from = data.total ? (data.page - 1) * data.per_page + 1 : 0;
+    const to   = Math.min(data.page * data.per_page, data.total);
+    if (countEl) countEl.textContent = data.total
+      ? `${from}–${to} ${t('gen_count_of')} ${data.total}`
+      : t('gen_no_results');
+
+    // Pagination controls
+    if (pageInfo) pageInfo.textContent = (t('gen_page_info') || 'Página {page} de {pages}')
+      .replace('{page}', data.page).replace('{pages}', data.pages);
+    if (prevBtn) prevBtn.disabled = data.page <= 1;
+    if (nextBtn) nextBtn.disabled = data.page >= data.pages;
+
+    // Empty state
+    if (!data.items.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="gen-table-empty">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="28" height="28" style="opacity:.35">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <span>${t('gen_empty_message')}</span>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.items.map(item => {
+      const d        = new Date(item.generated_at);
+      const dateStr  = isNaN(d) ? item.generated_at : d.toLocaleDateString(
+        currentLanguage === 'pt' ? 'pt-BR' : 'en-US',
+        { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+      );
+      const color    = SERIES_CONFIG[item.doc_type]?.color || '#2f81f7';
+      const typeLabel = docTypeLabel(item.doc_type);
+      const regionShort = regionAbbr(item.region);
+
+      return `<tr class="gen-table-row">
+        <td class="gen-col-id">${item.id}</td>
+        <td class="gen-col-type">
+          <span class="gen-type-badge" style="border-color:${color}33;color:${color};background:${color}12">
+            ${typeLabel}
+          </span>
+        </td>
+        <td class="gen-col-comp" title="${item.compartment || ''}">${item.compartment || '—'}</td>
+        <td class="gen-col-region" title="${item.region || ''}">${regionShort}</td>
+        <td class="gen-col-date">${dateStr}</td>
+        <td class="gen-col-user">
+          <span class="gen-user-chip">${item.username || 'anonimo'}</span>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function _loadRegionSelect() {
+    const sel = document.getElementById('gen-filter-region');
+    if (!sel) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/generations/regions`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) return;
+      const codes = await res.json(); // ["sa-saopaulo-1", ...]
+
+      // Update placeholder option text with current language, then add region options
+      if (sel.options[0]) sel.options[0].textContent = t('gen_filter_all_regions');
+      while (sel.options.length > 1) sel.remove(1);
+
+      codes.forEach(code => {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = regionLabel(code); // "São Paulo - GRU"
+        sel.appendChild(opt);
+      });
+    } catch (_) { /* silent — select stays as placeholder */ }
+  }
+
+  function _initGenTable() {
+    const section = document.getElementById('gen-table-section');
+    if (!section) return;
+
+    // Show section (admin-only — called from renderMetrics which is already admin-gated)
+    section.classList.remove('hidden');
+
+    // Populate the region select with distinct regions from the database
+    _loadRegionSelect();
+
+    // Filter event bindings (debounced for date inputs)
+    const bindInput = (id, key) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        clearTimeout(_genDebounce);
+        _genFilters[key] = el.value.trim();
+        _genDebounce = setTimeout(() => loadGenTable(1), 380);
+      });
+    };
+
+    bindInput('gen-filter-search',    'search');
+    bindInput('gen-filter-date-from', 'date_from');
+    bindInput('gen-filter-date-to',   'date_to');
+
+    // Region select — fires immediately (no debounce needed for a select)
+    const regionEl = document.getElementById('gen-filter-region');
+    if (regionEl) regionEl.addEventListener('change', () => {
+      _genFilters.region = regionEl.value;
+      loadGenTable(1);
+    });
+
+    const typeEl = document.getElementById('gen-filter-type');
+    if (typeEl) typeEl.addEventListener('change', () => {
+      _genFilters.doc_type = typeEl.value;
+      loadGenTable(1);
+    });
+
+    document.getElementById('gen-filter-clear')?.addEventListener('click', () => {
+      _genFilters = { search: '', doc_type: '', region: '', date_from: '', date_to: '' };
+      ['gen-filter-search','gen-filter-date-from','gen-filter-date-to']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      const tEl = document.getElementById('gen-filter-type');
+      if (tEl) tEl.value = '';
+      const rEl = document.getElementById('gen-filter-region');
+      if (rEl) rEl.value = '';
+      loadGenTable(1);
+    });
+
+    document.getElementById('gen-page-prev')?.addEventListener('click', () => {
+      if (_genPage > 1) loadGenTable(_genPage - 1);
+    });
+    document.getElementById('gen-page-next')?.addEventListener('click', () => {
+      loadGenTable(_genPage + 1);
+    });
+
+    // Initial load
+    loadGenTable(1);
+  }
 
   // ── Sidebar brand click ───────────────────────────────────────────────────────
   const sidebarBrandLink = document.getElementById('sidebar-brand-link');

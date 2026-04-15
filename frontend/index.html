@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OCI DocGen</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -608,6 +609,19 @@
               <span class="metrics-kpi-value" id="kpi-top-type">—</span>
             </div>
           </div>
+          <div class="metrics-kpi-card">
+            <div class="metrics-kpi-icon metrics-kpi-icon--orange">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="20" x2="12" y2="10"/>
+                <line x1="18" y1="20" x2="18" y2="4"/>
+                <line x1="6"  y1="20" x2="6"  y2="16"/>
+              </svg>
+            </div>
+            <div class="metrics-kpi-body">
+              <span class="metrics-kpi-label" data-i18n="metrics_kpi_avg_day">Media / Dia (30d)</span>
+              <span class="metrics-kpi-value" id="kpi-avg-day">—</span>
+            </div>
+          </div>
         </div>
 
         <!-- By type -->
@@ -667,6 +681,7 @@
                 <button class="metrics-type-filter-btn" data-type="full_infra" data-i18n="metrics_filter_full_infra">Infra Completa</button>
                 <button class="metrics-type-filter-btn" data-type="kubernetes">Kubernetes</button>
                 <button class="metrics-type-filter-btn" data-type="waf_report">WAF</button>
+                <button class="metrics-type-filter-btn" data-type="database">Database</button>
               </div>
               <div class="metrics-chart-type-btns">
                 <button class="metrics-chart-type-btn active" data-chart-type="spline" title="Spline">
@@ -695,6 +710,90 @@
             <span data-i18n="metrics_per_user_title">Gerações por Usuário</span>
           </div>
           <div id="metrics-per-user" class="metrics-by-type"></div>
+        </div>
+
+        <!-- All-generations table (admin only) -->
+        <div id="gen-table-section" class="content-card metrics-card hidden" style="margin-top:20px">
+          <div class="metrics-card-header gen-table-header">
+            <div class="gen-table-header-left">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <line x1="3" y1="9" x2="21" y2="9"/>
+                <line x1="3" y1="15" x2="21" y2="15"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+              </svg>
+              <span data-i18n="gen_table_title">Todas as Gerações</span>
+            </div>
+            <span id="gen-table-count" class="gen-table-count"></span>
+          </div>
+
+          <!-- Filter bar -->
+          <div class="gen-filter-bar">
+            <div class="gen-filter-input-wrap">
+              <svg class="gen-filter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input id="gen-filter-search" type="text" class="gen-filter-input"
+                data-i18n-placeholder="gen_filter_search_placeholder"
+                placeholder="Compartimento ou usuário...">
+            </div>
+            <select id="gen-filter-type" class="gen-filter-select">
+              <option value="" data-i18n="gen_filter_all_types">Todos os tipos</option>
+              <option value="new_host" data-i18n="metrics_filter_new_host">Novo Host</option>
+              <option value="full_infra" data-i18n="metrics_filter_full_infra">Infra Completa</option>
+              <option value="kubernetes">Kubernetes</option>
+              <option value="waf_report">WAF Report</option>
+              <option value="database">Database</option>
+            </select>
+            <select id="gen-filter-region" class="gen-filter-select gen-filter-region-select">
+              <option value="" data-i18n="gen_filter_all_regions">Todas as regiões</option>
+            </select>
+            <div class="gen-filter-date-range">
+              <input id="gen-filter-date-from" type="date" class="gen-filter-date">
+              <span class="gen-filter-date-sep">—</span>
+              <input id="gen-filter-date-to" type="date" class="gen-filter-date">
+            </div>
+            <button id="gen-filter-clear" class="gen-filter-clear-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              <span data-i18n="gen_filter_clear">Limpar</span>
+            </button>
+          </div>
+
+          <!-- Table -->
+          <div class="gen-table-wrap">
+            <table class="gen-table">
+              <thead>
+                <tr>
+                  <th class="gen-col-id"   data-i18n="gen_col_id">#</th>
+                  <th class="gen-col-type" data-i18n="gen_col_type">Tipo</th>
+                  <th class="gen-col-comp" data-i18n="gen_col_comp">Compartimento</th>
+                  <th class="gen-col-region" data-i18n="gen_col_region">Região</th>
+                  <th class="gen-col-date" data-i18n="gen_col_date">Data</th>
+                  <th class="gen-col-user" data-i18n="gen_col_user">Responsável</th>
+                </tr>
+              </thead>
+              <tbody id="gen-table-body">
+                <tr><td colspan="6" class="gen-table-empty">
+                  <div class="metrics-skeleton" style="height:80px;margin:12px 0"></div>
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div class="gen-pagination" id="gen-pagination">
+            <button id="gen-page-prev" class="gen-page-btn" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              <span data-i18n="gen_page_prev">Anterior</span>
+            </button>
+            <span id="gen-page-info" class="gen-page-info"></span>
+            <button id="gen-page-next" class="gen-page-btn" disabled>
+              <span data-i18n="gen_page_next">Próxima</span>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
         </div>
 
       </div>

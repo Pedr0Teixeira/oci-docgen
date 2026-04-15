@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Solid document body, no background rect so the icon adapts to any
+       browser theme (light or dark tab bar). -->
+  <path d="M14 12
+           H38
+           L50 24
+           V54
+           a4 4 0 0 1 -4 4
+           H14
+           a4 4 0 0 1 -4 -4
+           V16
+           a4 4 0 0 1 4 -4 Z"
+        fill="#2f81f7"/>
+
+  <!-- Folded corner triangle, slightly darker to show depth -->
+  <path d="M38 12 L50 24 H42 a4 4 0 0 1 -4 -4 Z"
+        fill="#1a6bde"/>
+
+  <!-- Text lines in white for contrast against the blue fill -->
+  <line x1="18" y1="35" x2="46" y2="35" stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <line x1="18" y1="44" x2="46" y2="44" stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <line x1="18" y1="53" x2="36" y2="53" stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+</svg>

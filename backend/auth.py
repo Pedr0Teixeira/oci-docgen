@@ -420,7 +420,8 @@ def get_metrics(user_id: Optional[int] = None) -> dict:
                    SUM(CASE WHEN doc_type='new_host'   THEN 1 ELSE 0 END) AS new_host,
                    SUM(CASE WHEN doc_type='full_infra' THEN 1 ELSE 0 END) AS full_infra,
                    SUM(CASE WHEN doc_type='kubernetes' THEN 1 ELSE 0 END) AS kubernetes,
-                   SUM(CASE WHEN doc_type='waf_report' THEN 1 ELSE 0 END) AS waf_report
+                   SUM(CASE WHEN doc_type='waf_report' THEN 1 ELSE 0 END) AS waf_report,
+                   SUM(CASE WHEN doc_type='database'   THEN 1 ELSE 0 END) AS database
               FROM doc_generations {where}
              {and_kw} generated_at >= date('now', '-89 days')
              GROUP BY day
@@ -437,7 +438,7 @@ def get_metrics(user_id: Optional[int] = None) -> dict:
         d = (today - timedelta(days=offset)).isoformat()
         row = sparse_map.get(d, {
             "day": d, "new_host": 0, "full_infra": 0,
-            "kubernetes": 0, "waf_report": 0,
+            "kubernetes": 0, "waf_report": 0, "database": 0,
         })
         time_series_rows.append(dict(row))
 
@@ -463,6 +464,87 @@ def get_metrics(user_id: Optional[int] = None) -> dict:
         "recent":     [dict(r) for r in recent],
         "time_series": time_series_rows,
         "per_user":    [dict(r) for r in per_user],
+    }
+
+
+def get_distinct_regions() -> list:
+    """Returns the sorted list of distinct region codes present in doc_generations."""
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT DISTINCT region FROM doc_generations WHERE region IS NOT NULL ORDER BY region ASC"
+    ).fetchall()
+    conn.close()
+    return [r["region"] for r in rows]
+
+
+def get_generations_list(
+    page: int = 1,
+    per_page: int = 25,
+    doc_type: Optional[str] = None,
+    username: Optional[str] = None,
+    region: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> dict:
+    """
+    Paginated list of all doc_generations for the admin table view.
+    Supports filtering by doc_type, username, region, text search
+    (matches compartment or username), and date range.
+    """
+    conn = _conn()
+
+    conditions: list[str] = []
+    args: list = []
+
+    if doc_type:
+        conditions.append("g.doc_type = ?")
+        args.append(doc_type)
+    if username:
+        conditions.append("u.username LIKE ?")
+        args.append(f"%{username}%")
+    if region:
+        conditions.append("g.region LIKE ?")
+        args.append(f"%{region}%")
+    if search:
+        conditions.append("(g.compartment LIKE ? OR COALESCE(u.username,'') LIKE ?)")
+        args += [f"%{search}%", f"%{search}%"]
+    if date_from:
+        conditions.append("date(g.generated_at) >= ?")
+        args.append(date_from)
+    if date_to:
+        conditions.append("date(g.generated_at) <= ?")
+        args.append(date_to)
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    base_query = f"""
+        FROM doc_generations g
+        LEFT JOIN users u ON g.user_id = u.id
+        {where}
+    """
+
+    total = conn.execute(f"SELECT COUNT(*) {base_query}", args).fetchone()[0]
+
+    offset = (page - 1) * per_page
+    rows = conn.execute(
+        f"""SELECT g.id, g.doc_type, g.compartment, g.region, g.generated_at,
+                   COALESCE(u.username, 'anonimo') AS username
+            {base_query}
+            ORDER BY g.generated_at DESC
+            LIMIT ? OFFSET ?""",
+        args + [per_page, offset],
+    ).fetchall()
+
+    conn.close()
+
+    pages = max(1, -(-total // per_page))  # ceiling division
+    return {
+        "items":    [dict(r) for r in rows],
+        "total":    total,
+        "page":     page,
+        "per_page": per_page,
+        "pages":    pages,
     }
 
 
