@@ -191,3 +191,5 @@ uploads/
 # Local Developer Tooling
 # =============================================================================
 .claude/
+# Dev script state
+.dev-pids

@@ -9,3 +9,4 @@ python-multipart
 uvicorn[standard]
 celery
 redis
+packaging
