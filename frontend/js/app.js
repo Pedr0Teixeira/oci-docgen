@@ -1,8 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
 
   // --- Settings and Constants ---
-  //const API_BASE_URL = 'http://127.0.0.1:8000'; // Local dev (sem Docker)
-  const API_BASE_URL = ''; // Docker / produção (nginx proxy)
+  // Local dev (frontend em :3000, sem Docker) -> API direta em :8000.
+  // Docker / produção (nginx proxy) -> mesma origem.
+  const API_BASE_URL = location.port === '3000' ? 'http://127.0.0.1:8000' : '';
 
   // --- DOM Element Selectors ---
   const mainAppContainer = document.getElementById('app-shell');
